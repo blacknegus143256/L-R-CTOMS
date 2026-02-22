@@ -12,20 +12,20 @@ class TailoringShop extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'shop_name',
         'contact_person',
         'contact_role',
         'address',
         'contact_number',
         'is_active',
-        'is_approved',
+        'status',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
-            'is_approved' => 'boolean',
+            'is_active' => 'boolean'
         ];
     }
 
@@ -51,8 +51,9 @@ class TailoringShop extends Model
             ->withTimestamps();
     }
 
-    public function members(): BelongsToMany
+    public function owner()
+        
     {
-        return $this->belongsToMany(User::class, 'shop_user');
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

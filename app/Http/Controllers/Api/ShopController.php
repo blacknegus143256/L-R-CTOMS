@@ -16,8 +16,7 @@ class ShopController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = TailoringShop::query()
-            ->where('is_active', true)
-            ->where('is_approved', true);
+            ->where('is_active', true);
 
         if ($request->filled('search')) {
             $query->where('shop_name', 'like', '%' . $request->input('search') . '%');
@@ -33,27 +32,43 @@ class ShopController extends Controller
             $query->whereHas('attributes', fn ($q) => $q->where('attributes.id', $id));
         }
 
+        // Filter by services if provided
+        $serviceIds = $request->input('services', []);
+        if (is_array($serviceIds)) {
+            $serviceIds = array_filter(array_map('intval', $serviceIds));
+        } else {
+            $serviceIds = [];
+        }
+        foreach ($serviceIds as $id) {
+            $query->whereHas('services', fn ($q) => $q->where('services.id', $id));
+        }
+
         $shops = $query->orderBy('shop_name')->get(['id', 'shop_name', 'address', 'contact_number', 'contact_person']);
 
         return response()->json(['data' => $shops]);
     }
 
     /**
-     * Show a single shop with its services.
+     * Show a single shop with its services and attributes.
      */
     public function show(TailoringShop $shop): JsonResponse
     {
-        if (! $shop->is_active || ! $shop->is_approved) {
+        if (! $shop->is_active) {
             return response()->json(['message' => 'Shop not found.'], 404);
         }
 
-        $shop->load('services:id,tailoring_shop_id,service_name,price,duration_days');
+        $shop->load([
+            'services:id,tailoring_shop_id,service_name,price,duration_days',
+            'attributes' => function ($q) {
+                $q->withPivot('price', 'unit', 'notes', 'is_available');
+            }
+        ]);
 
         return response()->json(['data' => $shop]);
     }
 
     /**
-     * Get two shops with their attributes for side-by-side comparison.
+     * Get two shops with their attributes and services for side-by-side comparison.
      * Query: ?shop1=1&shop2=2
      */
     public function compare(Request $request): JsonResponse
@@ -67,11 +82,11 @@ class ShopController extends Controller
 
         $shops = TailoringShop::query()
             ->where('is_active', true)
-            ->where('is_approved', true)
             ->whereIn('id', [$id1, $id2])
             ->with(['attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }])
+            ->with(['services:id,tailoring_shop_id,service_name,price,duration_days'])
             ->get();
 
         if ($shops->count() !== 2) {

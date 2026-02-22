@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '@inertiajs/react';
 import axios from 'axios';
 
 export default function Home() {
     const [categories, setCategories] = useState([]);
+    const [services, setServices] = useState([]);
     const [shops, setShops] = useState([]);
     const [compareShops, setCompareShops] = useState([]);
     const [shop1Id, setShop1Id] = useState('');
     const [shop2Id, setShop2Id] = useState('');
     const [selectedAttributes, setSelectedAttributes] = useState([]);
+    const [selectedServices, setSelectedServices] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [compareLoading, setCompareLoading] = useState(false);
@@ -18,30 +20,59 @@ export default function Home() {
         return axios.get('/api/categories').then((res) => setCategories(res.data.data || []));
     }, []);
 
-    const loadShops = useCallback((searchTerm = '', attributeIds = []) => {
+    const loadServices = useCallback(() => {
+        return axios.get('/api/services').then((res) => setServices(res.data.data || []));
+    }, []);
+
+    const loadShops = useCallback((searchTerm = '', attributeIds = [], serviceIds = []) => {
         const params = new URLSearchParams();
         if (searchTerm) params.set('search', searchTerm);
         attributeIds.forEach((id) => params.append('attributes[]', id));
+        serviceIds.forEach((id) => params.append('services[]', id));
         return axios.get('/api/shops?' + params.toString()).then((res) => setShops(res.data.data || []));
     }, []);
 
     useEffect(() => {
         setLoading(true);
         setError(null);
-        Promise.all([loadCategories(), loadShops()])
+        Promise.all([loadCategories(), loadServices(), loadShops()])
             .catch((err) => setError(err.message))
             .finally(() => setLoading(false));
-    }, [loadCategories, loadShops]);
+    }, [loadCategories, loadServices, loadShops]);
 
     useEffect(() => {
-        if (!loading) loadShops(search, selectedAttributes);
-    }, [search, selectedAttributes, loading, loadShops]);
+        if (!loading) loadShops(search, selectedAttributes, selectedServices);
+    }, [search, selectedAttributes, selectedServices, loading, loadShops]);
 
     const loadCompare = useCallback(() => {
+        // If only shop1 is selected, load single shop details
+        if (shop1Id && !shop2Id) {
+            setCompareLoading(true);
+            axios
+                .get(`/api/shops/${shop1Id}`)
+                .then((res) => setCompareShops([res.data.data].filter(Boolean)))
+                .catch(() => setCompareShops([]))
+                .finally(() => setCompareLoading(false));
+            return;
+        }
+        
+        // If only shop2 is selected, load single shop details
+        if (!shop1Id && shop2Id) {
+            setCompareLoading(true);
+            axios
+                .get(`/api/shops/${shop2Id}`)
+                .then((res) => setCompareShops([res.data.data].filter(Boolean)))
+                .catch(() => setCompareShops([]))
+                .finally(() => setCompareLoading(false));
+            return;
+        }
+        
+        // If both shops are the same or both not selected
         if (!shop1Id || !shop2Id || shop1Id === shop2Id) {
             setCompareShops([]);
             return;
         }
+        
         setCompareLoading(true);
         axios
             .get(`/api/shops/compare?shop1=${shop1Id}&shop2=${shop2Id}`)
@@ -60,8 +91,15 @@ export default function Home() {
         );
     };
 
+    const toggleService = (id) => {
+        setSelectedServices((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        );
+    };
+
     const clearFilters = () => {
         setSelectedAttributes([]);
+        setSelectedServices([]);
         setSearch('');
     };
 
@@ -92,7 +130,7 @@ export default function Home() {
                 {/* 1. Filter sidebar */}
                 <aside className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
                     <h2 className="mb-3 font-medium text-stone-800">1. Filter list</h2>
-                    {selectedAttributes.length > 0 && (
+                    {(selectedAttributes.length > 0 || selectedServices.length > 0) && (
                         <button
                             type="button"
                             onClick={clearFilters}
@@ -100,6 +138,27 @@ export default function Home() {
                         >
                             Clear
                         </button>
+                    )}
+                    
+                    {services.length > 0 && (
+                        <div>
+                            <div className="text-sm font-medium text-stone-700">Services</div>
+                            <ul className="mt-1 space-y-1">
+                                {services.map((service) => (
+                                    <li key={service.id}>
+                                        <label className="flex cursor-pointer items-center gap-2 text-sm">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedServices.includes(service.id)}
+                                                onChange={() => toggleService(service.id)}
+                                                className="rounded border-stone-300"
+                                            />
+                                            {service.service_name}
+                                        </label>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     )}
                     <div className="space-y-4">
                         {categories.map((cat) => (
@@ -148,7 +207,7 @@ export default function Home() {
                                 >
                                     <option value="">— Select first shop —</option>
                                     {shops.map((s) => (
-                                        <option key={s.id} value={s.id}>
+                                        <option key={s.id} value={s.id} disabled={String(s.id) === String(shop2Id)}>
                                             {s.shop_name}
                                         </option>
                                     ))}
@@ -190,7 +249,7 @@ export default function Home() {
                                                     <div className="text-xs font-normal text-stone-500">
                                                         {shop.contact_number || 'No phone'}
                                                     </div>
-                                                    <Link to={`/shop/${shop.id}`} className="text-xs text-amber-600 hover:underline">
+                                                    <Link href={`/shop/${shop.id}`} className="text-xs text-amber-600 hover:underline">
                                                         View profile
                                                     </Link>
                                                 </th>
@@ -206,6 +265,33 @@ export default function Home() {
                                                 </td>
                                             ))}
                                         </tr>
+                                        {/* Services Section */}
+                                        {compareShops[0]?.services?.length > 0 && (
+                                            <React.Fragment>
+                                                <tr className="border-b border-stone-100">
+                                                    <td colSpan={1 + compareShops.length} className="px-4 py-2 font-medium text-stone-700 bg-stone-50">
+                                                        Services
+                                                    </td>
+                                                </tr>
+                                                {compareShops[0].services.map((service) => (
+                                                    <tr key={service.id} className="border-b border-stone-100">
+                                                        <td className="px-4 py-2 pl-6 text-stone-600">{service.service_name}</td>
+                                                        {compareShops.map((shop) => {
+                                                            const shopService = (shop.services || []).find((s) => s.id === service.id);
+                                                            return (
+                                                                <td key={shop.id} className="px-4 py-2 text-stone-700">
+                                                                    {shopService ? (
+                                                                        <>₱{Number(shopService.price ?? 0).toFixed(2)}</>
+                                                                    ) : (
+                                                                        '—'
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
+                                        )}
                                         {categories.map((cat) => (
                                             <React.Fragment key={cat.id}>
                                                 <tr className="border-b border-stone-100">
@@ -239,7 +325,7 @@ export default function Home() {
                             <div className="flex flex-col items-center justify-center py-12 text-center text-stone-500">
                                 <span className="text-3xl">⚖️</span>
                                 <p className="mt-2 font-medium">Ready to compare</p>
-                                <p className="text-sm">Select two shops from the dropdowns above to see their prices side-by-side.</p>
+                                <p className="text-sm">Select a shop from the dropdowns above to see its details.</p>
                             </div>
                         )}
                     </div>

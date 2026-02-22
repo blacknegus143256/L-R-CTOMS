@@ -4,19 +4,22 @@ namespace Database\Seeders;
 
 use App\Models\TailoringShop;
 use Illuminate\Database\Seeder;
+use App\Models\User;
 
 class TailoringShopSeeder extends Seeder
 {
     public function run(): void
     {
+        $owner = User::where('role', 'store_admin')->first();
         $shop1 = TailoringShop::create([
+            'user_id' => $owner ? $owner->id : null,
             'shop_name' => 'Dumaguete Tailoring Co.',
             'contact_person' => 'Maria Santos',
             'contact_role' => 'Owner',
             'address' => '123 Rizal Ave, Dumaguete City',
             'contact_number' => '+63 912 345 6789',
             'is_active' => true,
-            'is_approved' => true,
+            'status' => 'pending',
         ]);
 
         foreach (
@@ -30,13 +33,14 @@ class TailoringShopSeeder extends Seeder
         }
 
         $shop2 = TailoringShop::create([
+            'user_id' => $owner ? $owner->id : null,
             'shop_name' => 'Stitch Perfect',
             'contact_person' => 'Juan Dela Cruz',
             'contact_role' => 'Owner',
             'address' => '45 Silliman Ave, Dumaguete City',
             'contact_number' => '+63 918 765 4321',
             'is_active' => true,
-            'is_approved' => true,
+            'status' => 'approved',
         ]);
 
         foreach (

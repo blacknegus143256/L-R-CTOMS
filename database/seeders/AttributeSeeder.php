@@ -26,7 +26,7 @@ class AttributeSeeder extends Seeder
         $zipper = $notions->attributes()->firstOrCreate(['name' => 'YKK Zipper'], []);
         $button = $notions->attributes()->firstOrCreate(['name' => 'Gold Button'], []);
 
-        $shops = TailoringShop::where('is_approved', true)->take(2)->orderBy('id')->get();
+        $shops = TailoringShop::where('status', 'approved')->take(2)->orderBy('id')->get();
         if ($shops->count() < 2) {
             return;
         }

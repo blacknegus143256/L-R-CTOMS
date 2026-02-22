@@ -22,6 +22,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role', // Add role to fillable
     ];
 
     /**
@@ -51,4 +52,8 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(\App\Models\TailoringShop::class, 'shop_user');
     }
+    public function shop()
+{
+    return $this->hasOne(TailoringShop::class, 'user_id');
+}
 }

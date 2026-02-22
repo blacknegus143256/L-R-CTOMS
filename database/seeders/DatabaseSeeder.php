@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use App\Models\TailoringShop;
 
 class DatabaseSeeder extends Seeder
 {
@@ -21,11 +22,21 @@ class DatabaseSeeder extends Seeder
             'name' => 'Shop Manager',
             'email' => 'shop@example.com',
         ]);
-
-        $this->call(TailoringShopSeeder::class);
-        $this->call(AttributeSeeder::class);
-
-        // Attach first shop to this user so they can use the dashboard
-        $user->tailoringShops()->attach(\App\Models\TailoringShop::first()->id);
+        
+        $this->call([
+            UserRoleSeeder::class,
+            TailoringShopSeeder::class,
+            AttributeSeeder::class,
+            ]);
+            TailoringShop::create([
+                'user_id' => $user->id,
+                'shop_name' => 'Example Tailoring Shop',
+                'contact_person' => 'John Doe',
+                'contact_role' => 'Manager',
+                'address' => '123 Main St, Dumaguete City',
+                'contact_number' => '+63 912 345 6789',
+                'is_active' => true,
+                'status' => 'approved',
+            ]);
     }
 }
