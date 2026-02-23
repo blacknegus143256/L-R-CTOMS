@@ -27,12 +27,13 @@ class AttributeSeeder extends Seeder
         $button = $notions->attributes()->firstOrCreate(['name' => 'Gold Button'], []);
 
         $shops = TailoringShop::where('status', 'approved')->take(2)->orderBy('id')->get();
-        if ($shops->count() < 2) {
+        if ($shops->count() < 3) {
             return;
         }
 
         $shop1 = $shops[0];
         $shop2 = $shops[1];
+        $shop3 = $shops[2];
 
         $shop1->attributes()->syncWithoutDetaching([
             $silk->id => ['price' => 450, 'unit' => 'per yard', 'notes' => null],
@@ -41,6 +42,12 @@ class AttributeSeeder extends Seeder
             $button->id => ['price' => 25, 'unit' => 'per piece', 'notes' => null],
         ]);
         $shop2->attributes()->syncWithoutDetaching([
+            $silk->id => ['price' => 500, 'unit' => 'per yard', 'notes' => 'Imported'],
+            $linen->id => ['price' => 220, 'unit' => 'per yard', 'notes' => null],
+            $zipper->id => ['price' => 75, 'unit' => 'per piece', 'notes' => null],
+            $button->id => ['price' => 30, 'unit' => 'per piece', 'notes' => null],
+        ]);
+        $shop3->attributes()->syncWithoutDetaching([
             $silk->id => ['price' => 500, 'unit' => 'per yard', 'notes' => 'Imported'],
             $linen->id => ['price' => 220, 'unit' => 'per yard', 'notes' => null],
             $zipper->id => ['price' => 75, 'unit' => 'per piece', 'notes' => null],

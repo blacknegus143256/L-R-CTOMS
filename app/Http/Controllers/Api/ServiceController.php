@@ -16,8 +16,8 @@ class ServiceController extends Controller
         $services = Service::whereHas('tailoringShop', function ($q) {
             $q->where('is_active', true);
         })
-        ->orderBy('service_name')
-        ->get(['id', 'tailoring_shop_id', 'service_name', 'price', 'duration_days']);
+        ->orderBy('service_category')
+        ->get(['id', 'tailoring_shop_id', 'service_category', 'service_description', 'starting_price', 'turnaround_time', 'is_available', 'rush_service_available', 'appointment_required', 'notes']);
 
         return response()->json(['data' => $services]);
     }

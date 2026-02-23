@@ -33,9 +33,14 @@ class ServiceController extends Controller
         }
 
         $valid = $request->validate([
-            'service_name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'duration_days' => 'nullable|string|max:100',
+            'service_category' => 'required|string|max:255',
+            'service_description' => 'nullable|string',
+            'starting_price' => 'required|numeric|min:0',
+            'turnaround_time' => 'nullable|string|max:255',
+            'is_available' => 'boolean',
+            'rush_service_available' => 'boolean',
+            'appointment_required' => 'boolean',
+            'notes' => 'nullable|string',
         ]);
 
         $service = $shop->services()->create($valid);
@@ -53,9 +58,14 @@ class ServiceController extends Controller
         }
 
         $valid = $request->validate([
-            'service_name' => 'sometimes|string|max:255',
-            'price' => 'sometimes|numeric|min:0',
-            'duration_days' => 'nullable|string|max:100',
+            'service_category' => 'sometimes|string|max:255',
+            'service_description' => 'nullable|string',
+            'starting_price' => 'sometimes|numeric|min:0',
+            'turnaround_time' => 'nullable|string|max:255',
+            'is_available' => 'boolean',
+            'rush_service_available' => 'boolean',
+            'appointment_required' => 'boolean',
+            'notes' => 'nullable|string',
         ]);
 
         $service->update($valid);

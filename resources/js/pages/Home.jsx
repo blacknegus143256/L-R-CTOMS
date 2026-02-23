@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 
@@ -10,7 +10,7 @@ export default function Home() {
     const [shop1Id, setShop1Id] = useState('');
     const [shop2Id, setShop2Id] = useState('');
     const [selectedAttributes, setSelectedAttributes] = useState([]);
-    const [selectedServices, setSelectedServices] = useState([]);
+    const [selectedServiceCategories, setSelectedServiceCategories] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [compareLoading, setCompareLoading] = useState(false);
@@ -24,11 +24,13 @@ export default function Home() {
         return axios.get('/api/services').then((res) => setServices(res.data.data || []));
     }, []);
 
-    const loadShops = useCallback((searchTerm = '', attributeIds = [], serviceIds = []) => {
+    const loadShops = useCallback((searchTerm = '', attributeIds = [], serviceCategories = []) => {
         const params = new URLSearchParams();
         if (searchTerm) params.set('search', searchTerm);
         attributeIds.forEach((id) => params.append('attributes[]', id));
-        serviceIds.forEach((id) => params.append('services[]', id));
+        if (serviceCategories.length > 0) {
+            serviceCategories.forEach((cat) => params.append('service_categories[]', cat));
+        }
         return axios.get('/api/shops?' + params.toString()).then((res) => setShops(res.data.data || []));
     }, []);
 
@@ -41,11 +43,21 @@ export default function Home() {
     }, [loadCategories, loadServices, loadShops]);
 
     useEffect(() => {
-        if (!loading) loadShops(search, selectedAttributes, selectedServices);
-    }, [search, selectedAttributes, selectedServices, loading, loadShops]);
+        if (!loading) loadShops(search, selectedAttributes, selectedServiceCategories);
+    }, [search, selectedAttributes, selectedServiceCategories, loading, loadShops]);
+
+    // Get unique service categories
+    const uniqueServiceCategories = useMemo(() => {
+        const categories = new Set();
+        services.forEach(service => {
+            if (service.service_category) {
+                categories.add(service.service_category);
+            }
+        });
+        return Array.from(categories);
+    }, [services]);
 
     const loadCompare = useCallback(() => {
-        // If only shop1 is selected, load single shop details
         if (shop1Id && !shop2Id) {
             setCompareLoading(true);
             axios
@@ -56,7 +68,6 @@ export default function Home() {
             return;
         }
         
-        // If only shop2 is selected, load single shop details
         if (!shop1Id && shop2Id) {
             setCompareLoading(true);
             axios
@@ -67,7 +78,6 @@ export default function Home() {
             return;
         }
         
-        // If both shops are the same or both not selected
         if (!shop1Id || !shop2Id || shop1Id === shop2Id) {
             setCompareShops([]);
             return;
@@ -91,15 +101,15 @@ export default function Home() {
         );
     };
 
-    const toggleService = (id) => {
-        setSelectedServices((prev) =>
-            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    const toggleServiceCategory = (category) => {
+        setSelectedServiceCategories((prev) =>
+            prev.includes(category) ? prev.filter((x) => x !== category) : [...prev, category]
         );
     };
 
     const clearFilters = () => {
         setSelectedAttributes([]);
-        setSelectedServices([]);
+        setSelectedServiceCategories([]);
         setSearch('');
     };
 
@@ -121,16 +131,31 @@ export default function Home() {
 
     return (
         <div className="space-y-8">
+            
+
             <div>
-                <h1 className="text-2xl font-semibold text-stone-800">Tailor Comparison Tool</h1>
-                <p className="mt-1 text-stone-600">Filter by needs, then compare prices side-by-side.</p>
+                <h1 className="text-2xl font-semibold text-stone-800 text-center">Tailor Comparison Tool</h1>
+                <div className="flex justify-end gap-3">
+                <Link
+                    href="/login"
+                    className="px-4 py-2 text-sm font-medium text-stone-700 hover:text-stone-900"
+                >
+                    Log in
+                </Link>
+                <Link
+                    href="/register"
+                    className="px-4 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                >
+                    Sign up
+                </Link>
+            </div>
+                <p className="mt-1 text-stone-600 text-center">Filter by needs, then compare prices side-by-side.</p>
             </div>
 
             <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
-                {/* 1. Filter sidebar */}
                 <aside className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
                     <h2 className="mb-3 font-medium text-stone-800">1. Filter list</h2>
-                    {(selectedAttributes.length > 0 || selectedServices.length > 0) && (
+                    {(selectedAttributes.length > 0 || selectedServiceCategories.length > 0) && (
                         <button
                             type="button"
                             onClick={clearFilters}
@@ -140,20 +165,20 @@ export default function Home() {
                         </button>
                     )}
                     
-                    {services.length > 0 && (
-                        <div>
+                    {uniqueServiceCategories.length > 0 && (
+                        <div className="mb-4">
                             <div className="text-sm font-medium text-stone-700">Services</div>
                             <ul className="mt-1 space-y-1">
-                                {services.map((service) => (
-                                    <li key={service.id}>
+                                {uniqueServiceCategories.map((category) => (
+                                    <li key={category}>
                                         <label className="flex cursor-pointer items-center gap-2 text-sm">
                                             <input
                                                 type="checkbox"
-                                                checked={selectedServices.includes(service.id)}
-                                                onChange={() => toggleService(service.id)}
+                                                checked={selectedServiceCategories.includes(category)}
+                                                onChange={() => toggleServiceCategory(category)}
                                                 className="rounded border-stone-300"
                                             />
-                                            {service.service_name}
+                                            {category}
                                         </label>
                                     </li>
                                 ))}
@@ -185,7 +210,6 @@ export default function Home() {
                 </aside>
 
                 <div className="min-w-0 space-y-6">
-                    {/* 2. Select shops to compare */}
                     <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
                         <h2 className="mb-3 font-medium text-stone-800">2. Select shops to compare</h2>
                         <div className="mb-3">
@@ -231,7 +255,6 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* 3. Comparison table */}
                     <div className="rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden">
                         {compareLoading ? (
                             <div className="flex justify-center py-12">
@@ -265,23 +288,22 @@ export default function Home() {
                                                 </td>
                                             ))}
                                         </tr>
-                                        {/* Services Section */}
-                                        {compareShops[0]?.services?.length > 0 && (
+                                        {uniqueServiceCategories.length > 0 && (
                                             <React.Fragment>
                                                 <tr className="border-b border-stone-100">
                                                     <td colSpan={1 + compareShops.length} className="px-4 py-2 font-medium text-stone-700 bg-stone-50">
                                                         Services
                                                     </td>
                                                 </tr>
-                                                {compareShops[0].services.map((service) => (
-                                                    <tr key={service.id} className="border-b border-stone-100">
-                                                        <td className="px-4 py-2 pl-6 text-stone-600">{service.service_name}</td>
+                                                {uniqueServiceCategories.map((category) => (
+                                                    <tr key={category} className="border-b border-stone-100">
+                                                        <td className="px-4 py-2 pl-6 text-stone-600">{category}</td>
                                                         {compareShops.map((shop) => {
-                                                            const shopService = (shop.services || []).find((s) => s.id === service.id);
+                                                            const shopService = (shop.services || []).find((s) => s.service_category === category);
                                                             return (
                                                                 <td key={shop.id} className="px-4 py-2 text-stone-700">
                                                                     {shopService ? (
-                                                                        <>₱{Number(shopService.price ?? 0).toFixed(2)}</>
+                                                                        <>₱{Number(shopService.starting_price ?? 0).toFixed(2)}</>
                                                                     ) : (
                                                                         '—'
                                                                     )}

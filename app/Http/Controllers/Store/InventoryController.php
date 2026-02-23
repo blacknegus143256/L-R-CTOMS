@@ -26,24 +26,35 @@ class InventoryController extends Controller
             'shopAttributes' => $shop->attributes()->with('attributeCategory')->get(),
         ]);
     }
+
     public function addServices(Request $request)
     {
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
         $request->validate([
-            'service_name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'duration_days' => 'nullable|integer|min:0',
+            'service_category' => 'required|string|max:255',
+            'starting_price' => 'required|numeric|min:0',
+            'turnaround_time' => 'nullable|integer|min:0',
+            'service_description' => 'nullable|string',
+            'is_available' => 'boolean',
+            'rush_service_available' => 'boolean',
+            'appointment_required' => 'boolean',
+            'notes' => 'nullable|string',
         ]);
 
         Service::create([
             'tailoring_shop_id' => $shop->id,
-            'service_name' => $request->service_name,
-            'price' => $request->price,
-            'duration_days' => $request->duration_days ?? 0,
+            'service_category' => $request->service_category,
+            'starting_price' => $request->starting_price,
+            'turnaround_time' => $request->turnaround_time ?? 0,
+            'service_description' => $request->service_description ?? '',
+            'is_available' => $request->boolean('is_available', true),
+            'rush_service_available' => $request->boolean('rush_service_available', false),
+            'appointment_required' => $request->boolean('appointment_required', false),
+            'notes' => $request->notes ?? '',
         ]);
 
-        return redirect()->back();
+        return redirect()->back()->with('message', 'Service added successfully!');
     }
 
     public function updateServices(Request $request, $id)
@@ -51,9 +62,14 @@ class InventoryController extends Controller
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
         $request->validate([
-            'service_name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'duration_days' => 'nullable|integer|min:0',
+            'service_category' => 'required|string|max:255',
+            'starting_price' => 'required|numeric|min:0',
+            'turnaround_time' => 'nullable|integer|min:0',
+            'service_description' => 'nullable|string',
+            'is_available' => 'boolean',
+            'rush_service_available' => 'boolean',
+            'appointment_required' => 'boolean',
+            'notes' => 'nullable|string',
         ]);
 
         $service = Service::where('id', $id)
@@ -61,12 +77,17 @@ class InventoryController extends Controller
             ->firstOrFail();
 
         $service->update([
-            'service_name' => $request->service_name,
-            'price' => $request->price,
-            'duration_days' => $request->duration_days ?? 0,
+            'service_category' => $request->service_category,
+            'starting_price' => $request->starting_price,
+            'turnaround_time' => $request->turnaround_time ?? 0,
+            'service_description' => $request->service_description ?? '',
+            'is_available' => $request->boolean('is_available', true),
+            'rush_service_available' => $request->boolean('rush_service_available', false),
+            'appointment_required' => $request->boolean('appointment_required', false),
+            'notes' => $request->notes ?? '',
         ]);
 
-        return redirect()->back();
+        return redirect()->back()->with('message', 'Service updated successfully!');
     }
 
     public function deleteServices($id)
@@ -79,28 +100,9 @@ class InventoryController extends Controller
 
         $service->delete();
 
-        return redirect()->back();
+        return redirect()->back()->with('message', 'Service deleted successfully!');
     }
-    public function addAttribute(Request $request)
-    {
-        $userId = Auth::id();
 
-        $shop = \App\Models\TailoringShop::where('user_id', $userId)->firstOrFail();
-        $request->validate([
-            'attribute_id' => 'required|exists:attributes,id',
-            'price' => 'required|numeric|min:0',
-            'unit' => 'required|string|max:255',
-        ]);
-
-        $shop->attributes()->syncWithoutDetaching([
-            $request->attribute_id => [
-                'price' => $request->price,
-                'unit' => $request->unit,
-                'is_available' => true,
-                ]
-        ]);
-        return redirect()->back()->with('message', 'Material added/updated to the shop!');
-    }
     public function storeMasterAttribute(Request $request)
     {
         $request->validate([

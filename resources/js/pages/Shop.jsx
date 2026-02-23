@@ -64,10 +64,10 @@ export default function Shop() {
                             key={s.id}
                             className="rounded-lg border border-stone-200 bg-white p-4"
                         >
-                            <div className="font-medium text-stone-800">{s.service_name}</div>
+                            <div className="font-medium text-stone-800">{s.service_category}</div>
                             <div className="mt-1 text-stone-600">
-                                ₱{Number(s.price).toFixed(2)}
-                                {s.duration_days && ` · ${s.duration_days}`}
+                                ₱{Number(s.starting_price).toFixed(2)}
+                                {s.turnaround_time && ` · ${s.turnaround_time}`}
                             </div>
                         </li>
                     ))}

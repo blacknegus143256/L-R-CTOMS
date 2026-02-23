@@ -13,15 +13,23 @@ class Service extends Model
 
     protected $fillable = [
         'tailoring_shop_id',
-        'service_name',
-        'price',
-        'duration_days',
+        'service_category',
+        'service_description',
+        'starting_price',
+        'turnaround_time',
+        'is_available',
+        'rush_service_available',
+        'appointment_required',
+        'notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'price' => 'decimal:2',
+            'starting_price' => 'decimal:2',
+            'is_available' => 'boolean',
+            'rush_service_available' => 'boolean',
+            'appointment_required' => 'boolean',
         ];
     }
 

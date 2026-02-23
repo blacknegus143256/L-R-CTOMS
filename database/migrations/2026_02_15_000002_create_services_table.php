@@ -11,8 +11,8 @@ return new class extends Migration
         Schema::create('services', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tailoring_shop_id')->constrained()->cascadeOnDelete();
-            $table->string('service_name');
-            $table->decimal('price', 10, 2);
+            $table->string('service_name')->nullable();
+            $table->decimal('price', 10, 2)->nullable();
             $table->string('duration_days')->nullable();
             $table->timestamps();
         });

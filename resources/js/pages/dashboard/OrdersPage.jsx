@@ -126,7 +126,7 @@ export default function OrdersPage() {
                             list.map((o) => (
                                 <tr key={o.id} className="border-b border-stone-100">
                                     <td className="px-4 py-3">{o.customer?.name ?? '—'}</td>
-                                    <td className="px-4 py-3">{o.service?.service_name ?? '—'}</td>
+                                    <td className="px-4 py-3">{o.service?.service_category ?? '—'}</td>
                                     <td className="px-4 py-3"><span className="rounded bg-stone-100 px-2 py-0.5 text-stone-700">{o.status}</span></td>
                                     <td className="px-4 py-3">₱{Number(o.total_price).toFixed(2)}</td>
                                     <td className="px-4 py-3 text-right">
@@ -155,7 +155,7 @@ export default function OrdersPage() {
                             <div>
                                 <label className="block text-sm font-medium text-stone-700">Service</label>
                                 <select required value={form.service_id} onChange={(e) => setForm((f) => ({ ...f, service_id: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2">
-                                    {services.map((s) => <option key={s.id} value={s.id}>{s.service_name} (₱{Number(s.price).toFixed(2)})</option>)}
+                                    {services.map((s) => <option key={s.id} value={s.id}>{s.service_category} (₱{Number(s.starting_price).toFixed(2)})</option>)}
                                 </select>
                             </div>
                             <div>

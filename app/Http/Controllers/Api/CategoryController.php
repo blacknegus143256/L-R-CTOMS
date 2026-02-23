@@ -22,8 +22,8 @@ class CategoryController extends Controller
             $q->where('is_active', true);
         })
             ->distinct()
-            ->orderBy('service_name')
-            ->get(['id', 'service_name']);
+            ->orderBy('service_category')
+            ->get(['id', 'service_category', 'starting_price', 'turnaround_time']);
 
         return response()->json([
             'data' => $categories,

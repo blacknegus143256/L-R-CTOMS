@@ -32,15 +32,22 @@ class ShopController extends Controller
             $query->whereHas('attributes', fn ($q) => $q->where('attributes.id', $id));
         }
 
-        // Filter by services if provided
+        // Filter by services if provided (OR logic - show shops with ANY of the selected services)
         $serviceIds = $request->input('services', []);
-        if (is_array($serviceIds)) {
+        if (is_array($serviceIds) && count($serviceIds) > 0) {
             $serviceIds = array_filter(array_map('intval', $serviceIds));
-        } else {
-            $serviceIds = [];
+            if (count($serviceIds) > 0) {
+                $query->whereHas('services', fn ($q) => $q->whereIn('services.id', $serviceIds));
+            }
         }
-        foreach ($serviceIds as $id) {
-            $query->whereHas('services', fn ($q) => $q->where('services.id', $id));
+
+        // Filter by service categories if provided (OR logic - show shops with ANY of the selected service categories)
+        $serviceCategories = $request->input('service_categories', $request->input('service_categories[]', []));
+        if (is_array($serviceCategories) && count($serviceCategories) > 0) {
+            $serviceCategories = array_filter($serviceCategories);
+            if (count($serviceCategories) > 0) {
+                $query->whereHas('services', fn ($q) => $q->whereIn('service_category', $serviceCategories));
+            }
         }
 
         $shops = $query->orderBy('shop_name')->get(['id', 'shop_name', 'address', 'contact_number', 'contact_person']);
@@ -58,7 +65,7 @@ class ShopController extends Controller
         }
 
         $shop->load([
-            'services:id,tailoring_shop_id,service_name,price,duration_days',
+            'services:id,tailoring_shop_id,service_category,service_description,starting_price,turnaround_time,is_available,rush_service_available,appointment_required,notes',
             'attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }
@@ -86,7 +93,7 @@ class ShopController extends Controller
             ->with(['attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }])
-            ->with(['services:id,tailoring_shop_id,service_name,price,duration_days'])
+            ->with(['services:id,tailoring_shop_id,service_category,service_description,starting_price,turnaround_time,is_available,rush_service_available,appointment_required,notes'])
             ->get();
 
         if ($shops->count() !== 2) {
