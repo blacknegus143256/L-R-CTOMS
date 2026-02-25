@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
+import ViewProfile from '@/components/ViewProfile';
 
 export default function Home() {
+    const [user, setUser] = useState(null);
     const [categories, setCategories] = useState([]);
     const [services, setServices] = useState([]);
     const [shops, setShops] = useState([]);
@@ -15,6 +17,11 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [compareLoading, setCompareLoading] = useState(false);
     const [error, setError] = useState(null);
+    
+    // Modal state
+    const [showModal, setShowModal] = useState(false);
+    const [selectedShop, setSelectedShop] = useState(null);
+    const [modalLoading, setModalLoading] = useState(false);
 
     const loadCategories = useCallback(() => {
         return axios.get('/api/categories').then((res) => setCategories(res.data.data || []));
@@ -113,6 +120,38 @@ export default function Home() {
         setSearch('');
     };
 
+    // Handle View Profile button click - works for logged in and guest users
+    const handleViewProfile = (shopId) => {
+        setModalLoading(true);
+        setSelectedShop(null);
+        setShowModal(true);
+        
+        axios.get(`/api/shops/${shopId}`)
+            .then((res) => {
+                setSelectedShop(res.data.data);
+            })
+            .catch(() => {
+                setShowModal(false);
+            })
+            .finally(() => {
+                setModalLoading(false);
+            });
+    };
+
+    // Handle place order - check auth first
+    const handlePlaceOrder = () => {
+        axios.get('/api/user')
+            .then((res) => {
+                setUser(res.data.user);
+                // User is logged in, proceed with order
+                alert('Proceeding with order...');
+            })
+            .catch(() => {
+                // Not logged in, redirect to login
+                window.location.href = '/login';
+            });
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center py-16">
@@ -131,24 +170,22 @@ export default function Home() {
 
     return (
         <div className="space-y-8">
-            
-
             <div>
                 <h1 className="text-2xl font-semibold text-stone-800 text-center">Tailor Comparison Tool</h1>
                 <div className="flex justify-end gap-3">
-                <Link
-                    href="/login"
-                    className="px-4 py-2 text-sm font-medium text-stone-700 hover:text-stone-900"
-                >
-                    Log in
-                </Link>
-                <Link
-                    href="/register"
-                    className="px-4 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-                >
-                    Sign up
-                </Link>
-            </div>
+                    <Link
+                        href="/login"
+                        className="px-4 py-2 text-sm font-medium text-stone-700 hover:text-stone-900"
+                    >
+                        Log in
+                    </Link>
+                    <Link
+                        href="/register"
+                        className="px-4 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                    >
+                        Sign up
+                    </Link>
+                </div>
                 <p className="mt-1 text-stone-600 text-center">Filter by needs, then compare prices side-by-side.</p>
             </div>
 
@@ -272,9 +309,12 @@ export default function Home() {
                                                     <div className="text-xs font-normal text-stone-500">
                                                         {shop.contact_number || 'No phone'}
                                                     </div>
-                                                    <Link href={`/shop/${shop.id}`} className="text-xs text-amber-600 hover:underline">
+                                                    <button 
+                                                        onClick={() => handleViewProfile(shop.id)}
+                                                        className="text-xs text-amber-600 hover:underline"
+                                                    >
                                                         View profile
-                                                    </Link>
+                                                    </button>
                                                 </th>
                                             ))}
                                         </tr>
@@ -353,6 +393,23 @@ export default function Home() {
                     </div>
                 </div>
             </div>
+
+            {/* Modal for View Profile */}
+            {showModal && (
+                modalLoading ? (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                        <div className="flex justify-center py-12">
+                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600" />
+                        </div>
+                    </div>
+                ) : (
+                    <ViewProfile 
+                        shop={selectedShop} 
+                        onClose={() => setShowModal(false)}
+                        onPlaceOrder={handlePlaceOrder}
+                    />
+                )
+            )}
         </div>
     );
 }

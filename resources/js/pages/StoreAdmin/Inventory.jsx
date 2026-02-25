@@ -383,11 +383,11 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 <table className="min-w-full divide-y divide-gray-200 border">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Price</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Unit</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Actions</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Price</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Unit</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -395,10 +395,10 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                             .filter(sa => sa.attribute_category_id === cat.id)
                                             .map((shopAttr) => (
                                                 <tr key={shopAttr.id}>
-                                                    <td className="px-4 py-2">{shopAttr.name}</td>
-                                                    <td className="px-4 py-2">${shopAttr.pivot.price}</td>
-                                                    <td className="px-4 py-2">{shopAttr.pivot.unit}</td>
-                                                    <td className="px-4 py-2">
+                                                    <td className="px-4 py-3">{shopAttr.name}</td>
+                                                    <td className="px-4 py-3">${shopAttr.pivot.price}</td>
+                                                    <td className="px-4 py-3">{shopAttr.pivot.unit}</td>
+                                                    <td className="px-4 py-3">
                                                         <span className={`px-2 py-1 text-xs rounded-full ${shopAttr.pivot.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                                             {shopAttr.pivot.is_available ? 'Available' : 'Unavailable'}
                                                         </span>

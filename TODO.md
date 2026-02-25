@@ -1,17 +1,20 @@
 # TODO List
 
-## Task: Improve Home.jsx UI - Make the UI bigger
+## Task: Update Home.jsx with ViewProfile Modal and Order Button
 
 ### Steps:
-1. [x] Read and analyze Home.jsx
-2. [ ] Plan the UI improvements
-3. [ ] Implement the UI changes to make elements bigger
+1. [x] Read Home.jsx file
+2. [x] Add useAuth hook to check user login status
+3. [x] Add modal state variables (showModal, selectedShop, modalLoading)
+4. [x] Add handleViewProfile function to check auth and open modal
+5. [x] Replace "View profile" Link with button that calls handleViewProfile
+6. [x] Add modal with shop details and "Place Order" button
 
-### Plan Details:
-- Increase main heading font size from `text-2xl` to `text-3xl` or `text-4xl`
-- Increase sidebar width from `220px` to `280px` 
-- Increase container padding from `p-4` to `p-6`
-- Increase font sizes for labels from `text-sm` to `text-base`
-- Increase input/select padding and font size
-- Increase spacing/gap in grid layouts
-- Make the comparison table text slightly larger
+### Changes Made:
+- Added authentication check using useAuth hook
+- If user is not logged in: redirects to /login page
+- If user is logged in: opens modal with shop details
+- Modal displays: shop name, contact info, services, attributes
+- "Place Order" button positioned at bottom right of modal
+- Modal has close button and loading states
+- Also added "Place Order" button to Shop.jsx (ViewProfile) page

@@ -42,16 +42,25 @@ export default function Shop() {
                 ← Back to shops
             </Link>
             <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
-                <h1 className="text-2xl font-semibold text-stone-800">{shop.shop_name}</h1>
-                {shop.contact_person && (
-                    <p className="mt-1 text-stone-600">Contact: {shop.contact_person}</p>
-                )}
-                {shop.address && (
-                    <p className="text-stone-500">{shop.address}</p>
-                )}
-                {shop.contact_number && (
-                    <p className="text-stone-600">{shop.contact_number}</p>
-                )}
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-stone-800">{shop.shop_name}</h1>
+                        {shop.contact_person && (
+                            <p className="mt-1 text-stone-600">Contact: {shop.contact_person}</p>
+                        )}
+                        {shop.address && (
+                            <p className="text-stone-500">{shop.address}</p>
+                        )}
+                        {shop.contact_number && (
+                            <p className="text-stone-600">{shop.contact_number}</p>
+                        )}
+                    </div>
+                    <button
+                        className="rounded-lg bg-amber-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                    >
+                        Place Order
+                    </button>
+                </div>
             </div>
 
             <h2 className="mt-8 mb-3 text-lg font-semibold text-stone-800">Services</h2>
