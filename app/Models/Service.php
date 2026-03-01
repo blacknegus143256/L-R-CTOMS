@@ -13,10 +13,11 @@ class Service extends Model
 
     protected $fillable = [
         'tailoring_shop_id',
-        'service_category',
+        'service_category_id',
+        'service_name',
         'service_description',
-        'starting_price',
-        'turnaround_time',
+        'price',
+        'duration_days',
         'is_available',
         'rush_service_available',
         'appointment_required',
@@ -26,7 +27,7 @@ class Service extends Model
     protected function casts(): array
     {
         return [
-            'starting_price' => 'decimal:2',
+            'price' => 'decimal:2',
             'is_available' => 'boolean',
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',
@@ -36,6 +37,11 @@ class Service extends Model
     public function tailoringShop(): BelongsTo
     {
         return $this->belongsTo(TailoringShop::class);
+    }
+
+    public function serviceCategory(): BelongsTo
+    {
+        return $this->belongsTo(ServiceCategory::class, 'service_category_id');
     }
 
     public function orders(): HasMany

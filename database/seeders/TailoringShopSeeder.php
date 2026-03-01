@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\TailoringShop;
+use App\Models\ServiceCategory;
 use Illuminate\Database\Seeder;
 use App\Models\User;
 
@@ -11,6 +12,14 @@ class TailoringShopSeeder extends Seeder
     public function run(): void
     {
         $owner = User::where('role', 'store_admin')->first();
+        
+        // Get service category IDs
+        $customSewingCat = ServiceCategory::where('slug', 'custom-sewing')->first();
+        $alterationsCat = ServiceCategory::where('slug', 'alterations')->first();
+        $formalWearCat = ServiceCategory::where('slug', 'formal-wear')->first();
+        $repairsCat = ServiceCategory::where('slug', 'repairs')->first();
+        $embroideryCat = ServiceCategory::where('slug', 'embroidery')->first();
+        
         $shop1 = TailoringShop::create([
             'user_id' => $owner ? $owner->id : null,
             'shop_name' => 'Dumaguete Tailoring Co.',
@@ -19,18 +28,43 @@ class TailoringShopSeeder extends Seeder
             'address' => '123 Rizal Ave, Dumaguete City',
             'contact_number' => '+63 912 345 6789',
             'is_active' => true,
-            'status' => 'pending',
+            'status' => 'approved',
         ]);
 
-        foreach (
+        $shop1->services()->createMany([
             [
-                ['service_category' => 'Alterations', 'starting_price' => 150.00, 'turnaround_time' => '2-3 days', 'service_description' => 'Hemming services for pants and skirts', 'is_available' => true],
-                ['service_category' => 'Custom Sewing', 'starting_price' => 2500.00, 'turnaround_time' => '1 week', 'service_description' => 'Custom Barong Tagalog', 'is_available' => true],
-                ['service_category' => 'Alterations', 'starting_price' => 400.00, 'turnaround_time' => '3-5 days', 'service_description' => 'Dress alteration and fitting', 'is_available' => true],
-            ] as $s
-        ) {
-            $shop1->services()->create($s);
-        }
+                'service_category_id' => $alterationsCat?->id ,
+                'service_name' => 'Hemming',
+                'price' => 150.00,
+                'duration_days' => '2-3 days',
+                'service_description' => 'Hemming services for pants and skirts',
+                'is_available' => true
+            ],
+            [
+                'service_category_id' => $alterationsCat?->id ,
+                'service_name' => 'Hemming',
+                'price' => 150.00,
+                'duration_days' => '2-3 days',
+                'service_description' => 'Hemming services for pants and skirts',
+                'is_available' => true
+            ],
+            [
+                'service_category_id' => $customSewingCat?->id,
+                'service_name' => 'Barong Tagalog',
+                'price' => 2500.00,
+                'duration_days' => '1 week',
+                'service_description' => 'Custom Barong Tagalog',
+                'is_available' => true
+            ],
+            [
+                'service_category_id' => $alterationsCat?->id,
+                'service_name' => 'Dress Alteration',
+                'price' => 400.00,
+                'duration_days' => '3-5 days',
+                'service_description' => 'Dress alteration and fitting',
+                'is_available' => true
+            ],
+        ]);
 
         $shop2 = TailoringShop::create([
             'user_id' => $owner ? $owner->id : null,
@@ -43,14 +77,34 @@ class TailoringShopSeeder extends Seeder
             'status' => 'approved',
         ]);
 
-        foreach (
+        $shop2->services()->createMany([
             [
-                ['service_category' => 'Alterations', 'starting_price' => 200.00, 'turnaround_time' => '2 days', 'service_description' => 'Pants alteration and hemming', 'is_available' => true],
-                ['service_category' => 'Formal Wear', 'starting_price' => 1800.00, 'turnaround_time' => '5-7 days', 'service_description' => 'Custom blazer fitting and tailoring', 'is_available' => true, 'appointment_required' => true],
-            ] as $s
-        ) {
-            $shop2->services()->create($s);
-        }
+                'service_category_id' => $alterationsCat?->id,
+                'service_name' => 'Pants Alteration',
+                'price' => 200.00,
+                'duration_days' => '2 days',
+                'service_description' => 'Pants alteration and hemming',
+                'is_available' => true
+            ],
+            [
+                'service_category_id' => $formalWearCat?->id,
+                'service_name' => 'Blazer',
+                'price' => 1800.00,
+                'duration_days' => '5-7 days',
+                'service_description' => 'Custom blazer fitting and tailoring',
+                'is_available' => true,
+                'appointment_required' => true
+            ],
+            [
+                'service_category_id' => $embroideryCat?->id,
+                'service_name' => 'Embroidery',
+                'price' => 500.00,
+                'duration_days' => '3-5 days',
+                'service_description' => 'Custom embroidery work',
+                'is_available' => true
+            ],
+        ]);
+
         $shop3 = TailoringShop::create([
             'user_id' => $owner ? $owner->id : null,
             'shop_name' => 'Stitch ImPerfect',
@@ -62,13 +116,32 @@ class TailoringShopSeeder extends Seeder
             'status' => 'approved',
         ]);
 
-        foreach (
+        $shop3->services()->createMany([
             [
-                ['service_category' => 'Alterations', 'starting_price' => 250.00, 'turnaround_time' => '1 days', 'service_description' => 'Pants alteration and hemming', 'is_available' => true],
-                ['service_category' => 'Formal Wear', 'starting_price' => 2500.00, 'turnaround_time' => '3-5 days', 'service_description' => 'Custom blazer fitting and tailoring', 'is_available' => true, 'appointment_required' => true],
-            ] as $s
-        ) {
-            $shop3->services()->create($s);
-        }
+                'service_category_id' => $alterationsCat?->id,
+                'service_name' => 'Quickie',
+                'price' => 250.00,
+                'duration_days' => '1 day',
+                'service_description' => 'Quick pants alteration and hemming',
+                'is_available' => true
+            ],
+            [
+                'service_category_id' => $formalWearCat?->id,
+                'service_name' => 'Blazer',
+                'price' => 2500.00,
+                'duration_days' => '3-5 days',
+                'service_description' => 'Custom blazer fitting and tailoring',
+                'is_available' => true,
+                'appointment_required' => true
+            ],
+            [
+                'service_category_id' => $repairsCat?->id,
+                'service_name' => 'Clothing Repairs',
+                'price' => 100.00,
+                'duration_days' => '1-2 days',
+                'service_description' => 'Clothing repairs and patches',
+                'is_available' => true
+            ],
+        ]);
     }
 }

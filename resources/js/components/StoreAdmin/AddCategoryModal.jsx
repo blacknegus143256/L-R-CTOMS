@@ -11,7 +11,8 @@ export default function AddCategoryModal({
     data, 
     setData, 
     onSubmit, 
-    processing 
+    processing,
+    categories 
 }) {
     return (
         <Transition show={isOpen} leave="duration-200">
@@ -45,17 +46,34 @@ export default function AddCategoryModal({
                     >
                         <form onSubmit={onSubmit} className="p-6">
                             <h2 className="text-lg font-bold mb-4">Add New Category</h2>
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium mb-1">Category Name</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full mt-1 border-gray-300 rounded-md"
-                                    value={data.name}
-                                    onChange={e => setData('name', e.target.value)}
-                                    placeholder="e.g., Threads, Buttons, Fabrics"
+                            <select
+                                value={data.attribute_category_id}
+                                onChange={(e) => setData('attribute_category_id', e.target.value)}
+                                className="w-full border-gray-300 rounded-md"
+                            >
+                                <option value="">Select Category</option>
+                                {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                    </option>
+                                ))}
+                                <option value="other">Other</option>
+                            </select>
+                            {data.attribute_category_id === 'other' && (
+                            <div className="mt-3">
+                                <label className="block text-sm font-medium mb-1">
+                                    New Category Name
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full border-gray-300 rounded-md"
+                                    value={data.new_category_name || ''}
+                                    onChange={(e) => setData('new_category_name', e.target.value)}
+                                    placeholder="e.g. Leather"
                                     required
                                 />
                             </div>
+                        )}
                             <div className="mt-6 flex justify-end">
                                 <button type="button" onClick={onClose} className="mr-3 text-gray-600">Cancel</button>
                                 <button 

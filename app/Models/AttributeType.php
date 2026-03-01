@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Attribute extends Model
+class AttributeType extends Model
 {
     use HasFactory;
 
@@ -20,8 +20,8 @@ class Attribute extends Model
 
     public function tailoringShops(): BelongsToMany
     {
-        return $this->belongsToMany(TailoringShop::class, 'shop_attributes')
-            ->withPivot(['price', 'unit', 'notes', 'is_available'])
+        return $this->belongsToMany(TailoringShop::class, 'shop_attributes', 'attribute_type_id', 'tailoring_shop_id')
+            ->withPivot(['item_name', 'price', 'unit', 'notes', 'is_available'])
             ->withTimestamps();
     }
 }

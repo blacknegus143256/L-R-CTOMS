@@ -11,7 +11,8 @@ return new class extends Migration
         Schema::create('shop_attributes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tailoring_shop_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('attribute_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('attribute_type_id')->constrained('attribute_types')->cascadeOnDelete();
+            $table->string('item_name');
             $table->decimal('price', 10, 2)->nullable();
             $table->string('unit')->default('per item');
             $table->text('notes')->nullable();

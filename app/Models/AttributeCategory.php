@@ -12,8 +12,8 @@ class AttributeCategory extends Model
 
     protected $fillable = ['name', 'slug'];
 
-    public function attributes(): HasMany
+    public function attributeTypes(): HasMany
     {
-        return $this->hasMany(Attribute::class, 'attribute_category_id');
+        return $this->hasMany(AttributeType::class, 'attribute_category_id');
     }
 }

@@ -2,41 +2,52 @@ import Modal from '@/components/Modal';
 import { useEffect } from 'react';
 
 export default function EditShopAttributeModal({ 
-    isOpen, 
+    show, 
     onClose,
-    item, 
-    pivot, 
-    data, 
-    setData, 
-    onSubmit, 
+    attribute, 
+    editAttrData, 
+    setEditAttrData, 
+    submitEditAttr, 
     processing,
-    
 }) {
     useEffect(() => {
-    if (!pivot || !isOpen) return;
+        if (!attribute || !show) return;
 
-    setData('price', pivot.price ?? '');
-    setData('unit', pivot.unit ?? 'per piece');
-    setData('notes', pivot.notes ?? '');
-    setData('is_available', pivot.is_available ?? false);
+        setEditAttrData('item_name', attribute.pivot?.item_name || '');
+        setEditAttrData('price', attribute.pivot?.price || '');
+        setEditAttrData('unit', attribute.pivot?.unit || 'per piece');
+        setEditAttrData('notes', attribute.pivot?.notes || '');
+        setEditAttrData('is_available', attribute.pivot?.is_available ?? false);
 
-}, [item?.id, isOpen]);
-    if (!item) return null;
+    }, [attribute?.id, show]);
+
+    if (!attribute) return null;
 
     return (
-        <Modal show={isOpen} onClose={onClose}>
-            <form onSubmit={onSubmit} className="p-6">
+        <Modal show={show} onClose={onClose}>
+            <form onSubmit={submitEditAttr} className="p-6">
                 <h2 className="text-lg font-medium text-gray-900">
-                    Edit {item.name}
+                    Edit {attribute.name}
                 </h2>
+
+                <div className="mt-4">
+                    <label className="block text-sm font-medium">Item Name / Details</label>
+                    <input 
+                        type="text" 
+                        className="w-full mt-1 border-gray-300 rounded-md"
+                        value={editAttrData.item_name || ''}
+                        onChange={e => setEditAttrData('item_name', e.target.value)}
+                        placeholder="(eg. Blue Floral Pattern)"
+                    />
+                </div>
 
                 <div className="mt-4">
                     <label className="block text-sm font-medium">Price (₱)</label>
                     <input 
                         type="number" 
                         className="w-full mt-1 border-gray-300 rounded-md"
-                        value={data.price}
-                        onChange={e => setData('price', e.target.value)}
+                        value={editAttrData.price}
+                        onChange={e => setEditAttrData('price', e.target.value)}
                         required
                     />
                 </div>
@@ -45,8 +56,8 @@ export default function EditShopAttributeModal({
                     <label className="block text-sm font-medium">Unit</label>
                     <select 
                         className="w-full mt-1 border-gray-300 rounded-md"
-                        value={data.unit}
-                        onChange={e => setData('unit', e.target.value)}
+                        value={editAttrData.unit}
+                        onChange={e => setEditAttrData('unit', e.target.value)}
                     >
                         <option value="per yard">per yard</option>
                         <option value="per meter">per meter</option>
@@ -60,8 +71,8 @@ export default function EditShopAttributeModal({
                     <label className="block text-sm font-medium">Notes (Optional)</label>
                     <textarea 
                         className="w-full mt-1 border-gray-300 rounded-md"
-                        value={data.notes || ''}
-                        onChange={e => setData('notes', e.target.value)}
+                        value={editAttrData.notes || ''}
+                        onChange={e => setEditAttrData('notes', e.target.value)}
                         placeholder="Any additional notes..."
                         rows={2}
                     />
@@ -71,8 +82,8 @@ export default function EditShopAttributeModal({
                     <input 
                         type="checkbox" 
                         id="is_available"
-                        checked={data.is_available}
-                        onChange={e => setData('is_available', e.target.checked)}
+                        checked={editAttrData.is_available}
+                        onChange={e => setEditAttrData('is_available', e.target.checked)}
                         className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                     />
                     <label htmlFor="is_available" className="ml-2 text-sm text-gray-700">

@@ -13,11 +13,12 @@ class ServiceController extends Controller
      */
     public function index(): JsonResponse
     {
-        $services = Service::whereHas('tailoringShop', function ($q) {
+        $services = Service::with('serviceCategory')
+        ->whereHas('tailoringShop', function ($q) {
             $q->where('is_active', true);
         })
-        ->orderBy('service_category')
-        ->get(['id', 'tailoring_shop_id', 'service_category', 'service_description', 'starting_price', 'turnaround_time', 'is_available', 'rush_service_available', 'appointment_required', 'notes']);
+        ->orderBy('service_category_id')
+        ->get(['id', 'tailoring_shop_id', 'service_category_id', 'service_name', 'service_description', 'price', 'duration_days', 'is_available', 'rush_service_available', 'appointment_required', 'notes']);
 
         return response()->json(['data' => $services]);
     }

@@ -46,7 +46,7 @@ class ShopController extends Controller
         if (is_array($serviceCategories) && count($serviceCategories) > 0) {
             $serviceCategories = array_filter($serviceCategories);
             if (count($serviceCategories) > 0) {
-                $query->whereHas('services', fn ($q) => $q->whereIn('service_category', $serviceCategories));
+                $query->whereHas('services', fn ($q) => $q->whereIn('service_category_id', $serviceCategories));
             }
         }
 
@@ -65,10 +65,15 @@ class ShopController extends Controller
         }
 
         $shop->load([
-            'services:id,tailoring_shop_id,service_category,service_description,starting_price,turnaround_time,is_available,rush_service_available,appointment_required,notes',
+
+            'services' => function ($q) {
+                $q->select('id', 'tailoring_shop_id','service_category_id', 'service_name', 'service_description', 'price', 'duration_days', 'is_available', 'rush_service_available', 'appointment_required', 'notes')
+                ->with('serviceCategory:id,name');
+            },
             'attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }
+
         ]);
 
         return response()->json(['data' => $shop]);
@@ -90,10 +95,25 @@ class ShopController extends Controller
         $shops = TailoringShop::query()
             ->where('is_active', true)
             ->whereIn('id', [$id1, $id2])
+            ->orderByRaw("FIELD(id, $id1, $id2)")
             ->with(['attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }])
-            ->with(['services:id,tailoring_shop_id,service_category,service_description,starting_price,turnaround_time,is_available,rush_service_available,appointment_required,notes'])
+            ->with(['services' => function ($q) {
+            $q->select(
+                'id',
+                'tailoring_shop_id',
+                'service_category_id',
+                'service_name',
+                'service_description',
+                'price',
+                'duration_days',
+                'is_available',
+                'rush_service_available',
+                'appointment_required',
+                'notes'
+            )->with('serviceCategory:id,name');
+        }])
             ->get();
 
         if ($shops->count() !== 2) {

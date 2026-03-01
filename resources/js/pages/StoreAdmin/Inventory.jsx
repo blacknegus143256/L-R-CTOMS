@@ -6,23 +6,31 @@ import AddCategoryModal from '@/components/StoreAdmin/AddCategoryModal';
 import EditShopAttributeModal from '@/components/StoreAdmin/EditShopAttributeModal';
 import { Pencil, Trash2, Plus, X } from 'lucide-react';
 
-const SERVICE_CATEGORIES = [
-    'Custom Sewing',
-    'Alterations',
-    'Repairs',
-    'Embroidery',
-    'Formal Wear'
+const FABRIC_CATEGORIES = [
+    'Cotton',
+    'Polyester',
+    'Silk',
+    'Linen',
+    'Wool',
+    'Denim',
+    'Knit / Stretch',
+    'Lace',
+    'Satin / Shiny',
+    'Uniform Fabric',
+    'Mixed / Blend',
+    'Others'
 ];
 
-export default function Inventory({ auth, services, categories, shopAttributes }) {
+export default function Inventory({ auth, services, categories, shopAttributes, serviceCategories = [], attributeTypes = [] }) {
     
     const [newAttributeModal, setNewAttributeModal] = useState(false);
     const [targetCategoryId, setTargetCategoryId] = useState(null);
 
     // Form state for creating new attribute with inventory details
     const {data: attrData, setData: setAttrData, post: postAttribute, processing: processingAttribute, reset: resetAttribute, errors: attributeErrors} = useForm({
-        name: '',
         attribute_category_id: '',
+        attribute_type_id: '',
+        item_name: '',
         price: '',
         unit: 'per yard',
         notes: '',
@@ -42,18 +50,28 @@ export default function Inventory({ auth, services, categories, shopAttributes }
 
     const submitNewAttribute = (e) => {
         e.preventDefault();
+
+        console.log("Submitting data:", attrData);
         postAttribute(route('store.master-attributes.add'), { onSuccess: () => {
             closeNewAttributeModal();
         }
         });
     };
 
+    // Helper function to get service category name from ID
+    const getServiceCategoryName = (categoryId) => {
+        if (!categoryId) return '-';
+        const cat = serviceCategories.find(c => c.id === categoryId || c.id === parseInt(categoryId));
+        return cat ? cat.name : categoryId;
+    };
+
     // Service form state - Updated with new fields
     const { data: serviceData, setData: setServiceData, post: postService, reset: resetService, processing: serviceProcessing, errors: serviceErrors } = useForm({
-        service_category: '',
+        service_category_id: '',
+        service_name: '',
         service_description: '',
-        starting_price: '',
-        turnaround_time: '',
+        price: '',
+        duration_days: '',
         is_available: true,
         rush_service_available: false,
         appointment_required: false,
@@ -68,10 +86,11 @@ export default function Inventory({ auth, services, categories, shopAttributes }
     // Edit service state
     const [editingService, setEditingService] = useState(null);
     const { data: editServiceData, setData: setEditServiceData, put: putService, reset: resetEditService, processing: editProcessing, errors: editServiceErrors } = useForm({
-        service_category: '',
+        service_category_id: '',
+        service_name: '',
         service_description: '',
-        starting_price: '',
-        turnaround_time: '',
+        price: '',
+        duration_days: '',
         is_available: true,
         rush_service_available: false,
         appointment_required: false,
@@ -81,10 +100,11 @@ export default function Inventory({ auth, services, categories, shopAttributes }
     const openEditModal = (service) => {
         setEditingService(service);
         setEditServiceData({
-            service_category: service.service_category || '',
+            service_category_id: service.service_category_id || '',
+            service_name: service.service_name || '',
             service_description: service.service_description || '',
-            starting_price: service.starting_price || '',
-            turnaround_time: service.turnaround_time || '',
+            price: service.price || '',
+            duration_days: service.duration_days || '',
             is_available: service.is_available ?? true,
             rush_service_available: service.rush_service_available ?? false,
             appointment_required: service.appointment_required ?? false,
@@ -127,6 +147,8 @@ export default function Inventory({ auth, services, categories, shopAttributes }
     // Edit attribute modal state
     const [editingAttribute, setEditingAttribute] = useState(null);
     const {data: editAttrData, setData: setEditAttrData, put: putAttribute, processing: attrProcessing, reset: resetEditAttr} = useForm({
+        attribute_type_id: '',
+        item_name: '',
         price: '',
         unit: '',
         notes: '',
@@ -136,6 +158,8 @@ export default function Inventory({ auth, services, categories, shopAttributes }
     const openEditAttrModal = (attr) => {
         setEditingAttribute(attr);
         setEditAttrData({
+            attribute_type_id: attr.pivot.id,
+            item_name: attr.pivot.item_name || '',
             price: attr.pivot.price,
             unit: attr.pivot.unit,
             notes: attr.pivot.notes || '',
@@ -148,6 +172,7 @@ export default function Inventory({ auth, services, categories, shopAttributes }
     };
     const submitEditAttr = (e) => {
         e.preventDefault();
+        console.log('Submitting edit for attribute ID:', editingAttribute.id, 'with data:', editAttrData);
         putAttribute(route('store.attributes.update', editingAttribute.id), {
             onSuccess: () => closeEditAttrModal(),
         });
@@ -185,24 +210,37 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Service Category</label>
                                     <select
-                                        value={serviceData.service_category}
-                                        onChange={e => setServiceData('service_category', e.target.value)}
+                                        value={serviceData.service_category_id}
+                                        onChange={e => {
+                                            const selectedId = e.target.value;
+                                            const selectedCat = serviceCategories.find(c => c.id === parseInt(selectedId));
+                                            setServiceData('service_category_id', Number(e.target.value));
+                                        }}
                                         className="w-full border-gray-300 rounded-md shadow-sm"
                                         required
                                     >
                                         <option value="">Select Category</option>
-                                        {SERVICE_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
+                                        {serviceCategories.map(cat => (
+                                            <option key={cat.id} value={cat.id}>{cat.name}</option>
                                         ))}
                                     </select>
                                 </div>
-                                
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Starting Price</label>
+                                    <label className="block text-sm font-medium mb-1">Service Name</label>
+                                    <input
+                                        type="text"
+                                        value={serviceData.service_name}
+                                        onChange={e => setServiceData('service_name', e.target.value)}
+                                        className="w-full border-gray-300 rounded-md shadow-sm"
+                                        required
+                                    />
+                                    </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Price</label>
                                     <input 
                                         type="number"
-                                        value={serviceData.starting_price}
-                                        onChange={e => setServiceData('starting_price', e.target.value)}
+                                        value={serviceData.price}
+                                        onChange={e => setServiceData('price', e.target.value)}
                                         className="w-full border-gray-300 rounded-md shadow-sm"
                                         required
                                         min="0"
@@ -211,11 +249,11 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 </div>
                                 
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Turnaround Time (days)</label>
+                                    <label className="block text-sm font-medium mb-1">Duration Days</label>
                                     <input 
                                         type="number"
-                                        value={serviceData.turnaround_time}
-                                        onChange={e => setServiceData('turnaround_time', e.target.value)}
+                                        value={serviceData.duration_days}
+                                        onChange={e => setServiceData('duration_days', e.target.value)}
                                         className="w-full border-gray-300 rounded-md shadow-sm"
                                         min="0"
                                     />
@@ -300,9 +338,10 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Name</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Starting Price</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Turnaround</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration Days</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Options</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -318,12 +357,13 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                     ) : (
                                         services.map((service) => (
                                             <tr key={service.id}>
-                                                <td className="px-4 py-3">{service.service_category}</td>
+                                                <td className="px-4 py-3">{getServiceCategoryName(service.service_category_id)}</td>
+                                                <td className="px-4 py-3">{service.service_name || '-'}</td>
                                                 <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
                                                     {service.service_description || '-'}
                                                 </td>
-                                                <td className="px-4 py-3">${service.starting_price}</td>
-                                                <td className="px-4 py-3">{service.turnaround_time} days</td>
+                                                <td className="px-4 py-3">₱{service.price}</td>
+                                                <td className="px-4 py-3">{service.duration_days} days</td>
                                                 <td className="px-4 py-3">
                                                     <span className={`px-2 py-1 text-xs rounded-full ${service.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                                         {service.is_available ? 'Available' : 'Unavailable'}
@@ -358,7 +398,7 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                     {/* Attributes/Inventory Section */}
                     <div className="bg-white p-6 rounded-lg shadow">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-semibold">Fabric Inventory</h2>
+                            <h2 className="text-xl font-semibold">Inventory</h2>
                             <div className="flex gap-2">
                                 <button 
                                     onClick={() => setCategoryModal(true)}
@@ -383,7 +423,8 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 <table className="min-w-full divide-y divide-gray-200 border">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Category</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Item Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Price</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Unit</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
@@ -394,9 +435,10 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                         {shopAttributes
                                             .filter(sa => sa.attribute_category_id === cat.id)
                                             .map((shopAttr) => (
-                                                <tr key={shopAttr.id}>
-                                                    <td className="px-4 py-3">{shopAttr.name}</td>
-                                                    <td className="px-4 py-3">${shopAttr.pivot.price}</td>
+                                                <tr key={`${shopAttr.id}-${shopAttr.pivot?.item_name || ''}`}>
+                                                    <td className="px-4 py-3">{shopAttr.name || '-'}</td>
+                                                    <td className="px-4 py-3">{shopAttr.pivot.item_name || '-'}</td>
+                                                    <td className="px-4 py-3">₱{shopAttr.pivot.price}</td>
                                                     <td className="px-4 py-3">{shopAttr.pivot.unit}</td>
                                                     <td className="px-4 py-3">
                                                         <span className={`px-2 py-1 text-xs rounded-full ${shopAttr.pivot.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -427,27 +469,7 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                 </div>
             </div>
 
-            {/* Add Attribute Modal */}
-            <AddNewAttributeModal 
-                isOpen={newAttributeModal}
-                onClose={closeNewAttributeModal}
-                categories={categories}
-                targetCategoryId={targetCategoryId}
-                data={attrData}
-                setData={setAttrData}
-                onSubmit={submitNewAttribute}
-                processing={processingAttribute}
-            />
-
-            {/* Add Category Modal */}
-            <AddCategoryModal 
-                isOpen={categoryModal}
-                onClose={() => setCategoryModal(false)}
-                data={categoryFormData}
-                setData={setCategoryFormData}
-                onSubmit={submitCategory}
-                processing={categoryProcessing}
-            />
+            
 
             {/* Edit Service Modal */}
             {editingService && (
@@ -463,23 +485,37 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                             <div className="mb-4">
                                 <label className="block text-sm font-medium mb-1">Service Category</label>
                                 <select
-                                    value={editServiceData.service_category}
-                                    onChange={e => setEditServiceData('service_category', e.target.value)}
+                                    value={editServiceData.service_category_id}
+                                    onChange={e => {
+                                        const selectedId = e.target.value;
+                                        const selectedCat = serviceCategories.find(c => c.id === parseInt(selectedId));
+                                        setEditServiceData('service_category_id', Number(e.target.value));
+                                    }}
                                     className="w-full border-gray-300 rounded-md shadow-sm"
                                     required
                                 >
                                     <option value="">Select Category</option>
-                                    {SERVICE_CATEGORIES.map(cat => (
-                                        <option key={cat} value={cat}>{cat}</option>
+                                    {serviceCategories.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
                                     ))}
                                 </select>
                             </div>
+                            <div>
+                            <label className="block text-sm font-medium mb-1">Service Name</label>
+                            <input
+                                type="text"
+                                value={editServiceData.service_name}
+                                onChange={e => setEditServiceData('service_name', e.target.value)}
+                                className="w-full border-gray-300 rounded-md shadow-sm"
+                                required
+                            />
+                            </div>
                             <div className="mb-4">
-                                <label className="block text-sm font-medium mb-1">Starting Price</label>
+                                <label className="block text-sm font-medium mb-1">Price</label>
                                 <input 
                                     type="number"
-                                    value={editServiceData.starting_price}
-                                    onChange={e => setEditServiceData('starting_price', e.target.value)}
+                                    value={editServiceData.price}
+                                    onChange={e => setEditServiceData('price', e.target.value)}
                                     className="w-full border-gray-300 rounded-md shadow-sm"
                                     required
                                     min="0"
@@ -487,11 +523,11 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                                 />
                             </div>
                             <div className="mb-4">
-                                <label className="block text-sm font-medium mb-1">Turnaround Time (days)</label>
+                                <label className="block text-sm font-medium mb-1">Duration days</label>
                                 <input 
                                     type="number"
-                                    value={editServiceData.turnaround_time}
-                                    onChange={e => setEditServiceData('turnaround_time', e.target.value)}
+                                    value={editServiceData.duration_days}
+                                    onChange={e => setEditServiceData('duration_days', e.target.value)}
                                     className="w-full border-gray-300 rounded-md shadow-sm"
                                     min="0"
                                 />
@@ -577,7 +613,33 @@ export default function Inventory({ auth, services, categories, shopAttributes }
                 setEditAttrData={setEditAttrData}
                 submitEditAttr={submitEditAttr}
                 attrProcessing={attrProcessing}
+                attributeTypes={attributeTypes}
             />
+
+            {/* Add Attribute Modal */}
+            <AddNewAttributeModal 
+                isOpen={newAttributeModal}
+                onClose={closeNewAttributeModal}
+                categories={categories}
+                targetCategoryId={targetCategoryId}
+                data={attrData}
+                setData={setAttrData}
+                onSubmit={submitNewAttribute}
+                processing={processingAttribute}
+                attributeTypes={attributeTypes}
+            />
+
+            {/* Add Category Modal */}
+            <AddCategoryModal 
+                isOpen={categoryModal}
+                onClose={() => setCategoryModal(false)}
+                data={categoryFormData}
+                setData={setCategoryFormData}
+                onSubmit={submitCategory}
+                processing={categoryProcessing}
+                categories={categories}
+            />
+
         </AuthenticatedLayout>
     );
 }
