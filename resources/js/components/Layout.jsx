@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
+import "maplibre-gl/dist/maplibre-gl.css";
+
 export default function Layout() {
     const { token } = useAuth();
 

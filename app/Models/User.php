@@ -47,6 +47,12 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+    protected static function booted()
+    {
+        static::created(function ($user) {
+            $user->profile()->create([]);
+        });
+    }
 
     public function tailoringShops(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
@@ -56,4 +62,8 @@ class User extends Authenticatable
 {
     return $this->hasOne(TailoringShop::class, 'user_id');
 }
+    public function profile()
+    {
+        return $this->hasOne(UserProfile::class, 'user_id');
+    }
 }

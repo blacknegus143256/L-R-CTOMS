@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import ViewProfile from '@/components/ViewProfile';
+import "maplibre-gl/dist/maplibre-gl.css";
+import LocationMapModal from "@/components/LocationMapModal";
 
 export default function Home() {
     const [user, setUser] = useState(null);
@@ -18,6 +20,9 @@ export default function Home() {
     const [compareLoading, setCompareLoading] = useState(false);
     const [error, setError] = useState(null);
     
+    const [locationModalOpen, setLocationModalOpen] = useState(false);
+    const [selectedLocation, setSelectedLocation] = useState(null);
+
     const [showModal, setShowModal] = useState(false);
     const [selectedShop, setSelectedShop] = useState(null);
     const [modalLoading, setModalLoading] = useState(false);
@@ -253,11 +258,41 @@ export default function Home() {
                                     </thead>
                                     <tbody>
                                         <tr className="border-b border-stone-100">
-                                            <td className="px-8 py-4 font-medium text-stone-600">Location</td>
-                                            {compareShops.map((shop) => (
-                                                <td key={shop.id} className="px-4 py-2 text-stone-700">{shop.address || '—'}</td>
-                                            ))}
-                                        </tr>
+                                        <td className="px-8 py-4 font-medium text-stone-600">Location</td>
+
+                                        {compareShops.map((shop) => {
+                                            const hasCoords = shop.user.profile.latitude !== null && shop.user.profile.longitude !== null;
+
+                                            const locationText = [
+                                                shop.user.profile.street,
+                                                shop.user.profile.barangay
+                                            ].filter(Boolean).join(', ');
+
+                                            return (
+                                                <td key={shop.id} className="px-4 py-2 text-stone-700">
+                                                    {hasCoords ? (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedLocation({
+                                                                    lat: shop.user.profile.latitude,
+                                                                    lng: shop.user.profile.longitude,
+                                                                    street: shop.user.profile.street,
+                                                                    barangay: shop.user.profile.barangay,
+                                                                    shopName: shop.user.profile.shop_name,
+                                                                });
+                                                                setLocationModalOpen(true);
+                                                            }}
+                                                            className="text-amber-600 hover:underline"
+                                                        >
+                                                            {locationText || 'View on Map'}
+                                                        </button>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
                                         {uniqueServiceCategories.length > 0 && (
                                             <React.Fragment>
                                                 <tr className="border-b border-stone-100">
@@ -344,6 +379,12 @@ export default function Home() {
                     <ViewProfile shop={selectedShop} onClose={() => setShowModal(false)} onPlaceOrder={handlePlaceOrder} />
                 )
             )}
+            {locationModalOpen && selectedLocation && (
+            <LocationMapModal
+                location={selectedLocation}
+                onClose={() => setLocationModalOpen(false)}
+            />
+        )}
         </div>
     );
 }

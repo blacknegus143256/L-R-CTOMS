@@ -4,18 +4,26 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
+import { useEffect, useRef } from 'react';
+import MapLibrePicker from "@/Components/MapLibrePicker";
+import { useState } from "react";
+
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
     status,
     className = '',
 }) {
+    const [openMap, setOpenMap] = useState(false);
     const user = usePage().props.auth.user;
 
     const { data, setData, patch, errors, processing, recentlySuccessful } =
         useForm({
             name: user.name,
             email: user.email,
+            phone: user.profile?.phone || '',
+            barangay: user.profile?.barangay || '',
+            street: user.profile?.street || '',
         });
 
     const submit = (e) => {
@@ -68,6 +76,46 @@ export default function UpdateProfileInformation({
 
                     <InputError className="mt-2" message={errors.email} />
                 </div>
+                <div>
+                <InputLabel htmlFor="phone" value="Phone" />
+                <TextInput
+                    id="phone"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={11}
+                    className="mt-1 block w-full"
+                    value={data.phone}
+                    onChange={(e) => setData('phone', e.target.value)}
+                />
+                <InputError message={errors.phone} className="mt-2" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+                <div>
+                    <InputLabel htmlFor="barangay" value="Barangay" />
+                    <TextInput
+                        id="barangay"
+                        value={data.barangay}
+                        onChange={(e) => setData('barangay', e.target.value)}
+                    />
+                </div>
+
+                <div>
+                    <InputLabel htmlFor="street" value="Street" />
+                    <TextInput
+                        id="street"
+                        value={data.street}
+                        onChange={(e) => setData('street', e.target.value)}
+                    />
+                </div>
+                <button
+                type="button"
+                onClick={() => setOpenMap(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+            >
+                Set Location from Map
+            </button>
+            </div>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
                     <div>
@@ -108,6 +156,35 @@ export default function UpdateProfileInformation({
                     </Transition>
                 </div>
             </form>
+            {openMap && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white w-3/4 h-3/4 rounded-xl p-4 relative">
+                    
+                    <button
+                        onClick={() => setOpenMap(false)}
+                        className="absolute top-2 right-2 text-gray-600"
+                    >
+                        ✕
+                    </button>
+        
+                    <h3 className="text-lg font-semibold mb-2">
+                        Select Location
+                    </h3>
+        
+                    <MapLibrePicker data={data} setData={setData} />
+        
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => setOpenMap(false)}
+                            className="px-4 py-2 bg-green-600 text-white rounded"
+                        >
+                            Save Location
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         </section>
     );
 }

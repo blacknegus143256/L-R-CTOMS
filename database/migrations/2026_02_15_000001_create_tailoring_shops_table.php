@@ -11,13 +11,16 @@ return new class extends Migration
         Schema::create('tailoring_shops', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+
             $table->string('shop_name');
+            $table->string('slug')->unique()->nullable();
+            $table->text('description')->nullable();
+
             $table->string('contact_person')->nullable();
             $table->string('contact_role')->default('Owner');
-            $table->text('address')->default('Dumaguete City');
-            $table->string('contact_number')->nullable();
+            
             $table->boolean('is_active')->default(true);
-            $table->string('status')->default('pending');
+            $table->enum('status', ['pending', 'approved', 'rejected', 'suspended'])->default('pending');
             $table->timestamps();
         });
     }

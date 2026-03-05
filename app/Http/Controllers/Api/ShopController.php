@@ -50,7 +50,22 @@ class ShopController extends Controller
             }
         }
 
-        $shops = $query->orderBy('shop_name')->get(['id', 'shop_name', 'address', 'contact_number', 'contact_person']);
+        $shops = $query->with(['user.profile'])->orderBy('shop_name')->get();
+
+        $shops = $shops->map(function ($shop) {
+            return[
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'contact_person' => $shop->contact_person,
+                'contact_role' => $shop->contact_role,
+
+                'phone' => optional($shop->user->profile)->phone,
+                'barangay' => optional($shop->user->profile)->barangay,
+                'street' => optional($shop->user->profile)->street,
+                'latitude' => optional($shop->user->profile)->latitude,
+                'longitude' => optional($shop->user->profile)->longitude,
+            ];
+        });
 
         return response()->json(['data' => $shops]);
     }
@@ -69,10 +84,11 @@ class ShopController extends Controller
             'services' => function ($q) {
                 $q->select('id', 'tailoring_shop_id','service_category_id', 'service_name', 'service_description', 'price', 'duration_days', 'is_available', 'rush_service_available', 'appointment_required', 'notes')
                 ->with('serviceCategory:id,name');
-            },
-            'attributes' => function ($q) {
-                $q->withPivot('price', 'unit', 'notes', 'is_available');
-            }
+                },
+                'attributes' => function ($q) {
+                    $q->withPivot('price', 'unit', 'notes', 'is_available');
+                },
+                'user.profile'
 
         ]);
 
@@ -96,6 +112,7 @@ class ShopController extends Controller
             ->where('is_active', true)
             ->whereIn('id', [$id1, $id2])
             ->orderByRaw("FIELD(id, $id1, $id2)")
+            ->with(['user.profile'])
             ->with(['attributes' => function ($q) {
                 $q->withPivot('price', 'unit', 'notes', 'is_available');
             }])
@@ -113,6 +130,7 @@ class ShopController extends Controller
                 'appointment_required',
                 'notes'
             )->with('serviceCategory:id,name');
+
         }])
             ->get();
 

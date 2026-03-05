@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\UserProfile;
 
 class ProfileController extends Controller
 {
@@ -21,6 +22,9 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => session('status'),
+            'auth' => [
+            'user' => $request->user()->load('profile'),
+        ],
         ]);
     }
 
@@ -29,14 +33,28 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
-
+        $user = $request->user();
+        $user->fill($request->validated());
+        
         if ($request->user()->isDirty('email')) {
             $request->user()->email_verified_at = null;
         }
+        $user->save();
+         // Update or create the user profile
+         $profileData  = $request->validate([
+            'phone' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string'],
+            'barangay' => ['nullable', 'string', 'max:255'],
+            'street' => ['nullable', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric'],
+            'longitude' => ['nullable', 'numeric'],
+        ]);
 
-        $request->user()->save();
-
+        $user->profile()->updateOrCreate(
+        ['user_id' => $user->id],
+        $profileData
+        );
+        
         return Redirect::route('profile.edit');
     }
 
