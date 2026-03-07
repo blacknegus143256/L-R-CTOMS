@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api\Dashboard;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttributeType;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\TailoringShop;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
+    private const VALID_STATUSES = ['Pending', 'Accepted', 'In Progress', 'Ready', 'Completed', 'Cancelled'];
+
     private function authorizeShop(Request $request, TailoringShop $shop): bool
     {
         return $request->user()->tailoringShops()->where('tailoring_shops.id', $shop->id)->exists();
@@ -22,7 +26,7 @@ class OrderController extends Controller
         }
 
         $orders = $shop->orders()
-            ->with(['customer:id,name,phone_number', 'service:id,service_name,price'])
+            ->with(['customer:id,name,phone_number', 'service:id,service_name,price', 'items.attribute'])
             ->latest()
             ->get();
 
@@ -38,9 +42,10 @@ class OrderController extends Controller
         $valid = $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'service_id' => 'required|exists:services,id',
-            'status' => 'nullable|string|in:Pending,Measuring,Sewing,Ready,Completed',
+            'attributes' => 'nullable|array',
+            'attributes.*' => 'integer|exists:attribute_types,id',
+            'status' => 'nullable|string|in:' . implode(',', self::VALID_STATUSES),
             'expected_completion_date' => 'nullable|date',
-            'total_price' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
         ]);
 
@@ -50,11 +55,51 @@ class OrderController extends Controller
             return response()->json(['message' => 'Customer or service does not belong to this shop.'], 422);
         }
 
-        $valid['tailoring_shop_id'] = $shop->id;
-        $valid['status'] = $valid['status'] ?? 'Pending';
-        $order = Order::create($valid);
+        // Calculate total price: service price + attribute prices
+        $totalPrice = $service->price;
+        $attributesData = [];
 
-        $order->load(['customer:id,name,phone_number', 'service:id,service_name,price']);
+        if (!empty($valid['attributes'])) {
+            // Get attribute prices from shop_attributes
+            $shopAttributes = $shop->attributes()
+                ->whereIn('attribute_types.id', $valid['attributes'])
+                ->get()
+                ->keyBy('id');
+
+            foreach ($valid['attributes'] as $attributeId) {
+                $shopAttr = $shopAttributes->get($attributeId);
+                $attrPrice = $shopAttr ? $shopAttr->pivot->price : 0;
+                $totalPrice += $attrPrice;
+
+                $attributesData[] = [
+                    'attribute_type_id' => $attributeId,
+                    'price' => $attrPrice,
+                ];
+            }
+        }
+
+        $orderData = [
+            'tailoring_shop_id' => $shop->id,
+            'customer_id' => $valid['customer_id'],
+            'service_id' => $valid['service_id'],
+            'status' => $valid['status'] ?? 'Pending',
+            'expected_completion_date' => $valid['expected_completion_date'] ?? null,
+            'total_price' => $totalPrice,
+            'notes' => $valid['notes'] ?? null,
+        ];
+
+        $order = Order::create($orderData);
+
+        // Create order items
+        foreach ($attributesData as $attrData) {
+            OrderItem::create([
+                'order_id' => $order->id,
+                'attribute_type_id' => $attrData['attribute_type_id'],
+                'price' => $attrData['price'],
+            ]);
+        }
+
+        $order->load(['customer:id,name,phone_number', 'service:id,service_name,price', 'items.attribute']);
 
         return response()->json(['data' => $order], 201);
     }
@@ -71,7 +116,9 @@ class OrderController extends Controller
         $valid = $request->validate([
             'customer_id' => 'sometimes|exists:customers,id',
             'service_id' => 'sometimes|exists:services,id',
-            'status' => 'nullable|string|in:Pending,Measuring,Sewing,Ready,Completed',
+            'attributes' => 'sometimes|array',
+            'attributes.*' => 'integer|exists:attribute_types,id',
+            'status' => 'nullable|string|in:' . implode(',', self::VALID_STATUSES),
             'expected_completion_date' => 'nullable|date',
             'total_price' => 'sometimes|numeric|min:0',
             'notes' => 'nullable|string',
@@ -84,9 +131,51 @@ class OrderController extends Controller
             return response()->json(['message' => 'Service does not belong to this shop.'], 422);
         }
 
+        // Handle attribute updates
+        if (isset($valid['attributes'])) {
+            $service = isset($valid['service_id']) 
+                ? $shop->services()->find($valid['service_id']) 
+                : $order->service;
+            
+            $totalPrice = $service->price;
+            $attributesData = [];
+
+            // Get attribute prices from shop_attributes
+            $shopAttributes = $shop->attributes()
+                ->whereIn('attribute_types.id', $valid['attributes'])
+                ->get()
+                ->keyBy('id');
+
+            foreach ($valid['attributes'] as $attributeId) {
+                $shopAttr = $shopAttributes->get($attributeId);
+                $attrPrice = $shopAttr ? $shopAttr->pivot->price : 0;
+                $totalPrice += $attrPrice;
+
+                $attributesData[] = [
+                    'attribute_type_id' => $attributeId,
+                    'price' => $attrPrice,
+                ];
+            }
+
+            // Delete existing order items and create new ones
+            $order->items()->delete();
+            foreach ($attributesData as $attrData) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'attribute_type_id' => $attrData['attribute_type_id'],
+                    'price' => $attrData['price'],
+                ]);
+            }
+
+            // Update total price if not manually set
+            if (!isset($valid['total_price'])) {
+                $valid['total_price'] = $totalPrice;
+            }
+        }
+
         $order->update($valid);
 
-        return response()->json(['data' => $order->fresh(['customer:id,name,phone_number', 'service:id,service_name,price'])]);
+        return response()->json(['data' => $order->fresh(['customer:id,name,phone_number', 'service:id,service_name,price', 'items.attribute'])]);
     }
 
     public function destroy(Request $request, TailoringShop $shop, Order $order): JsonResponse
@@ -98,6 +187,8 @@ class OrderController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
+        // Delete order items first (cascade should handle this, but being explicit)
+        $order->items()->delete();
         $order->delete();
 
         return response()->json(['message' => 'Deleted'], 200);

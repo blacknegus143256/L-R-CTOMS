@@ -1,45 +1,72 @@
-# Task: Update Fabric with Dropdown Categories
+# Order System Implementation Plan
 
-## Changes Made:
+## Completed Tasks
 
-### 1. Database Migrations
-- `database/migrations/2026_02_25_000001_add_fabric_categories.php` - Creates Fabric category with 12 predefined fabric types
-- `database/migrations/2026_02_25_000002_add_item_name_to_shop_attributes.php` - Adds item_name column to shop_attributes pivot table
-- `database/migrations/2026_02_26_000001_create_service_categories_table.php` - Creates service_categories table
-- `database/migrations/2026_02_26_000002_add_service_category_id_to_services_table.php` - Adds foreign key to services table
+### Phase 1: Backend ✅
+1. ✅ Created `CustomerOrderController` - for customers to place orders
+   - Endpoint: `POST /api/shops/{shop}/orders` - public endpoint for placing orders
+   - Handles both new and existing customers
+   - Calculates total price (service + attributes)
+   
+2. ✅ Added customer orders listing endpoint
+   - Endpoint: `GET /api/customer/orders` - for logged-in shop owners to view orders
 
-### 2. Models
-- `app/Models/ServiceCategory.php` - New model for service categories
-- `app/Models/Service.php` - Added serviceCategory relationship and service_category_id to fillable
+### Phase 2: Frontend - Order Modal ✅
+3. ✅ Created `OrderModal.jsx` component
+   - Two-step flow: Select attributes → Customer info
+   - Real-time price calculation
+   - Support for existing customers or new customer registration
+   - Order notes field
+   
+4. ✅ Updated `Shop.jsx` to integrate OrderModal
+   - Each service now has "Order Now" button
+   - Opens modal with service details and shop attributes
+   - Success notification after order placement
 
-### 3. Controllers
-- `app/Http/Controllers/Store/InventoryController.php` - Added serviceCategories to props, uses service_category_id, prevents attribute duplication, stores service_category_id value
-- `app/Http/Controllers/Api/CategoryController.php` - Added service_categories to API response
+5. ✅ Updated `ViewProfile.jsx`
+   - "Place Order" button now links to shop page
 
-### 4. Frontend - Store Admin
-- `resources/js/pages/StoreAdmin/Inventory.jsx` - Uses serviceCategories from props, displays category names using helper function
-- `resources/js/components/StoreAdmin/AddNewAttributeModal.jsx` - Added Fabric Category dropdown and Item Name input with placeholder "(eg. Blue Floral Pattern)"
-- `resources/js/components/StoreAdmin/EditShopAttributeModal.jsx` - Added Item Name field
+### Phase 3: Shop Order Management ✅
+6. ✅ Updated `DashboardOrders.jsx` (OrdersPage.jsx)
+   - Status filter tabs (All, Pending, Accepted, In Progress, Ready, Completed, Cancelled)
+   - Order cards showing customer, service, items, total
+   - Quick status update buttons (Accept, Start Work, Mark Ready, Complete, Cancel)
+   - Order details modal
 
-### 5. Seeders
-- `database/seeders/ServiceCategorySeeder.php` - New seeder for service categories
-- `database/seeders/AttributeSeeder.php` - Updated to use item_name
-- `database/seeders/TailoringShopSeeder.php` - Updated to use service_category_id foreign keys
-- `database/seeders/DatabaseSeeder.php` - Added ServiceCategorySeeder
+## What's Working Now
 
-## To apply changes, run:
-```
-php artisan migrate:fresh --seed
-```
+1. **Customer Flow:**
+   - Browse shops on Home page
+   - View shop profile (ViewProfile modal)
+   - Click "Place Order" → goes to Shop page
+   - Click "Order Now" on any service
+   - Select attributes and see real-time price
+   - Enter customer info (new or existing)
+   - Place order → success notification
 
-## Data Model:
-- **Fabric Category** (Cotton, Silk, Linen, etc.) - stored in `attributes.name`
-- **Item Name** (e.g., "Blue Floral Pattern") - stored in `shop_attributes.item_name`
-- **Service Category** - stored in `service_categories` table, service_category stores the ID (foreign key)
-- All 3 shops have different services and fabrics with different prices
+2. **Shop Owner Flow:**
+   - Login to dashboard
+   - Go to Orders page
+   - View all orders with filters
+   - Click on order to see details
+   - Update order status (Accept → In Progress → Ready → Completed)
 
-## Key Features:
-1. Attribute duplication prevention using `firstOrCreate` 
-2. Service category uses ID as foreign key stored in service_category column
-3. Fabric Category dropdown with 12 predefined categories
-4. Item Name field with placeholder "(eg. Blue Floral Pattern)"
+## Remaining Tasks (Optional)
+
+- Add customer-facing "My Orders" page for customers to track their orders
+- Add order number generation (e.g., ORD-2026-001)
+- Add email/SMS notifications
+- Add order history tracking
+
+## Files Modified/Created
+
+1. **Created:**
+   - `app/Http/Controllers/Api/Dashboard/CustomerOrderController.php`
+   - `resources/js/components/OrderModal.jsx`
+
+2. **Modified:**
+   - `routes/api.php` - Added customer order routes
+   - `resources/js/pages/Shop.jsx` - Integrated OrderModal
+   - `resources/js/components/ViewProfile.jsx` - Updated to link to Shop
+   - `resources/js/pages/dashboard/OrdersPage.jsx` - Updated with new status flow
+

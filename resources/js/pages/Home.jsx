@@ -261,11 +261,14 @@ export default function Home() {
                                         <td className="px-8 py-4 font-medium text-stone-600">Location</td>
 
                                         {compareShops.map((shop) => {
-                                            const hasCoords = shop.user.profile.latitude !== null && shop.user.profile.longitude !== null;
+                                            const lat = shop.user?.profile?.latitude;
+                                            const lng = shop.user?.profile?.longitude;
+                                            
+                                            const hasCoords = lat !== null && lng !== null && lat !== undefined && lng !== undefined;
 
                                             const locationText = [
-                                                shop.user.profile.street,
-                                                shop.user.profile.barangay
+                                                shop.user.profile?.street,
+                                                shop.user.profile?.barangay
                                             ].filter(Boolean).join(', ');
 
                                             return (
@@ -278,7 +281,7 @@ export default function Home() {
                                                                     lng: shop.user.profile.longitude,
                                                                     street: shop.user.profile.street,
                                                                     barangay: shop.user.profile.barangay,
-                                                                    shopName: shop.user.profile.shop_name,
+                                                                    shopName: shop.shop_name,
                                                                 });
                                                                 setLocationModalOpen(true);
                                                             }}
@@ -342,6 +345,25 @@ export default function Home() {
                                                                                 <div className="text-stone-800 font-medium">{item.pivot?.item_name || 'Generic'}</div>
                                                                                 <div className="text-xs text-stone-500">
                                                                                     ₱{Number(item.pivot?.price ?? 0).toFixed(2)} {item.pivot?.unit || ''}
+                                                                                    <div className="relative flex items-center group/tooltip">
+                                                                                    <svg 
+                                                                                        xmlns="http://www.w3.org/2000/svg" 
+                                                                                        fill="none" 
+                                                                                        viewBox="0 0 24 24" 
+                                                                                        strokeWidth={1.5} 
+                                                                                        stroke="currentColor" 
+                                                                                        className="w-3.5 h-3.5 text-stone-400 cursor-help hover:text-amber-600"
+                                                                                    >
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                                                                    </svg>
+
+                                                                                    {/* Tooltip text */}
+                                                                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block w-48 p-2 bg-stone-800 text-white text-[10px] rounded shadow-lg z-50 text-center leading-tight">
+                                                                                        Prices vary on the materials used
+                                                                                        {/* Arrow */}
+                                                                                        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-stone-800"></span>
+                                                                                    </span>
+                                                                                </div>
                                                                                 </div>
                                                                             </li>
                                                                         ))}

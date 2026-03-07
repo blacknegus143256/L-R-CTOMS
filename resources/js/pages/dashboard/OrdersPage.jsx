@@ -2,188 +2,357 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 
-const STATUS_OPTIONS = ['Pending', 'Measuring', 'Sewing', 'Ready', 'Completed'];
+const STATUS_OPTIONS = ['Pending', 'Accepted', 'In Progress', 'Ready', 'Completed', 'Cancelled'];
+
+const STATUS_COLORS = {
+    'Pending': 'bg-yellow-100 text-yellow-800',
+    'Accepted': 'bg-blue-100 text-blue-800',
+    'In Progress': 'bg-purple-100 text-purple-800',
+    'Ready': 'bg-green-100 text-green-800',
+    'Completed': 'bg-stone-100 text-stone-800',
+    'Cancelled': 'bg-red-100 text-red-800',
+};
 
 export default function OrdersPage() {
     const { shopId } = useParams();
-    const [list, setList] = useState([]);
-    const [customers, setCustomers] = useState([]);
-    const [services, setServices] = useState([]);
+    const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [modal, setModal] = useState(null);
-    const [saving, setSaving] = useState(false);
-    const [form, setForm] = useState({ customer_id: '', service_id: '', status: 'Pending', total_price: '', expected_completion_date: '', notes: '' });
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('All');
 
-    const fetchList = useCallback(() => {
+    const fetchOrders = useCallback(() => {
         if (!shopId) return;
         setLoading(true);
-        Promise.all([
-            axios.get(`/api/dashboard/shops/${shopId}/orders`),
-            axios.get(`/api/dashboard/shops/${shopId}/customers`),
-            axios.get(`/api/dashboard/shops/${shopId}/services`),
-        ])
-            .then(([o, c, s]) => {
-                setList(o.data.data || []);
-                setCustomers(c.data.data || []);
-                setServices(s.data.data || []);
+        axios.get(`/api/dashboard/shops/${shopId}/orders`)
+            .then((res) => {
+                setOrders(res.data.data || []);
             })
             .catch((e) => setError(e.response?.data?.message || 'Failed to load'))
             .finally(() => setLoading(false));
     }, [shopId]);
 
-    useEffect(() => fetchList(), [fetchList]);
+    useEffect(() => fetchOrders(), [fetchOrders]);
 
-    const openAdd = () => {
-        setForm({
-            customer_id: customers[0]?.id ?? '',
-            service_id: services[0]?.id ?? '',
-            status: 'Pending',
-            total_price: '',
-            expected_completion_date: '',
-            notes: '',
-        });
-        setModal('add');
-    };
-    const openEdit = (o) => {
-        setForm({
-            customer_id: o.customer_id,
-            service_id: o.service_id,
-            status: o.status,
-            total_price: String(o.total_price ?? ''),
-            expected_completion_date: o.expected_completion_date ? o.expected_completion_date.slice(0, 10) : '',
-            notes: o.notes || '',
-        });
-        setModal({ id: o.id });
-    };
-    const closeModal = () => setModal(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSaving(true);
+    const handleStatusUpdate = async (orderId, newStatus) => {
         try {
-            const payload = {
-                customer_id: Number(form.customer_id),
-                service_id: Number(form.service_id),
-                status: form.status,
-                total_price: parseFloat(form.total_price) || 0,
-                expected_completion_date: form.expected_completion_date || null,
-                notes: form.notes || null,
-            };
-            if (modal === 'add') {
-                await axios.post(`/api/dashboard/shops/${shopId}/orders`, payload);
-            } else {
-                await axios.put(`/api/dashboard/shops/${shopId}/orders/${modal.id}`, payload);
+            await axios.put(`/api/dashboard/shops/${shopId}/orders/${orderId}`, {
+                status: newStatus
+            });
+            fetchOrders();
+            if (selectedOrder?.id === orderId) {
+                setSelectedOrder(prev => ({ ...prev, status: newStatus }));
             }
-            closeModal();
-            fetchList();
         } catch (e) {
-            setError(e.response?.data?.message || 'Save failed');
-        } finally {
-            setSaving(false);
+            alert(e.response?.data?.message || 'Failed to update status');
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Delete this order?')) return;
-        try {
-            await axios.delete(`/api/dashboard/shops/${shopId}/orders/${id}`);
-            fetchList();
-        } catch (e) {
-            setError(e.response?.data?.message || 'Delete failed');
-        }
-    };
+    const filteredOrders = filterStatus === 'All' 
+        ? orders 
+        : orders.filter(o => o.status === filterStatus);
 
-    if (loading) return <div className="text-stone-500">Loading…</div>;
+    if (loading) return (
+        <div className="flex justify-center py-16">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600" />
+        </div>
+    );
+
     if (error) return <div className="rounded-lg bg-red-50 p-4 text-red-700">{error}</div>;
 
     return (
         <div>
-            <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-stone-800">Orders</h2>
-                <button type="button" onClick={openAdd} disabled={!customers.length || !services.length} className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50">
-                    Add order
-                </button>
-            </div>
-            {(!customers.length || !services.length) && (
-                <p className="mb-3 text-sm text-amber-700">Add at least one customer and one service to create orders.</p>
-            )}
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-                <table className="w-full text-sm">
-                    <thead>
-                        <tr className="border-b border-stone-200 bg-stone-50">
-                            <th className="px-4 py-3 text-left font-medium text-stone-700">Customer</th>
-                            <th className="px-4 py-3 text-left font-medium text-stone-700">Service</th>
-                            <th className="px-4 py-3 text-left font-medium text-stone-700">Status</th>
-                            <th className="px-4 py-3 text-left font-medium text-stone-700">Total</th>
-                            <th className="w-24 px-4 py-3 text-right font-medium text-stone-700">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {list.length === 0 ? (
-                            <tr><td colSpan={5} className="px-4 py-8 text-center text-stone-500">No orders yet.</td></tr>
-                        ) : (
-                            list.map((o) => (
-                                <tr key={o.id} className="border-b border-stone-100">
-                                    <td className="px-4 py-3">{o.customer?.name ?? '—'}</td>
-                                    <td className="px-4 py-3">{o.service?.service_category ?? '—'}</td>
-                                    <td className="px-4 py-3"><span className="rounded bg-stone-100 px-2 py-0.5 text-stone-700">{o.status}</span></td>
-                                    <td className="px-4 py-3">₱{Number(o.total_price).toFixed(2)}</td>
-                                    <td className="px-4 py-3 text-right">
-                                        <button type="button" onClick={() => openEdit(o)} className="text-amber-600 hover:underline">Edit</button>
-                                        {' · '}
-                                        <button type="button" onClick={() => handleDelete(o.id)} className="text-red-600 hover:underline">Delete</button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+            <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-2xl font-semibold text-stone-800">Orders</h2>
+                <div className="text-sm text-stone-500">
+                    {orders.length} total order{orders.length !== 1 ? 's' : ''}
+                </div>
             </div>
 
-            {modal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-semibold">{modal === 'add' ? 'Add order' : 'Edit order'}</h3>
-                        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+            {/* Status Filter Tabs */}
+            <div className="mb-6 flex flex-wrap gap-2">
+                <button
+                    onClick={() => setFilterStatus('All')}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                        filterStatus === 'All'
+                            ? 'bg-stone-800 text-white'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                >
+                    All
+                </button>
+                {STATUS_OPTIONS.map(status => (
+                    <button
+                        key={status}
+                        onClick={() => setFilterStatus(status)}
+                        className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                            filterStatus === status
+                                ? 'bg-stone-800 text-white'
+                                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                    >
+                        {status}
+                        <span className="ml-1 text-xs opacity-70">
+                            ({orders.filter(o => o.status === status).length})
+                        </span>
+                    </button>
+                ))}
+            </div>
+
+            {/* Orders List */}
+            {filteredOrders.length === 0 ? (
+                <div className="rounded-xl border border-stone-200 bg-white p-12 text-center">
+                    <div className="text-4xl mb-4">📋</div>
+                    <p className="text-stone-500">No orders found.</p>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {filteredOrders.map(order => (
+                        <div
+                            key={order.id}
+                            className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+                        >
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <span className="text-lg font-semibold text-stone-800">
+                                            Order #{order.id}
+                                        </span>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[order.status] || 'bg-stone-100 text-stone-800'}`}>
+                                            {order.status}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div>
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide">Customer</div>
+                                            <div className="font-medium text-stone-800">{order.customer?.name || 'N/A'}</div>
+                                            {order.customer?.phone_number && (
+                                                <div className="text-sm text-stone-600">{order.customer.phone_number}</div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide">Service</div>
+                                            <div className="font-medium text-stone-800">{order.service?.service_name || 'N/A'}</div>
+                                            <div className="text-sm text-stone-600">₱{Number(order.service?.price || 0).toFixed(2)} base</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide">Total</div>
+                                            <div className="text-xl font-bold text-amber-700">
+                                                ₱{Number(order.total_price).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide">Date</div>
+                                            <div className="text-sm text-stone-800">
+                                                {order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'}
+                                            </div>
+                                            {order.expected_completion_date && (
+                                                <div className="text-xs text-stone-500">
+                                                    Expected: {new Date(order.expected_completion_date).toLocaleDateString()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Order Items */}
+                                    {order.items && order.items.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-stone-100">
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide mb-2">Selected Options</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {order.items.map((item, idx) => (
+                                                    <span key={idx} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-1 text-sm text-amber-800 border border-amber-200">
+                                                        {item.attribute?.name || 'Option'}
+                                                        {item.price > 0 && (
+                                                            <span className="text-amber-600">+₱{Number(item.price).toFixed(2)}</span>
+                                                        )}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Notes */}
+                                    {order.notes && (
+                                        <div className="mt-4 pt-4 border-t border-stone-100">
+                                            <div className="text-xs text-stone-500 uppercase tracking-wide mb-1">Notes</div>
+                                            <div className="text-sm text-stone-700 bg-stone-50 p-3 rounded-lg">
+                                                {order.notes}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Actions */}
+                                <div className="ml-4 flex flex-col gap-2">
+                                    <button
+                                        onClick={() => setSelectedOrder(order)}
+                                        className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+                                    >
+                                        View Details
+                                    </button>
+                                    
+                                    {/* Status Actions */}
+                                    {order.status === 'Pending' && (
+                                        <button
+                                            onClick={() => handleStatusUpdate(order.id, 'Accepted')}
+                                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                        >
+                                            Accept
+                                        </button>
+                                    )}
+                                    
+                                    {order.status === 'Accepted' && (
+                                        <button
+                                            onClick={() => handleStatusUpdate(order.id, 'In Progress')}
+                                            className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                                        >
+                                            Start Work
+                                        </button>
+                                    )}
+                                    
+                                    {order.status === 'In Progress' && (
+                                        <button
+                                            onClick={() => handleStatusUpdate(order.id, 'Ready')}
+                                            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                                        >
+                                            Mark Ready
+                                        </button>
+                                    )}
+                                    
+                                    {order.status === 'Ready' && (
+                                        <button
+                                            onClick={() => handleStatusUpdate(order.id, 'Completed')}
+                                            className="rounded-lg bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+                                        >
+                                            Complete
+                                        </button>
+                                    )}
+
+                                    {order.status !== 'Completed' && order.status !== 'Cancelled' && (
+                                        <button
+                                            onClick={() => handleStatusUpdate(order.id, 'Cancelled')}
+                                            className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Order Details Modal */}
+            {selectedOrder && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedOrder(null)}>
+                    <div className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-start justify-between border-b border-stone-200 p-6">
                             <div>
-                                <label className="block text-sm font-medium text-stone-700">Customer</label>
-                                <select required value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2">
-                                    {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <h2 className="text-2xl font-semibold text-stone-800">Order #{selectedOrder.id}</h2>
+                                <p className="text-stone-500">
+                                    Placed on {selectedOrder.created_at ? new Date(selectedOrder.created_at).toLocaleString() : 'N/A'}
+                                </p>
                             </div>
+                            <button onClick={() => setSelectedOrder(null)} className="text-stone-400 hover:text-stone-600">
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Customer Info */}
                             <div>
-                                <label className="block text-sm font-medium text-stone-700">Service</label>
-                                <select required value={form.service_id} onChange={(e) => setForm((f) => ({ ...f, service_id: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2">
-                                    {services.map((s) => <option key={s.id} value={s.id}>{s.service_category} (₱{Number(s.starting_price).toFixed(2)})</option>)}
-                                </select>
+                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Customer</h3>
+                                <div className="bg-stone-50 rounded-lg p-4">
+                                    <div className="font-medium text-stone-800">{selectedOrder.customer?.name || 'N/A'}</div>
+                                    {selectedOrder.customer?.phone_number && (
+                                        <div className="text-sm text-stone-600">Phone: {selectedOrder.customer.phone_number}</div>
+                                    )}
+                                    {selectedOrder.customer?.email && (
+                                        <div className="text-sm text-stone-600">Email: {selectedOrder.customer.email}</div>
+                                    )}
+                                    {selectedOrder.customer?.address && (
+                                        <div className="text-sm text-stone-600">Address: {selectedOrder.customer.address}</div>
+                                    )}
+                                </div>
                             </div>
+
+                            {/* Service & Price Breakdown */}
                             <div>
-                                <label className="block text-sm font-medium text-stone-700">Status</label>
-                                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2">
-                                    {STATUS_OPTIONS.map((st) => <option key={st} value={st}>{st}</option>)}
-                                </select>
+                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Service & Price</h3>
+                                <div className="bg-stone-50 rounded-lg p-4 space-y-2">
+                                    <div className="flex justify-between">
+                                        <span className="text-stone-600">{selectedOrder.service?.service_name}</span>
+                                        <span className="text-stone-800">₱{Number(selectedOrder.service?.price || 0).toFixed(2)}</span>
+                                    </div>
+                                    {selectedOrder.items && selectedOrder.items.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between">
+                                            <span className="text-stone-600">{item.attribute?.name || 'Option'}</span>
+                                            <span className="text-stone-800">+₱{Number(item.price || 0).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="border-t border-stone-200 pt-2 flex justify-between font-bold">
+                                        <span className="text-stone-800">Total</span>
+                                        <span className="text-amber-700">₱{Number(selectedOrder.total_price).toFixed(2)}</span>
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* Status */}
                             <div>
-                                <label className="block text-sm font-medium text-stone-700">Total (₱)</label>
-                                <input type="number" step="0.01" min="0" required value={form.total_price} onChange={(e) => setForm((f) => ({ ...f, total_price: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2" />
+                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Status</h3>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-4 py-2 rounded-full text-sm font-medium ${STATUS_COLORS[selectedOrder.status] || 'bg-stone-100 text-stone-800'}`}>
+                                        {selectedOrder.status}
+                                    </span>
+                                    {selectedOrder.expected_completion_date && (
+                                        <span className="text-sm text-stone-500">
+                                            Expected: {new Date(selectedOrder.expected_completion_date).toLocaleDateString()}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700">Expected completion</label>
-                                <input type="date" value={form.expected_completion_date} onChange={(e) => setForm((f) => ({ ...f, expected_completion_date: e.target.value }))} className="mt-1 w-full rounded border border-stone-300 px-3 py-2" />
+
+                            {/* Notes */}
+                            {selectedOrder.notes && (
+                                <div>
+                                    <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Notes</h3>
+                                    <div className="bg-stone-50 rounded-lg p-4 text-stone-700">
+                                        {selectedOrder.notes}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Quick Status Actions */}
+                            <div className="border-t border-stone-200 pt-6">
+                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-3">Update Status</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {STATUS_OPTIONS.filter(s => s !== selectedOrder.status).map(status => (
+                                        <button
+                                            key={status}
+                                            onClick={() => {
+                                                handleStatusUpdate(selectedOrder.id, status);
+                                                setSelectedOrder(null);
+                                            }}
+                                            className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                                                status === 'Cancelled'
+                                                    ? 'border border-red-300 text-red-700 hover:bg-red-50'
+                                                    : 'bg-stone-800 text-white hover:bg-stone-700'
+                                            }`}
+                                        >
+                                            Mark as {status}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700">Notes</label>
-                                <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className="mt-1 w-full rounded border border-stone-300 px-3 py-2" />
-                            </div>
-                            <div className="flex justify-end gap-2 pt-2">
-                                <button type="button" onClick={closeModal} className="rounded-lg border border-stone-300 px-4 py-2 text-sm">Cancel</button>
-                                <button type="submit" disabled={saving} className="rounded-lg bg-stone-800 px-4 py-2 text-sm text-white hover:bg-stone-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
         </div>
     );
 }
+

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\Dashboard\CustomerController;
+use App\Http\Controllers\Api\Dashboard\CustomerOrderController;
 use App\Http\Controllers\Api\Dashboard\DashboardShopController;
 use App\Http\Controllers\Api\Dashboard\OrderController;
 use App\Http\Controllers\Api\Dashboard\ServiceController as DashboardServiceController;
@@ -16,6 +17,15 @@ Route::get('/services', [ServiceController::class, 'index']);
 Route::get('/shops', [ShopController::class, 'index']);
 Route::get('/shops/compare', [ShopController::class, 'compare'])->name('shops.compare');
 Route::get('/shops/{shop}', [ShopController::class, 'show']);
+
+// Customer orders (public - for placing orders)
+Route::post('/shops/{shop}/orders', [CustomerOrderController::class, 'store']);
+
+// Auth (optional) - for customers to view their orders
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/customer/orders', [CustomerOrderController::class, 'index']);
+    Route::get('/customer/orders/{order}', [CustomerOrderController::class, 'show']);
+});
 
 // Auth (guest)
 Route::post('/login', [AuthController::class, 'login']);

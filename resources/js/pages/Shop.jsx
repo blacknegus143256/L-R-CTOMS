@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axios from 'axios';
+import OrderModal from '@/components/OrderModal';
 
 export default function Shop() {
     const { id } = useParams();
     const [shop, setShop] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    
+    // Order modal state
+    const [orderModalOpen, setOrderModalOpen] = useState(false);
+    const [selectedService, setSelectedService] = useState(null);
+    const [orderSuccess, setOrderSuccess] = useState(null);
 
     useEffect(() => {
         if (!id) return;
@@ -55,11 +61,6 @@ export default function Shop() {
                             <p className="text-stone-600">{shop.contact_number}</p>
                         )}
                     </div>
-                    <button
-                        className="rounded-lg bg-amber-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
-                    >
-                        Place Order
-                    </button>
                 </div>
             </div>
 
@@ -73,14 +74,46 @@ export default function Shop() {
                             key={s.id}
                             className="rounded-lg border border-stone-200 bg-white p-4"
                         >
-                            <div className="font-medium text-stone-800">{s.service_category}</div>
+                            <div className="font-medium text-stone-800">{s.service_name}</div>
                             <div className="mt-1 text-stone-600">
-                                ₱{Number(s.starting_price).toFixed(2)}
-                                {s.turnaround_time && ` · ${s.turnaround_time}`}
+                                ₱{Number(s.price).toFixed(2)}
+                                {s.duration_days && ` · ${s.duration_days} days`}
                             </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedService(s);
+                                    setOrderModalOpen(true);
+                                }}
+                                className="mt-3 w-full rounded-lg bg-amber-600 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                            >
+                                Order Now
+                            </button>
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {/* Order Modal */}
+            <OrderModal
+                shop={shop}
+                service={selectedService}
+                isOpen={orderModalOpen}
+                onClose={() => {
+                    setOrderModalOpen(false);
+                    setSelectedService(null);
+                }}
+                onSuccess={(order) => {
+                    setOrderSuccess(order);
+                    setTimeout(() => setOrderSuccess(null), 5000);
+                }}
+            />
+
+            {/* Success Message */}
+            {orderSuccess && (
+                <div className="fixed bottom-4 right-4 rounded-lg bg-green-600 p-4 text-white shadow-lg">
+                    <div className="font-medium">Order placed successfully!</div>
+                    <div className="text-sm">Order #{orderSuccess.id} - ₱{Number(orderSuccess.total_price).toFixed(2)}</div>
+                </div>
             )}
         </div>
     );

@@ -28,8 +28,10 @@ class ShopController extends Controller
         } else {
             $attributeIds = [];
         }
-        foreach ($attributeIds as $id) {
-            $query->whereHas('attributes', fn ($q) => $q->where('attributes.id', $id));
+        if (count($attributeIds) > 0)  {
+            $query->whereHas('attributes', function ($q) use ($attributeIds) {
+                $q->whereIn('attribute_types.id', $attributeIds);
+            }, '=', count($attributeIds));
         }
 
         // Filter by services if provided (OR logic - show shops with ANY of the selected services)
@@ -46,24 +48,31 @@ class ShopController extends Controller
         if (is_array($serviceCategories) && count($serviceCategories) > 0) {
             $serviceCategories = array_filter($serviceCategories);
             if (count($serviceCategories) > 0) {
-                $query->whereHas('services', fn ($q) => $q->whereIn('service_category_id', $serviceCategories));
+                $query->whereHas('services.serviceCategory', function ($q) use ($serviceCategories) {
+                    $q->whereIn('name', $serviceCategories);
+                });
             }
         }
 
-        $shops = $query->with(['user.profile'])->orderBy('shop_name')->get();
+        $shops = $query->with([
+            'user.profile',
+            'services.serviceCategory',
+                'attributes'
+            ])->orderBy('shop_name')->get();
 
         $shops = $shops->map(function ($shop) {
+        $profile = $shop->user?->profile;
             return[
                 'id' => $shop->id,
                 'shop_name' => $shop->shop_name,
                 'contact_person' => $shop->contact_person,
                 'contact_role' => $shop->contact_role,
 
-                'phone' => optional($shop->user->profile)->phone,
-                'barangay' => optional($shop->user->profile)->barangay,
-                'street' => optional($shop->user->profile)->street,
-                'latitude' => optional($shop->user->profile)->latitude,
-                'longitude' => optional($shop->user->profile)->longitude,
+                'phone' => $profile?->phone,
+                'barangay' => $profile?->barangay,
+                'street' => $profile?->street,
+                'latitude' => $profile?->latitude,
+                'longitude' => $profile?->longitude,
             ];
         });
 
@@ -86,7 +95,8 @@ class ShopController extends Controller
                 ->with('serviceCategory:id,name');
                 },
                 'attributes' => function ($q) {
-                    $q->withPivot('price', 'unit', 'notes', 'is_available');
+                    $q->with('attributeCategory:id,name')
+                      ->withPivot('price', 'unit', 'notes', 'is_available');
                 },
                 'user.profile'
 

@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/react';
 
 export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     if (!shop) return null;
-
+    const userprofile = shop.userprofile || {};
     const services = shop.services || [];
     const attributes = shop.attributes || [];
 
@@ -42,10 +42,10 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                             <ul className="grid gap-3 sm:grid-cols-2">
                                 {services.slice(0, 4).map((s) => (
                                     <li key={s.id} className="rounded-lg border border-stone-200 p-3">
-                                        <div className="font-medium text-stone-800">{s.service_category}</div>
+                                        <div className="font-medium text-stone-800">{s.service_category.name}</div>
                                         <div className="mt-1 text-stone-600">
-                                            ₱{Number(s.starting_price).toFixed(2)}
-                                            {s.turnaround_time && ` · ${s.turnaround_time}`}
+                                            ₱{Number(s.price).toFixed(2)}
+                                            {s.duration && ` · ${s.duration}`}
                                         </div>
                                     </li>
                                 ))}
@@ -85,17 +85,17 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                     {/* Action Buttons */}
                     <div className="mt-6 flex justify-end gap-3">
                         <Link
-                            href={`/shop/${shop.id}`}
+                            to={`/shop/${shop.id}`}
                             className="rounded-lg border border-stone-300 px-6 py-3 text-base font-medium text-stone-700 hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2"
                         >
                             View Shop
                         </Link>
-                        <button
-                            onClick={onPlaceOrder}
+                        <Link
+                            to={`/shop/${shop.id}`}
                             className="rounded-lg bg-amber-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
                         >
                             Place Order
-                        </button>
+                        </Link>
                     </div>
                 </div>
             </div>
