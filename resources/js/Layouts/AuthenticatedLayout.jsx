@@ -168,6 +168,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     {user.role === 'store_admin' && (
                         <>
                     <ResponsiveNavLink href={route('store.dashboard')} active={route().current('store.dashboard')}>Store Dashboard</ResponsiveNavLink>
+                    <ResponsiveNavLink href={route('store.inventory')} active={route().current('store.inventory')}>Inventory</ResponsiveNavLink>
                         </>
                     )}
 

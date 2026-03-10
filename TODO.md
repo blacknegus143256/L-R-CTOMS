@@ -1,72 +1,65 @@
-# Order System Implementation Plan
+# Order System Implementation - Updated
 
 ## Completed Tasks
 
-### Phase 1: Backend ✅
-1. ✅ Created `CustomerOrderController` - for customers to place orders
-   - Endpoint: `POST /api/shops/{shop}/orders` - public endpoint for placing orders
-   - Handles both new and existing customers
-   - Calculates total price (service + attributes)
-   
-2. ✅ Added customer orders listing endpoint
-   - Endpoint: `GET /api/customer/orders` - for logged-in shop owners to view orders
+### 1. Database Fix - Add user_id to customers table ✅
+- Created migration: `2026_03_15_000001_add_user_id_to_customers_table.php`
+- Adds foreign key relationship from customers to users
 
-### Phase 2: Frontend - Order Modal ✅
-3. ✅ Created `OrderModal.jsx` component
-   - Two-step flow: Select attributes → Customer info
-   - Real-time price calculation
-   - Support for existing customers or new customer registration
-   - Order notes field
-   
-4. ✅ Updated `Shop.jsx` to integrate OrderModal
-   - Each service now has "Order Now" button
-   - Opens modal with service details and shop attributes
-   - Success notification after order placement
+### 2. Updated Customer Model ✅
+- Added `user_id` to fillable array
+- Added `user()` relationship
 
-5. ✅ Updated `ViewProfile.jsx`
-   - "Place Order" button now links to shop page
+### 3. Updated CustomerOrderController ✅
+- Auto-creates customer from authenticated user's profile
+- Sends payload: `{ service_id, attributes, notes }` only
+- Backend handles all customer data from user profile
+- Added `checkProfile()` method to validate profile completeness
 
-### Phase 3: Shop Order Management ✅
-6. ✅ Updated `DashboardOrders.jsx` (OrdersPage.jsx)
-   - Status filter tabs (All, Pending, Accepted, In Progress, Ready, Completed, Cancelled)
-   - Order cards showing customer, service, items, total
-   - Quick status update buttons (Accept, Start Work, Mark Ready, Complete, Cancel)
-   - Order details modal
+### 4. Updated Routes ✅
+- Added `/api/customer/profile-check` endpoint
+- Order placement only requires: service_id, attributes, notes
 
-## What's Working Now
+### 5. Updated OrderModal ✅
+- Removed all customer input fields (name, email, phone, address)
+- Only sends: service_id, attributes, notes
+- Checks profile completeness before allowing order
+- Shows error and redirects to profile if incomplete
+- Two-step flow: Select Attributes → Confirm Order
 
-1. **Customer Flow:**
-   - Browse shops on Home page
-   - View shop profile (ViewProfile modal)
-   - Click "Place Order" → goes to Shop page
-   - Click "Order Now" on any service
-   - Select attributes and see real-time price
-   - Enter customer info (new or existing)
-   - Place order → success notification
+## Current Data Flow
 
-2. **Shop Owner Flow:**
-   - Login to dashboard
-   - Go to Orders page
-   - View all orders with filters
-   - Click on order to see details
-   - Update order status (Accept → In Progress → Ready → Completed)
+```
+User logs in
+   ↓
+User has profile (user_profiles table)
+   ↓
+User selects service → OrderModal
+   ↓
+Selects attributes
+   ↓
+Confirms order
+   ↓
+Frontend sends: { service_id, attributes, notes }
+   ↓
+Backend:
+   - Gets authenticated user
+   - Creates/finds customer from user data
+   - Creates order linked to customer
+   - Returns order confirmation
+```
 
-## Remaining Tasks (Optional)
+## Files Modified
 
-- Add customer-facing "My Orders" page for customers to track their orders
-- Add order number generation (e.g., ORD-2026-001)
-- Add email/SMS notifications
-- Add order history tracking
+1. **database/migrations/2026_03_15_000001_add_user_id_to_customers_table.php** (NEW)
+2. **app/Models/Customer.php** - Added user_id and relationship
+3. **app/Http/Controllers/Api/Dashboard/CustomerOrderController.php** - Auto-create customer
+4. **routes/api.php** - Added profile-check route
+5. **resources/js/components/OrderModal.jsx** - Simplified to only send service/attributes/notes
 
-## Files Modified/Created
+## Next Steps (Optional)
 
-1. **Created:**
-   - `app/Http/Controllers/Api/Dashboard/CustomerOrderController.php`
-   - `resources/js/components/OrderModal.jsx`
-
-2. **Modified:**
-   - `routes/api.php` - Added customer order routes
-   - `resources/js/pages/Shop.jsx` - Integrated OrderModal
-   - `resources/js/components/ViewProfile.jsx` - Updated to link to Shop
-   - `resources/js/pages/dashboard/OrdersPage.jsx` - Updated with new status flow
+- Run migration: `php artisan migrate`
+- Test the complete order flow
+- Add "My Orders" page for customers to view their order history
 

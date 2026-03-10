@@ -6,20 +6,6 @@ import AddCategoryModal from '@/components/StoreAdmin/AddCategoryModal';
 import EditShopAttributeModal from '@/components/StoreAdmin/EditShopAttributeModal';
 import { Pencil, Trash2, Plus, X } from 'lucide-react';
 
-const FABRIC_CATEGORIES = [
-    'Cotton',
-    'Polyester',
-    'Silk',
-    'Linen',
-    'Wool',
-    'Denim',
-    'Knit / Stretch',
-    'Lace',
-    'Satin / Shiny',
-    'Uniform Fabric',
-    'Mixed / Blend',
-    'Others'
-];
 
 export default function Inventory({ auth, services, categories, shopAttributes, serviceCategories = [], attributeTypes = [] }) {
     

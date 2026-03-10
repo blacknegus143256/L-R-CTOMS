@@ -1,120 +1,133 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import axios from 'axios';
-import OrderModal from '@/components/OrderModal';
+import { useState, useMemo } from "react";
+import { Link, usePage } from "@inertiajs/react";
+import { useEffect } from "react";
+import OrderModal from "@/components/OrderModal";
 
-export default function Shop() {
-    const { id } = useParams();
-    const [shop, setShop] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    
-    // Order modal state
-    const [orderModalOpen, setOrderModalOpen] = useState(false);
-    const [selectedService, setSelectedService] = useState(null);
-    const [orderSuccess, setOrderSuccess] = useState(null);
+export default function Shop({ shop }) {
+    if (!shop) return null;
+
+    const { url } = usePage();
+    const [showOrderForm, setShowOrderForm] = useState(false);
 
     useEffect(() => {
-        if (!id) return;
-        axios
-            .get(`/api/shops/${id}`)
-            .then((res) => setShop(res.data.data))
-            .catch((err) => setError(err.response?.status === 404 ? 'Shop not found.' : err.message))
-            .finally(() => setLoading(false));
-    }, [id]);
+        if (url.includes('order=true')) {
+            setShowOrderForm(true);
+        }
+    }, [url]);
 
-    if (loading) {
-        return (
-            <div className="flex justify-center py-16">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600" />
-            </div>
-        );
-    }
-
-    if (error || !shop) {
-        return (
-            <div className="rounded-lg bg-red-50 p-4 text-red-700">
-                {error || 'Shop not found.'}
-                <Link to="/" className="ml-2 underline">Back to shops</Link>
-            </div>
-        );
-    }
+    const [orderSuccess, setOrderSuccess] = useState(null);
 
     const services = shop.services || [];
+    console.log(shop.attributes);
+    // Group attributes by category
+    const attributesByCategory = useMemo(() => {
+        if (!shop?.attributes) return {};
+
+        const grouped = {};
+
+        shop.attributes.forEach(attr => {
+            const categoryName = attr.attribute_category?.name || attr.attributeCategory?.name || "Other";
+
+            if (!grouped[categoryName]) {
+                grouped[categoryName] = [];
+            }
+
+            grouped[categoryName].push(attr);
+        });
+
+        return grouped;
+    }, [shop]);
 
     return (
         <div>
-            <Link to="/" className="mb-4 inline-block text-sm text-stone-500 hover:text-stone-700">
+
+            <Link href="/" className="mb-4 inline-block text-sm text-stone-500">
                 ← Back to shops
             </Link>
+
             <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-stone-800">{shop.shop_name}</h1>
-                        {shop.contact_person && (
-                            <p className="mt-1 text-stone-600">Contact: {shop.contact_person}</p>
-                        )}
-                        {shop.address && (
-                            <p className="text-stone-500">{shop.address}</p>
-                        )}
-                        {shop.contact_number && (
-                            <p className="text-stone-600">{shop.contact_number}</p>
-                        )}
-                    </div>
-                </div>
+                <h1 className="text-2xl font-semibold">{shop.shop_name}</h1>
             </div>
 
-            <h2 className="mt-8 mb-3 text-lg font-semibold text-stone-800">Services</h2>
+            <h2 className="mt-8 mb-3 text-lg font-semibold">Services</h2>
+
             {services.length === 0 ? (
-                <p className="text-stone-500">No services listed.</p>
+                <p>No services listed.</p>
             ) : (
                 <ul className="grid gap-3 sm:grid-cols-2">
                     {services.map((s) => (
-                        <li
-                            key={s.id}
-                            className="rounded-lg border border-stone-200 bg-white p-4"
-                        >
-                            <div className="font-medium text-stone-800">{s.service_name}</div>
-                            <div className="mt-1 text-stone-600">
-                                ₱{Number(s.price).toFixed(2)}
-                                {s.duration_days && ` · ${s.duration_days} days`}
+                        <li key={s.id} className="border p-4 rounded">
+
+                            <div className="mt-2 text-amber-600 font-semibold">
+                                {s.service_name}
                             </div>
-                            <button
-                                onClick={() => {
-                                    setSelectedService(s);
-                                    setOrderModalOpen(true);
-                                }}
-                                className="mt-3 w-full rounded-lg bg-amber-600 py-2 text-sm font-medium text-white hover:bg-amber-700"
-                            >
-                                Order Now
-                            </button>
+                            <div className="text-sm text-stone-500">
+                            Category: {s.service_category?.name || "General"}
+                            </div>
+                            <div className="mt-2 font-medium">Description: {s.service_description}</div>
+                            <div className="mt-2 font-medium">Duration: {s.duration_days} days</div>
+                            <div className="mt-2 font-medium">Status: {s.is_available ? "Available" : "Not Available"}</div>
+                            <div className="mt-2 font-medium">Rush Service: {s.rush_service_available ? "Available" : "Not Available"}</div>
+                            <div className="mt-2 font-medium">Appointment: {s.appointment_required ? "Required" : "No"}</div>
+                            <div className="mt-2 font-medium">Note: {s.notes}</div>
+                            <div>
+                                ₱{Number(s.price).toFixed(2)}
+                            </div>
+
                         </li>
                     ))}
                 </ul>
             )}
 
-            {/* Order Modal */}
-            <OrderModal
-                shop={shop}
-                service={selectedService}
-                isOpen={orderModalOpen}
-                onClose={() => {
-                    setOrderModalOpen(false);
-                    setSelectedService(null);
-                }}
-                onSuccess={(order) => {
-                    setOrderSuccess(order);
-                    setTimeout(() => setOrderSuccess(null), 5000);
-                }}
-            />
+            {Object.keys(attributesByCategory).length > 0 && (
+                <div className="mt-8">
+                    <h2 className="text-xl font-semibold mb-4">
+                        Customization Options
+                    </h2>
 
-            {/* Success Message */}
-            {orderSuccess && (
-                <div className="fixed bottom-4 right-4 rounded-lg bg-green-600 p-4 text-white shadow-lg">
-                    <div className="font-medium">Order placed successfully!</div>
-                    <div className="text-sm">Order #{orderSuccess.id} - ₱{Number(orderSuccess.total_price).toFixed(2)}</div>
+                    {Object.entries(attributesByCategory).map(([categoryName, attrs]) => (
+                        <div key={categoryName} className="mb-6">
+
+                            <h3 className="font-medium text-lg mb-2">
+                                {categoryName}
+                            </h3>
+
+                            <ul className="space-y-1">
+                                {attrs.map(attr => (
+                                    <li key={attr.id} className="flex justify-between margin-2 rounded border p-3">
+
+                                        <span>{attr.name}</span>
+
+{attr.pivot?.item_name || attr.name}
+                                        <span>
+                                            {attr.pivot?.price
+                                                ? `+₱${Number(attr.pivot.price).toFixed(2)}`
+                                                : "Free"}
+                                        </span>
+
+                                    </li>
+                                ))}
+                            </ul>
+
+                        </div>
+                    ))}
                 </div>
             )}
+
+            <OrderModal
+                shop={shop}
+                isOpen={showOrderForm}
+                onClose={() => setShowOrderForm(false)}
+            />
+
+            <button
+                onClick={() => setShowOrderForm(true)}
+                className="fixed bottom-6 right-6 z-40 rounded-full bg-amber-600 px-6 py-3 text-white shadow-lg hover:bg-amber-700"
+            >
+                Place Order
+            </button>
+
         </div>
     );
 }
+

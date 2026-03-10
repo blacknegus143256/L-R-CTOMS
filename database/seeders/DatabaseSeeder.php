@@ -36,8 +36,6 @@ class DatabaseSeeder extends Seeder
             'shop_name' => 'Example Tailoring Shop',
             'contact_person' => 'John Doe',
             'contact_role' => 'Manager',
-            'address' => '123 Main St, Dumaguete City',
-            'contact_number' => '+63 912 345 6789',
             'is_active' => true,
             'status' => 'approved',
         ]);

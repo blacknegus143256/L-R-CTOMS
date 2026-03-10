@@ -18,6 +18,15 @@ class CustomerOrderController extends Controller
     /**
      * Customer places a new order.
      * POST /api/shops/{shop}/orders
+     * 
+     * Payload:
+     * {
+     *   "service_id": 5,
+     *   "attributes": [3, 7, 9],
+     *   "notes": "Make it tighter"
+     * }
+     * 
+     * Backend automatically handles customer from authenticated user.
      */
     public function store(Request $request, TailoringShop $shop): JsonResponse
     {
@@ -31,12 +40,6 @@ class CustomerOrderController extends Controller
             'attributes' => 'nullable|array',
             'attributes.*' => 'integer|exists:attribute_types,id',
             'notes' => 'nullable|string',
-            // Customer fields (for new customer) OR customer_id (for existing)
-            'customer_id' => 'nullable|integer|exists:customers,id',
-            'customer_name' => 'nullable|string|max:255',
-            'customer_phone' => 'nullable|string|max:50',
-            'customer_email' => 'nullable|email|max:255',
-            'customer_address' => 'nullable|string',
         ]);
 
         // Verify service belongs to this shop
@@ -45,24 +48,14 @@ class CustomerOrderController extends Controller
             return response()->json(['message' => 'Service not found in this shop.'], 422);
         }
 
-        // Determine customer
-        $customer = null;
-        if (!empty($valid['customer_id'])) {
-            // Use existing customer
-            $customer = $shop->customers()->find($valid['customer_id']);
-            if (!$customer) {
-                return response()->json(['message' => 'Customer not found in this shop.'], 422);
-            }
-        } elseif (!empty($valid['customer_name'])) {
-            // Create new customer
-            $customer = $shop->customers()->create([
-                'name' => $valid['customer_name'],
-                'phone_number' => $valid['customer_phone'] ?? null,
-                'email' => $valid['customer_email'] ?? null,
-                'address' => $valid['customer_address'] ?? null,
-            ]);
-        } else {
-            return response()->json(['message' => 'Customer information is required.'], 422);
+        // Determine customer - either from authenticated user or guest
+        $customer = $this->resolveCustomer($request, $shop);
+
+        if (!$customer) {
+            return response()->json([
+                'message' => 'Please complete your profile to place an order.',
+                'requires_profile' => true
+            ], 422);
         }
 
         // Calculate total price: service price + attribute prices
@@ -107,9 +100,46 @@ class CustomerOrderController extends Controller
             ]);
         }
 
-        $order->load(['customer:id,name,phone_number,email', 'service:id,service_name,price', 'items.attribute']);
+        $order->load(['customer:id,name,phone,email', 'service:id,service_name,price', 'items.attribute']);
 
         return response()->json(['data' => $order], 201);
+    }
+
+    /**
+     * Resolve customer - either from authenticated user or return null for guest
+     */
+    private function resolveCustomer(Request $request, TailoringShop $shop): ?Customer
+    {
+        $user = $request->user();
+
+        // If user is authenticated, create/find customer from their profile
+        if ($user) {
+            // Try to find existing customer for this user + shop combination
+            $customer = Customer::where('user_id', $user->id)
+                ->where('tailoring_shop_id', $shop->id)
+                ->first();
+
+            if (!$customer) {
+                // Get user profile
+                $profile = $user->profile;
+
+                // Create new customer from user data
+                $customer = Customer::create([
+                    'user_id' => $user->id,
+                    'tailoring_shop_id' => $shop->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $profile?->phone ?? null,
+                    'address' => $profile?->street ? 
+                        ($profile->street . ', ' . $profile->barangay) : null,
+                ]);
+            }
+
+            return $customer;
+        }
+
+        // For guests, return null - they need to login or provide info
+        return null;
     }
 
     /**
@@ -118,35 +148,28 @@ class CustomerOrderController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Check if user is authenticated (optional - guest checkout allowed)
-        $userId = $request->user()?->id;
-        
-        // If user is logged in, get their customer records
-        $customerIds = [];
-        if ($userId) {
-            // Get all shops owned by this user
-            $shopIds = $request->user()->tailoringShops()->pluck('tailoring_shops.id');
-            // Get customers belonging to those shops
-            $customerIds = Customer::whereIn('tailoring_shop_id', $shopIds)->pluck('id')->toArray();
-        }
+        $user = $request->user();
 
-        // Also check if there's a customer_id in session or request for guest orders
-        $query = Order::with([
-            'customer:id,name,phone_number,email',
-            'service:id,service_name,price',
-            'tailoringShop:id,shop_name',
-            'items.attribute'
-        ]);
-
-        // If user is a shop owner, they can see their shop's orders
-        if (!empty($customerIds)) {
-            $query->whereIn('customer_id', $customerIds);
-        } else {
-            // For guests/customers without login, return empty or check for guest token
+        if (!$user) {
             return response()->json(['data' => []]);
         }
 
-        $orders = $query->latest()->get();
+        // Get all customer records for this user across all shops
+        $customerIds = Customer::where('user_id', $user->id)->pluck('id')->toArray();
+
+        if (empty($customerIds)) {
+            return response()->json(['data' => []]);
+        }
+
+        $orders = Order::with([
+            'customer:id,name,phone,email',
+            'service:id,service_name,price',
+            'tailoringShop:id,shop_name',
+            'items.attribute'
+        ])
+        ->whereIn('customer_id', $customerIds)
+        ->latest()
+        ->get();
 
         return response()->json(['data' => $orders]);
     }
@@ -157,21 +180,62 @@ class CustomerOrderController extends Controller
      */
     public function show(Request $request, Order $order): JsonResponse
     {
-        // Check if user owns this order through their shops
-        $shopIds = $request->user()?->tailoringShops()->pluck('tailoring_shops.id') ?? [];
-        
-        if (!$shopIds->contains($order->tailoring_shop_id)) {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        // Verify the order belongs to a customer owned by this user
+        $customer = $order->customer;
+        if (!$customer || $customer->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $order->load([
-            'customer:id,name,phone_number,email,address',
+            'customer:id,name,phone,email,address',
             'service:id,service_name,price,service_description',
-            'tailoringShop:id,shop_name,contact_number',
+            'service.serviceCategory:id,name',
+            'attributes.attributeCategory:id,name',
+            'attributes' => function ($q) {
+                $q->with('attributeCategory:id,name')
+                  ->withPivot('price', 'unit', 'notes');
+            },
+            'tailoringShop:id,shop_name,phone,street,barangay',
             'items.attribute'
         ]);
 
         return response()->json(['data' => $order]);
+    }
+
+    /**
+     * Check if user has complete profile for ordering.
+     * GET /api/customer/profile-check
+     */
+    public function checkProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'complete' => false,
+                'message' => 'Please login to place orders.'
+            ]);
+        }
+
+        $profile = $user->profile;
+        
+        // Check required fields
+        $hasPhone = !empty($profile?->phone);
+        $hasAddress = !empty($profile?->street) || !empty($profile?->barangay);
+
+        return response()->json([
+            'complete' => $hasPhone && $hasAddress,
+            'has_phone' => $hasPhone,
+            'has_address' => $hasAddress,
+            'message' => !$hasPhone ? 'Please add phone number to your profile.' : 
+                         (!$hasAddress ? 'Please add address to your profile.' : 'Profile complete.')
+        ]);
     }
 }
 

@@ -57,7 +57,7 @@ class ShopController extends Controller
         $shops = $query->with([
             'user.profile',
             'services.serviceCategory',
-                'attributes'
+            'attributes'
             ])->orderBy('shop_name')->get();
 
         $shops = $shops->map(function ($shop) {

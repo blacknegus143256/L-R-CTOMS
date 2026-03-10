@@ -25,8 +25,7 @@ class TailoringShopSeeder extends Seeder
             'shop_name' => 'Dumaguete Tailoring Co.',
             'contact_person' => 'Maria Santos',
             'contact_role' => 'Owner',
-            'address' => '123 Rizal Ave, Dumaguete City',
-            'contact_number' => '+63 912 345 6789',
+            
             'is_active' => true,
             'status' => 'approved',
         ]);
@@ -71,8 +70,6 @@ class TailoringShopSeeder extends Seeder
             'shop_name' => 'Stitch Perfect',
             'contact_person' => 'Juan Dela Cruz',
             'contact_role' => 'Owner',
-            'address' => '45 Silliman Ave, Dumaguete City',
-            'contact_number' => '+63 918 765 4321',
             'is_active' => true,
             'status' => 'approved',
         ]);
@@ -110,8 +107,6 @@ class TailoringShopSeeder extends Seeder
             'shop_name' => 'Stitch ImPerfect',
             'contact_person' => 'Arvinidos De Nigga',
             'contact_role' => 'Owner',
-            'address' => '45 Silliman Ave, Dumaguete City',
-            'contact_number' => '+63 918 765 4321',
             'is_active' => true,
             'status' => 'approved',
         ]);

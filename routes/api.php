@@ -19,12 +19,14 @@ Route::get('/shops/compare', [ShopController::class, 'compare'])->name('shops.co
 Route::get('/shops/{shop}', [ShopController::class, 'show']);
 
 // Customer orders (public - for placing orders)
-Route::post('/shops/{shop}/orders', [CustomerOrderController::class, 'store']);
 
-// Auth (optional) - for customers to view their orders
+// Auth (optional) - for customers to view their orders and check profile
 Route::middleware('auth:sanctum')->group(function () {
+    
+    Route::post('/shops/{shop}/orders', [CustomerOrderController::class, 'store']);
     Route::get('/customer/orders', [CustomerOrderController::class, 'index']);
     Route::get('/customer/orders/{order}', [CustomerOrderController::class, 'show']);
+    Route::get('/customer/profile-check', [CustomerOrderController::class, 'checkProfile']);
 });
 
 // Auth (guest)

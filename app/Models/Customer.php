@@ -12,6 +12,7 @@ class Customer extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'tailoring_shop_id',
         'name',
         'phone_number',
@@ -25,6 +26,11 @@ class Customer extends Model
         return [
             'measurements' => 'array',
         ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function tailoringShop(): BelongsTo

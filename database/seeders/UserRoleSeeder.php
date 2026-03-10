@@ -32,7 +32,6 @@ class UserRoleSeeder extends Seeder
         TailoringShop::create([
             'user_id' => $storeOwner->id,
             'shop_name' => 'Jane\'s Elegant Stitches',
-            'address' => 'Dumaguete City, Negros Oriental',
             'status' => 'approved', // So it shows up immediately
         ]);
 

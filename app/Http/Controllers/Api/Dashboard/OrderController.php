@@ -9,6 +9,7 @@ use App\Models\OrderItem;
 use App\Models\TailoringShop;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
@@ -103,6 +104,62 @@ class OrderController extends Controller
 
         return response()->json(['data' => $order], 201);
     }
+
+    public function publicStore(Request $request, TailoringShop $shop)
+{
+    // 1. Validation (Note: customer_id is NOT required here because it's the auth user)
+    $valid = $request->validate([
+        'service_id' => 'required|exists:services,id',
+        'attributes' => 'nullable|array',
+        'attributes.*' => 'integer|exists:attribute_types,id',
+        'notes' => 'nullable|string',
+    ]);
+
+    $service = $shop->services()->findOrFail($valid['service_id']);
+
+    // 2. Calculate Total Price
+    $totalPrice = $service->price;
+    $attributesData = [];
+
+    if (!empty($valid['attributes'])) {
+        $shopAttributes = $shop->attributes()
+            ->whereIn('attribute_types.id', $valid['attributes'])
+            ->get()
+            ->keyBy('id');
+
+        foreach ($valid['attributes'] as $attributeId) {
+            $shopAttr = $shopAttributes->get($attributeId);
+            $attrPrice = $shopAttr ? $shopAttr->pivot->price : 0;
+            $totalPrice += $attrPrice;
+
+            $attributesData[] = [
+                'attribute_type_id' => $attributeId,
+                'price' => $attrPrice,
+            ];
+        }
+    }
+
+    // 3. Create the Order (Linking it to the logged-in user)
+    $order = Order::create([
+        'tailoring_shop_id' => $shop->id,
+        'user_id' => Auth::id(), // The customer's User ID
+        'service_id' => $valid['service_id'],
+        'status' => 'Pending',
+        'total_price' => $totalPrice,
+        'notes' => $valid['notes'] ?? null,
+    ]);
+
+    // 4. Create Order Items
+    foreach ($attributesData as $attrData) {
+        $order->items()->create([
+            'attribute_type_id' => $attrData['attribute_type_id'],
+            'price' => $attrData['price'],
+        ]);
+    }
+
+    // 5. Redirect back for Inertia
+    return redirect()->back()->with('message', 'Order placed successfully!');
+}
 
     public function update(Request $request, TailoringShop $shop, Order $order): JsonResponse
     {

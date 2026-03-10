@@ -8,7 +8,10 @@ use App\Http\Controllers\SuperAdmin\DashboardController;
 use App\Http\Controllers\SuperAdmin\UserController;
 use App\Http\Controllers\Store\StoreDashboardController;
 use App\Http\Controllers\Store\InventoryController;
-
+use App\Http\Controllers\ShopController;
+use App\Http\Controllers\TailoringShopController;
+use App\Models\TailoringShop;
+use App\Http\Controllers\Api\Dashboard\OrderController;
 // For the Super Admin
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/super-admin/dashboard', [DashboardController::class, 'index'])->name('super.dashboard');
@@ -27,6 +30,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
         Route::get('/store/dashboard', [StoreDashboardController::class, 'index'])->name('store.dashboard');
         Route::get('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'index'])->name('store.inventory');
+        
 
         Route::post('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'addServices'])->name('store.services.add');
         Route::put('/store/inventory/{id}', [App\Http\Controllers\Store\InventoryController::class, 'updateServices'])->name('store.services.update');
@@ -51,16 +55,28 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('/shop',  function (){
-    return Inertia::render('Shop');
+Route::get('/shop/{shop}',  function ($shop){
+    $shop = TailoringShop::with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory'])->findOrFail($shop);
+
+    return Inertia::render('Shop', [
+        'shop' => $shop
+    ]);
 });
 Route::get('/', function () {
     return Inertia::render('Home');
 })->name('home');
+
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::middleware('auth')->group(function () {
+        // ... other routes ...
+
+        // Use the imported class name directly
+        Route::post('/shops/{shop}/orders', [OrderController::class, 'publicStore']);
+    });
 });
 
 require __DIR__.'/auth.php';

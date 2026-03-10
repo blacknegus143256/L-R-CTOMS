@@ -1,23 +1,29 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { router } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 
-export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }) {
-    const [step, setStep] = useState(1); // 1: select attributes, 2: customer info
+export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
+    const { data, setData, post, processing, errors, reset } = useForm({
+        service_id: '',
+        attributes: [],
+        notes: '',
+    });
+
+    const [step, setStep] = useState(1); // 1: select attributes, 2: confirm
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    
-    // Customer info
-    const [customerMode, setCustomerMode] = useState('new'); // 'new' or 'existing'
-    const [existingCustomerId, setExistingCustomerId] = useState('');
-    const [customers, setCustomers] = useState([]);
-    const [newCustomer, setNewCustomer] = useState({
-        name: '',
-        phone: '',
-        email: '',
-        address: ''
-    });
+    const [profileCheckLoading, setProfileCheckLoading] = useState(true);
+    const [profileComplete, setProfileComplete] = useState(true);
+    const [selectedServiceId, setSelectedServiceId] = useState('');
+
+    const { auth } = usePage().props; // Get auth data from Inertia
+    // Compute the selected service
+    const service = shop?.services?.find(
+        s => String(s.id) === String(selectedServiceId)
+    ) || null;
 
     // Group attributes by category
     const attributesByCategory = useMemo(() => {
@@ -27,7 +33,7 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
         shop.attributes.forEach(attr => {
             const categoryName = attr.attribute_category?.name || 'Other';
             if (!grouped[categoryName]) {
-                grouped[categoryName] = [];
+                grouped[categoryName] = [];56
             }
             grouped[categoryName].push(attr);
         });
@@ -48,15 +54,33 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
         return total;
     }, [service?.price, selectedAttributes, shop?.attributes]);
 
-    // Load customers when modal opens
+    // Check user profile on mount
     useEffect(() => {
-        if (isOpen && shop?.id) {
-            // Try to load customers for this shop
-            axios.get(`/api/dashboard/shops/${shop.id}/customers`)
-                .then(res => setCustomers(res.data.data || []))
-                .catch(() => setCustomers([]));
+    if (isOpen) {
+        setProfileCheckLoading(true);
+        
+        if (!auth?.user) {
+            setProfileComplete(false);
+            setError("Please login to place an order.");
+        } else {
+            // Logic: Check if the profile object exists AND if the fields are not null/empty
+            const userProfile = auth.user.profile;
+            
+            const hasPhone = !!userProfile?.phone;
+            const hasBarangay = !!userProfile?.barangay;
+            const hasStreet = !!userProfile?.street; // Based on your DB, some are NULL
+
+            if (hasPhone && hasBarangay || hasStreet) {
+                setProfileComplete(true);
+                setError(null);
+            } else {
+                setProfileComplete(false);
+                setError("Please complete your profile details (Phone/Address) to continue.");
+            }
         }
-    }, [isOpen, shop?.id]);
+        setProfileCheckLoading(false);
+    }
+}, [isOpen, auth]);
 
     // Reset state when service changes
     useEffect(() => {
@@ -65,11 +89,12 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
             setNotes('');
             setStep(1);
             setError(null);
-            setCustomerMode('new');
-            setExistingCustomerId('');
-            setNewCustomer({ name: '', phone: '', email: '', address: '' });
         }
     }, [service]);
+
+    useEffect(() => {
+        setData('service_id', selectedServiceId);
+    }, [selectedServiceId]);
 
     const toggleAttribute = (attrId) => {
         setSelectedAttributes(prev => 
@@ -79,41 +104,43 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
         );
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError(null);
-        setLoading(true);
+    const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!service) {
+        setError('Please select a service first.');
+        return;
+    }
+    
+    setError(null);
+    setLoading(true);
 
-        try {
-            const payload = {
-                service_id: service.id,
-                attributes: selectedAttributes,
-                notes: notes || null,
-            };
+    // Sync the local component state to the useForm 'data' object right before sending
+    setData(prev => ({
+        ...prev,
+        attributes: selectedAttributes,
+        notes: notes
+    }));
 
-            if (customerMode === 'existing' && existingCustomerId) {
-                payload.customer_id = parseInt(existingCustomerId);
-            } else {
-                payload.customer_name = newCustomer.name;
-                payload.customer_phone = newCustomer.phone || null;
-                payload.customer_email = newCustomer.email || null;
-                payload.customer_address = newCustomer.address || null;
-            }
-
-            const response = await axios.post(`/api/shops/${shop.id}/orders`, payload);
-            
-            if (onSuccess) {
-                onSuccess(response.data.data);
-            }
+    // Use the post method from useForm
+    // Ensure this route matches a POST route in your web.php
+    post(`/shops/${shop.id}/orders`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            reset();
             onClose();
-        } catch (err) {
-            setError(err.response?.data?.message || err.message || 'Failed to place order');
-        } finally {
+            if (onSuccess) onSuccess();
+        },
+        onError: (err) => {
             setLoading(false);
-        }
-    };
+            console.log("Database/Validation Error:", err);
+            setError("Failed to save order. Please check your inputs.");
+        },
+        onFinish: () => setLoading(false),
+    });
+};
 
-    if (!isOpen || !service) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -122,9 +149,9 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                 <div className="flex items-start justify-between border-b border-stone-200 p-6">
                     <div>
                         <h2 className="text-2xl font-semibold text-stone-800">
-                            {step === 1 ? 'Customize Your Order' : 'Your Information'}
+                            {step === 1 ? 'Customize Your Order' : 'Confirm Order'}
                         </h2>
-                        <p className="mt-1 text-stone-600">{service.service_name}</p>
+                        <p className="mt-1 text-stone-600">{service ? service.service_name : "Select a service"}</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -136,16 +163,61 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit}>
-                    {/* Step 1: Select Attributes */}
-                    {step === 1 && (
+                {/* Loading Profile Check */}
+                {profileCheckLoading && (
+                    <div className="p-6">
+                        <div className="flex justify-center py-8">
+                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600" />
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 1: Select Attributes */}
+                {!profileCheckLoading && step === 1 && (
+                    <form onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
                         <div className="p-6">
+                            {/* Error Message */}
+                            {error && !profileComplete && (
+                                <div className="mb-4 rounded-lg bg-amber-50 p-3 text-amber-700 border border-amber-200">
+                                    <div className="font-medium">{error}</div>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.get(route('profile.edit'))}
+                                        className="mt-2 text-sm underline hover:text-amber-800"
+                                    >
+                                        Go to Profile →
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Service Selection */}
+                            <div className="mb-6">
+                                <label className="mb-2 block text-sm font-medium text-stone-700">
+                                    Select Service
+                                </label>
+
+                                <select
+                                    value={selectedServiceId}
+                                    onChange={(e) => setSelectedServiceId(e.target.value)}
+                                    className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                >
+                                    <option value="">Choose a service</option>
+
+                                    {shop.services.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        {/* Shows: Hemming [Repair] — ₱150.00 */}
+                                        {s.service_name} [{s.service_category?.name || 'General'}] — ₱{Number(s.price || 0).toFixed(2)}
+                                    </option>
+                                ))}
+                                </select>
+                            </div>
+
                             {/* Base Price */}
                             <div className="mb-6 rounded-lg bg-amber-50 p-4 border border-amber-200">
                                 <div className="flex items-center justify-between">
                                     <span className="text-stone-700">Base Service Price</span>
                                     <span className="text-xl font-semibold text-amber-700">
-                                        ₱{Number(service.price).toFixed(2)}
+                                        ₱{Number(service?.price || 0).toFixed(2)}
                                     </span>
                                 </div>
                             </div>
@@ -177,16 +249,19 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                                                                 className="h-5 w-5 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
                                                             />
                                                             <div className="flex-1">
+
                                                                 <div className="font-medium text-stone-800">
                                                                     {attr.pivot?.item_name || attr.name}
                                                                 </div>
+
                                                                 {attr.pivot?.notes && (
                                                                     <div className="text-xs text-stone-500">{attr.pivot.notes}</div>
                                                                 )}
                                                             </div>
                                                             <div className="text-amber-700 font-medium">
-                                                                {price > 0 ? `+₱${Number(price).toFixed(2)}` : 'Free'}
+                                                                {price > 0 ? `+₱${Number(price).toFixed(2)}` : 'Free'} - {attr.pivot.unit}
                                                             </div>
+                                                            <div className="sr-only">{attr.pivot?.unit}</div>
                                                         </label>
                                                     );
                                                 })}
@@ -221,18 +296,20 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                                     </div>
                                 </div>
                                 <button
-                                    type="button"
-                                    onClick={() => setStep(2)}
-                                    className="rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                                    type="submit"
+                                    disabled={!selectedServiceId}
+                                    className="rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Continue
                                 </button>
                             </div>
                         </div>
-                    )}
+                    </form>
+                )}
 
-                    {/* Step 2: Customer Info */}
-                    {step === 2 && (
+                {/* Step 2: Confirm Order */}
+                {!profileCheckLoading && step === 2 && (
+                    <form onSubmit={handleSubmit}>
                         <div className="p-6">
                             {error && (
                                 <div className="mb-4 rounded-lg bg-red-50 p-3 text-red-700 border border-red-200">
@@ -240,141 +317,57 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                                 </div>
                             )}
 
-                            {/* Customer Mode Toggle */}
-                            {customers.length > 0 && (
-                                <div className="mb-6">
-                                    <label className="mb-2 block text-sm font-medium text-stone-700">
-                                        Customer
-                                    </label>
-                                    <div className="flex gap-4">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="customerMode"
-                                                value="new"
-                                                checked={customerMode === 'new'}
-                                                onChange={() => setCustomerMode('new')}
-                                                className="h-4 w-4 border-stone-300 text-amber-600"
-                                            />
-                                            <span className="text-stone-700">New Customer</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="customerMode"
-                                                value="existing"
-                                                checked={customerMode === 'existing'}
-                                                onChange={() => setCustomerMode('existing')}
-                                                className="h-4 w-4 border-stone-300 text-amber-600"
-                                            />
-                                            <span className="text-stone-700">Existing Customer</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Existing Customer Dropdown */}
-                            {customerMode === 'existing' && customers.length > 0 && (
-                                <div className="mb-6">
-                                    <label className="mb-2 block text-sm font-medium text-stone-700">
-                                        Select Customer
-                                    </label>
-                                    <select
-                                        value={existingCustomerId}
-                                        onChange={(e) => setExistingCustomerId(e.target.value)}
-                                        className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                    >
-                                        <option value="">— Select a customer —</option>
-                                        {customers.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            {/* New Customer Form */}
-                            {(customerMode === 'new' || customers.length === 0) && (
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-stone-700">
-                                            Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={newCustomer.name}
-                                            onChange={(e) => setNewCustomer(prev => ({ ...prev, name: e.target.value }))}
-                                            required
-                                            className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                            placeholder="Your full name"
-                                        />
-                                    </div>
-                                    <div className="grid gap-4 sm:grid-cols-2">
-                                        <div>
-                                            <label className="mb-2 block text-sm font-medium text-stone-700">
-                                                Phone
-                                            </label>
-                                            <input
-                                                type="tel"
-                                                value={newCustomer.phone}
-                                                onChange={(e) => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))}
-                                                className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                                placeholder="09XX XXX XXXX"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="mb-2 block text-sm font-medium text-stone-700">
-                                                Email
-                                            </label>
-                                            <input
-                                                type="email"
-                                                value={newCustomer.email}
-                                                onChange={(e) => setNewCustomer(prev => ({ ...prev, email: e.target.value }))}
-                                                className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                                placeholder="email@example.com"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-stone-700">
-                                            Address
-                                        </label>
-                                        <textarea
-                                            value={newCustomer.address}
-                                            onChange={(e) => setNewCustomer(prev => ({ ...prev, address: e.target.value }))}
-                                            rows={2}
-                                            className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                            placeholder="Your delivery address"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Order Summary */}
-                            <div className="mt-6 rounded-lg bg-stone-50 p-4">
+                            <div className="rounded-lg bg-stone-50 p-4">
                                 <h3 className="font-medium text-stone-800 mb-3">Order Summary</h3>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
                                         <span className="text-stone-600">Service</span>
-                                        <span className="text-stone-800">{service.service_name}</span>
+                                        <span className="text-stone-800">{service?.service_name}</span>
                                     </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-stone-600">Base Price</span>
+                                        <span className="text-stone-800">₱{Number(service?.price || 0).toFixed(2)}</span>
+                                    </div>
+                                    
                                     {selectedAttributes.length > 0 && (
-                                        <div className="flex justify-between">
-                                            <span className="text-stone-600">Options</span>
-                                            <span className="text-stone-800">{selectedAttributes.length} selected</span>
-                                        </div>
+                                        <>
+                                            <div className="border-t border-stone-200 pt-2 mt-2">
+                                                <span className="text-stone-600">Selected Options:</span>
+                                            </div>
+                                            {selectedAttributes.map(attrId => {
+                                                const attr = shop?.attributes?.find(a => a.id === attrId);
+                                                const price = attr?.pivot?.price || 0;
+                                                return (
+                                                    <div key={attrId} className="flex justify-between pl-2">
+                                                        <span className="text-stone-600">+ {attr?.pivot?.item_name || attr?.name}</span>
+                                                        <span className="text-stone-800">₱{Number(price).toFixed(2)}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </>
                                     )}
+                                    
                                     {notes && (
-                                        <div className="flex justify-between">
-                                            <span className="text-stone-600">Notes</span>
-                                            <span className="text-stone-800 text-right max-w-[200px] truncate">{notes}</span>
+                                        <div className="border-t border-stone-200 pt-2 mt-2">
+                                            <div className="text-stone-600">Notes:</div>
+                                            <div className="text-stone-800 text-right">{notes}</div>
                                         </div>
                                     )}
-                                    <div className="border-t border-stone-200 pt-2 flex justify-between">
-                                        <span className="font-medium text-stone-700">Total</span>
-                                        <span className="font-bold text-amber-700">₱{totalPrice.toFixed(2)}</span>
+                                    
+                                    <div className="border-t border-stone-200 pt-2 flex justify-between font-bold">
+                                        <span className="text-stone-800">Total</span>
+                                        <span className="text-amber-700">₱{totalPrice.toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Profile Notice */}
+                            {!profileComplete && (
+                                <div className="mt-4 rounded-lg bg-amber-50 p-3 text-amber-700 border border-amber-200 text-sm">
+                                    Your order will be linked to your account. Please ensure your profile is complete.
+                                </div>
+                            )}
 
                             {/* Action Buttons */}
                             <div className="mt-6 flex items-center justify-between">
@@ -387,15 +380,15 @@ export default function OrderModal({ shop, service, isOpen, onClose, onSuccess }
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={loading || (customerMode === 'existing' && !existingCustomerId) || (customerMode === 'new' && !newCustomer.name)}
+                                    disabled={loading || !profileComplete}
                                     className="rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {loading ? 'Placing Order...' : 'Place Order'}
+                                    {loading ? 'Placing Order...' : 'Confirm Order'}
                                 </button>
                             </div>
                         </div>
-                    )}
-                </form>
+                    </form>
+                )}
             </div>
         </div>
     );
