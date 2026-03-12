@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\TailoringShop;
+use App\Models\UserProfile;
+use App\Models\Order;
+use Illuminate\Database\Eloquent\Relations\HasMany  ;
+use Termwind\Components\Hr;
 
 class User extends Authenticatable
 {
@@ -66,4 +71,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(UserProfile::class, 'user_id');
     }
+    public function orders():HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
 }

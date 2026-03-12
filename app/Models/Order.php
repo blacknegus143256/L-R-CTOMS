@@ -14,6 +14,7 @@ class Order extends Model
     protected $fillable = [
         'tailoring_shop_id',
         'user_id',
+        'customer_id',
         'service_id',
         'status',
         'expected_completion_date',
@@ -21,7 +22,7 @@ class Order extends Model
         'notes',
     ];
 
-    protected $with = ['user', 'service', 'items'];
+    protected $with = ['user', 'customer', 'service', 'items'];
 
     protected function casts(): array
     {
@@ -38,7 +39,12 @@ class Order extends Model
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(user::class);
+        return $this->belongsTo(User::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function service(): BelongsTo
@@ -50,4 +56,9 @@ class Order extends Model
     {
         return $this->hasMany(OrderItem::class);
     }
+
+public function tailoring_shop()
+{
+    return $this->belongsTo(TailoringShop::class);
+}
 }

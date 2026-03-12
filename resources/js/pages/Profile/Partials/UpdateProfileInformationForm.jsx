@@ -158,7 +158,7 @@ export default function UpdateProfileInformation({
             </form>
             {openMap && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white w-3/4 h-3/4 rounded-xl p-4 relative">
+                <div className="bg-white w-3/4   h-6/6 rounded-xl p-4 relative">
                     
                     <button
                         onClick={() => setOpenMap(false)}
@@ -167,7 +167,7 @@ export default function UpdateProfileInformation({
                         ✕
                     </button>
         
-                    <h3 className="text-lg font-semibold mb-2">
+                    <h3 className="text-lg font-semibold mb-1">
                         Select Location
                     </h3>
         
@@ -177,7 +177,7 @@ export default function UpdateProfileInformation({
                         <button
                             type="button"
                             onClick={() => setOpenMap(false)}
-                            className="px-4 py-2 bg-green-600 text-white rounded"
+                            className="px-2 py-2 bg-green-600 text-white rounded"
                         >
                             Save Location
                         </button>

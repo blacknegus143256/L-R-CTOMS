@@ -25,12 +25,12 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
 
                             <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                                <NavLink
+                                {/* <NavLink
                                     href={user.role === 'super_admin' ? route('super.dashboard') : user.role === 'store_admin' ? route ('store.dashboard') : route('dashboard')}
                                     active={route().current('super.dashboard') || route().current('store.dashboard') || route().current('dashboard')}
                                 >
                                     Dashboard
-                                </NavLink>
+                                </NavLink> */}
 
                                 {user.role === 'super_admin' && (
                                     <>
@@ -49,6 +49,19 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </NavLink>
                                 <NavLink href={route('store.inventory')} active={route().current('store.inventory')}>
                                     Inventory
+                                </NavLink>
+                                <NavLink href={route('store.orders')} active={route().current('store.orders')}>
+                                    Orders
+                                </NavLink>
+                                    </>
+                                )}
+                                {user.role !== 'super_admin' && user.role !== 'store_admin' && (
+                                    <>
+                                <NavLink href={route('dashboard')} active={route().current('dashboard')}>
+                                    Dashboard
+                                </NavLink>
+                                <NavLink href={route('customer.orders')} active={route().current('customer.orders')}>
+                                    My Orders
                                 </NavLink>
                                     </>
                                 )}
@@ -150,12 +163,12 @@ export default function AuthenticatedLayout({ header, children }) {
                     }
                 >
                     <div className="space-y-1 pb-3 pt-2">
-                        <ResponsiveNavLink
+                        {/* <ResponsiveNavLink
                             href={user.role === 'super_admin' ? route('super.dashboard') : user.role === 'store_admin' ? route ('store.dashboard') : route('dashboard')}
                             active={route().current('super.dashboard') || route().current('store.dashboard') || route().current('dashboard')}
                         >
                             Dashboard
-                        </ResponsiveNavLink>
+                        </ResponsiveNavLink> */}
                     </div>
 
                     {user.role === 'super_admin' && (
@@ -169,6 +182,14 @@ export default function AuthenticatedLayout({ header, children }) {
                         <>
                     <ResponsiveNavLink href={route('store.dashboard')} active={route().current('store.dashboard')}>Store Dashboard</ResponsiveNavLink>
                     <ResponsiveNavLink href={route('store.inventory')} active={route().current('store.inventory')}>Inventory</ResponsiveNavLink>
+                    <ResponsiveNavLink href={route('store.orders')} active={route().current('store.orders')}>Orders</ResponsiveNavLink>
+                        </>
+                    )}
+
+                    {user.role !== 'super_admin' && user.role !== 'store_admin' && (
+                        <>
+                    <ResponsiveNavLink href={route('dashboard')} active={route().current('dashboard')}>Dashboard</ResponsiveNavLink>
+                    <ResponsiveNavLink href={route('customer.orders')} active={route().current('customer.orders')}>My Orders</ResponsiveNavLink>
                         </>
                     )}
 

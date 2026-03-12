@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { usePage, router, Link } from '@inertiajs/react';
-
-const STATUS_OPTIONS = ['Pending', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready', 'Completed', 'Cancelled'];
+import { Link, usePage } from '@inertiajs/react';
 
 const STATUS_COLORS = {
     'Pending': 'bg-yellow-100 text-yellow-800',
@@ -13,18 +11,12 @@ const STATUS_COLORS = {
     'Cancelled': 'bg-red-100 text-red-800',
 };
 
-export default function OrdersPage() {
+export default function CustomerOrdersPage() {
     const { props } = usePage();
-    const shopId = props.shopId;
-    const shop = props.shop;
-    const initialOrders = props.orders || [];
+    const orders = props.orders || [];
     
-    const [orders] = useState(initialOrders);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [filterStatus, setFilterStatus] = useState('All');
-    const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-    const [appointmentDate, setAppointmentDate] = useState('');
-    const [pendingStatusOrder, setPendingStatusOrder] = useState(null);
 
     // Stats for tabs
     const stats = {
@@ -33,39 +25,6 @@ export default function OrdersPage() {
         inProgress: orders.filter(o => ['Accepted', 'Appointment Scheduled', 'In Progress'].includes(o.status)).length,
         ready: orders.filter(o => o.status === 'Ready').length,
         completed: orders.filter(o => o.status === 'Completed').length,
-    };
-
-    const handleStatusUpdate = (orderId, newStatus, expectedCompletionDate = null) => {
-        const payload = { status: newStatus };
-        if (expectedCompletionDate) {
-            payload.expected_completion_date = expectedCompletionDate;
-        }
-        
-        router.patch(`/store/orders/${orderId}/status`, payload, {
-            onSuccess: () => {
-                window.location.reload();
-            },
-            onError: (errors) => {
-                alert(errors.message || 'Failed to update status');
-            }
-        });
-    };
-
-    const handleAcceptClick = (order) => {
-        if (order.service?.appointment_required) {
-            setPendingStatusOrder({ id: order.id, status: 'Appointment Scheduled' });
-            setShowAppointmentModal(true);
-        } else {
-            handleStatusUpdate(order.id, 'Accepted');
-        }
-    };
-
-    const handleAppointmentSubmit = () => {
-        if (!appointmentDate) {
-            alert('Please select an appointment date');
-            return;
-        }
-        handleStatusUpdate(pendingStatusOrder.id, pendingStatusOrder.status, appointmentDate);
     };
 
     const filteredOrders = filterStatus === 'All' 
@@ -81,19 +40,42 @@ export default function OrdersPage() {
         { id: 'Completed', label: 'Completed', count: stats.completed },
     ];
 
+    if (orders.length === 0) return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-stone-800">My Orders</h1>
+                    <p className="text-stone-600">Track your tailoring orders</p>
+                </div>
+            </div>
+            
+            <div className="rounded-xl border border-stone-200 bg-white p-12 text-center">
+                <div className="text-4xl mb-4">📋</div>
+                <p className="text-stone-500 mb-4">You haven't placed any orders yet.</p>
+                <Link 
+                    href="/" 
+                    className="inline-block bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
+                >
+                    Browse Shops
+                </Link>
+            </div>
+        </div>
+    );
+
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-stone-800">Orders Management</h1>
-                    <p className="text-stone-600">{shop?.shop_name || 'Your Shop'}</p>
+                    <h1 className="text-2xl font-bold text-stone-800">My Orders</h1>
+                    <p className="text-stone-600">Track your tailoring orders</p>
                 </div>
-                <Link
-                    href={`/store/dashboard`}
-                    className="px-4 py-2 bg-stone-100 text-stone-700 rounded-lg hover:bg-stone-200 transition"
+                <Link 
+                    href="/" 
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
                 >
-                    ← Back to Dashboard
+                    Browse More Shops
                 </Link>
             </div>
 
@@ -145,20 +127,12 @@ export default function OrdersPage() {
                                                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[order.status] || 'bg-stone-100 text-stone-800'}`}>
                                                     {order.status}
                                                 </span>
-                                                {order.service?.appointment_required && (
-                                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                                        📅 Appointment Required
-                                                    </span>
-                                                )}
                                             </div>
                                             
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                                 <div>
-                                                    <div className="text-xs text-stone-500 uppercase tracking-wide">Customer</div>
-                                                    <div className="font-medium text-stone-800">{order.user?.name || 'N/A'}</div>
-                                                    {order.customer?.phone_number && (
-                                                        <div className="text-sm text-stone-600">{order.user.profile?.phone_number}</div>
-                                                    )}
+                                                    <div className="text-xs text-stone-500 uppercase tracking-wide">Shop</div>
+                                                    <div className="font-medium text-stone-800">{order.tailoring_shop?.shop_name || 'N/A'}</div>
                                                 </div>
                                                 <div>
                                                     <div className="text-xs text-stone-500 uppercase tracking-wide">Service</div>
@@ -178,7 +152,7 @@ export default function OrdersPage() {
                                                     </div>
                                                     {order.expected_completion_date && (
                                                         <div className="text-xs text-indigo-600 font-medium">
-                                                            📅 {new Date(order.expected_completion_date).toLocaleDateString()}
+                                                            📅 Expected: {new Date(order.expected_completion_date).toLocaleDateString()}
                                                         </div>
                                                     )}
                                                 </div>
@@ -204,7 +178,7 @@ export default function OrdersPage() {
                                             {/* Notes */}
                                             {order.notes && (
                                                 <div className="mt-3 pt-3 border-t border-stone-100">
-                                                    <div className="text-xs text-stone-500 uppercase tracking-wide mb-1">Notes</div>
+                                                    <div className="text-xs text-stone-500 uppercase tracking-wide mb-1">Your Notes</div>
                                                     <div className="text-sm text-stone-700 bg-stone-50 p-2 rounded-lg">
                                                         {order.notes}
                                                     </div>
@@ -213,59 +187,13 @@ export default function OrdersPage() {
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="ml-4 flex flex-col gap-2">
+                                        <div className="ml-4">
                                             <button
                                                 onClick={() => setSelectedOrder(order)}
                                                 className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
                                             >
                                                 View Details
                                             </button>
-                                            
-                                            {/* Status Actions */}
-                                            {order.status === 'Pending' && (
-                                                <button
-                                                    onClick={() => handleAcceptClick(order)}
-                                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                                                >
-                                                    Accept
-                                                </button>
-                                            )}
-                                            
-                                            {order.status === 'Accepted' && (
-                                                <button
-                                                    onClick={() => handleStatusUpdate(order.id, 'In Progress')}
-                                                    className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
-                                                >
-                                                    Start Work
-                                                </button>
-                                            )}
-                                            
-                                            {(order.status === 'Appointment Scheduled' || order.status === 'In Progress') && (
-                                                <button
-                                                    onClick={() => handleStatusUpdate(order.id, 'Ready')}
-                                                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-                                                >
-                                                    Mark Ready
-                                                </button>
-                                            )}
-                                            
-                                            {order.status === 'Ready' && (
-                                                <button
-                                                    onClick={() => handleStatusUpdate(order.id, 'Completed')}
-                                                    className="rounded-lg bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
-                                                >
-                                                    Complete
-                                                </button>
-                                            )}
-
-                                            {order.status !== 'Completed' && order.status !== 'Cancelled' && (
-                                                <button
-                                                    onClick={() => handleStatusUpdate(order.id, 'Cancelled')}
-                                                    className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -294,24 +222,21 @@ export default function OrdersPage() {
                         </div>
 
                         <div className="p-6 space-y-6">
-                            {/* Customer Info */}
+                            {/* Shop Info */}
                             <div>
-                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Customer</h3>
+                                <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Shop</h3>
                                 <div className="bg-stone-50 rounded-lg p-4">
-                                    <div className="font-medium text-stone-800">{selectedOrder.user?.name || 'N/A'}</div>
-                                    {selectedOrder.user.profile?.phone && (
-                                        <div className="text-sm text-stone-600">Phone: {selectedOrder.user.profile.phone}</div>
+                                    <div className="font-medium text-stone-800">{selectedOrder.tailoring_shop?.shop_name || 'N/A'}</div>
+                                    {selectedOrder.tailoring_shop?.contact_number && (
+                                        <div className="text-sm text-stone-600">Phone: {selectedOrder.tailoring_shop.contact_number}</div>
                                     )}
-                                    {selectedOrder.user?.email && (
-                                        <div className="text-sm text-stone-600">Email: {selectedOrder.user.email}</div>
-                                    )}
-                                    {selectedOrder.customer?.address && (
-                                        <div className="text-sm text-stone-600">Address: {selectedOrder.customer.address}</div>
+                                    {selectedOrder.tailoring_shop?.address && (
+                                        <div className="text-sm text-stone-600">Address: {selectedOrder.tailoring_shop.address}</div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Service Info */}
+                            {/* Service & Price */}
                             <div>
                                 <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Service & Price</h3>
                                 <div className="bg-stone-50 rounded-lg p-4 space-y-2">
@@ -341,7 +266,7 @@ export default function OrdersPage() {
                                     </span>
                                     {selectedOrder.expected_completion_date && (
                                         <span className="text-sm text-stone-500">
-                                            📅 Expected: {new Date(selectedOrder.expected_completion_date).toLocaleDateString()}
+                                            📅 Expected Completion: {new Date(selectedOrder.expected_completion_date).toLocaleDateString()}
                                         </span>
                                     )}
                                 </div>
@@ -350,52 +275,26 @@ export default function OrdersPage() {
                             {/* Notes */}
                             {selectedOrder.notes && (
                                 <div>
-                                    <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Notes</h3>
+                                    <h3 className="text-sm font-medium text-stone-500 uppercase tracking-wide mb-2">Your Notes</h3>
                                     <div className="bg-stone-50 rounded-lg p-4 text-stone-700">
                                         {selectedOrder.notes}
                                     </div>
                                 </div>
                             )}
-                        </div>
-                    </div>
-                </div>
-            )}
 
-            {/* Appointment Modal */}
-            {showAppointmentModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAppointmentModal(false)}>
-                    <div className="mx-4 max-w-md w-full rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-semibold text-stone-800 mb-4">Schedule Appointment</h3>
-                        <p className="text-sm text-stone-600 mb-4">
-                            This service requires an appointment. Please select a date for the customer measurement/consultation.
-                        </p>
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-stone-700 mb-1">Appointment Date</label>
-                            <input
-                                type="date"
-                                value={appointmentDate}
-                                onChange={(e) => setAppointmentDate(e.target.value)}
-                                min={new Date().toISOString().split('T')[0]}
-                                className="w-full border border-stone-300 rounded-lg px-4 py-2 text-stone-800"
-                            />
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => {
-                                    setShowAppointmentModal(false);
-                                    setAppointmentDate('');
-                                    setPendingStatusOrder(null);
-                                }}
-                                className="flex-1 px-4 py-2 border border-stone-300 rounded-lg text-stone-700 hover:bg-stone-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleAppointmentSubmit}
-                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                            >
-                                Schedule
-                            </button>
+                            {/* What to expect */}
+                            <div className="bg-amber-50 rounded-lg p-4">
+                                <h3 className="text-sm font-medium text-amber-800 mb-2">What to expect</h3>
+                                <div className="text-sm text-amber-700 space-y-1">
+                                    {selectedOrder.status === 'Pending' && <p>Your order is waiting for the shop to accept it.</p>}
+                                    {selectedOrder.status === 'Accepted' && <p>The shop has accepted your order and will start working on it soon.</p>}
+                                    {selectedOrder.status === 'Appointment Scheduled' && <p>Please visit the shop on the scheduled appointment date for measurements/consultation.</p>}
+                                    {selectedOrder.status === 'In Progress' && <p>Your order is being worked on. We'll notify you when it's ready.</p>}
+                                    {selectedOrder.status === 'Ready' && <p>Your order is ready for pickup! Please visit the shop to get your items.</p>}
+                                    {selectedOrder.status === 'Completed' && <p>Thank you for your order!</p>}
+                                    {selectedOrder.status === 'Cancelled' && <p>This order has been cancelled.</p>}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

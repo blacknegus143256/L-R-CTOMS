@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
-    private const VALID_STATUSES = ['Pending', 'Accepted', 'In Progress', 'Ready', 'Completed', 'Cancelled'];
+    private const VALID_STATUSES = ['Pending', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready', 'Completed', 'Cancelled'];
 
     private function authorizeShop(Request $request, TailoringShop $shop): bool
     {
@@ -32,6 +32,27 @@ class OrderController extends Controller
             ->get();
 
         return response()->json(['data' => $orders]);
+    }
+
+    public function show(Request $request, TailoringShop $shop, Order $order): JsonResponse
+    {
+        if (! $this->authorizeShop($request, $shop)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+        if ($order->tailoring_shop_id != $shop->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        $order->load([
+            'customer:id,name,phone_number,email,address,measurements',
+            'service:id,service_name,price,service_description,duration_days,appointment_required',
+            'service.serviceCategory:id,name',
+            'items.attribute',
+            'items.attribute.attributeCategory:id,name',
+            'tailoringShop:id,shop_name,contact_number,address,contact_person',
+        ]);
+
+        return response()->json(['data' => $order]);
     }
 
     public function store(Request $request, TailoringShop $shop): JsonResponse

@@ -46,4 +46,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('dashboard/shops/{shop}/services', DashboardServiceController::class)->except(['show']);
     Route::apiResource('dashboard/shops/{shop}/customers', CustomerController::class)->except(['show']);
     Route::apiResource('dashboard/shops/{shop}/orders', OrderController::class)->except(['show']);
+    Route::get('dashboard/shops/{shop}/orders/{order}', [OrderController::class, 'show']);
 });
