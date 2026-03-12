@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import ViewProfile from '@/components/ViewProfile';
+import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
-import LocationMapModal from "@/components/LocationMapModal";
+import LocationMapModal from "@/Components/LocationMapModal";
 
 export default function Home() {
     const [user, setUser] = useState(null);

@@ -1,4 +1,4 @@
-import Modal from '@/components/Modal';
+import Modal from '@/Components/Modal';
 
 export default function AddNewAttributeModal({
 isOpen,

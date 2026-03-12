@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Link, usePage } from "@inertiajs/react";
 import { useEffect } from "react";
-import OrderModal from "@/components/OrderModal";
+import OrderModal from "@/Components/OrderModal";
 
 export default function Shop({ shop }) {
     if (!shop) return null;

@@ -1,9 +1,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useState } from 'react';
-import AddNewAttributeModal from '@/components/StoreAdmin/AddNewAttributeModal';
-import AddCategoryModal from '@/components/StoreAdmin/AddCategoryModal';
-import EditShopAttributeModal from '@/components/StoreAdmin/EditShopAttributeModal';
+import AddNewAttributeModal from '@/Components/StoreAdmin/AddNewAttributeModal';
+import AddCategoryModal from '@/Components/StoreAdmin/AddCategoryModal';
+import EditShopAttributeModal from '@/Components/StoreAdmin/EditShopAttributeModal';
 import { Pencil, Trash2, Plus, X } from 'lucide-react';
 
 
