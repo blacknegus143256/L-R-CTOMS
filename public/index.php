@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 
+require __DIR__ . '/../public/index.php';
 define('LARAVEL_START', microtime(true));
 
 // Determine if the application is in maintenance mode...
