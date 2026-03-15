@@ -2,9 +2,12 @@
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
     "type": "module",
+    "homepage": "https://blacknegus143256.github.io/L-R-CTOMS",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "predeploy": "npm run build",
+        "deploy": "gh-pages -d dist"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",
@@ -24,6 +27,7 @@
     },
     "dependencies": {
         "@vitejs/plugin-react": "^5.1.4",
+        "gh-pages": "^6.3.0",
         "lucide-react": "^0.575.0",
         "maplibre-gl": "^5.19.0",
         "react": "^19.2.4",
