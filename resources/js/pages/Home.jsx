@@ -387,7 +387,7 @@ export default function Home(header, children) {
                                                                                 <li key={idx} className="border-b border-stone-50 last:border-0 pb-1">
                                                                                     <div className="font-medium text-bold">{s.service_name || 'Standard Service'}</div>
                                                                                     <div className="font-medium text-xs">{s.service_description || 'Standard Service'}</div>
-                                                                                    <div className="text-lg font-bold text-amber-700">₱{Number(s.price ?? 0).toFixed(2)}</div>
+                                                                                    <div className="font-bold">₱{Number(s.price ?? 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                                                                                 </li>
                                                                             ))}
                                                                         </ul>
@@ -416,7 +416,7 @@ export default function Home(header, children) {
                                                                             {matchedItems.map((item, idx) => (
                                                                                 <li key={idx} className="border-b border-stone-50 last:border-0 pb-1">
                                                                                     <div className="text-stone-800 font-medium">{item.pivot?.item_name || 'Generic'}</div>
-                                                                                    <div className="text-sm font-bold text-amber-700">₱{Number(item.pivot?.price ?? 0).toFixed(2)} {item.pivot?.unit || ''}</div>
+                                                                                    <div className="font-bold">₱{Number(item.pivot?.price ?? 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                                                                                 </li>
                                                                             ))}
                                                                         </ul>

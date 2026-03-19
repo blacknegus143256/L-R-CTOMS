@@ -89,7 +89,7 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-stone-500 font-medium">Total Spent</p>
-                                <p className="text-3xl font-bold text-stone-700 mt-1">₱{Number(stats?.totalSpent || 0).toFixed(2)}</p>
+                                <p className="text-3xl font-bold text-stone-800 mt-1">₱{Number(stats?.totalSpent || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>               
                                 <p className="text-xs text-stone-400 mt-1">On completed orders</p>
                             </div>
                             <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center">
@@ -246,7 +246,7 @@ export default function Dashboard() {
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3 text-right font-bold text-amber-700">
-                                                ₱{Number(order.total_price || 0).toFixed(2)}
+                                                ₱{Number(order.total_price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                             </td>
                                         </tr>
                                     ))}

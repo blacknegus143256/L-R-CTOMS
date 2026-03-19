@@ -206,7 +206,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                                     {shop.services.map(s => (
                                     <option key={s.id} value={s.id}>
                                         {/* Shows: Hemming [Repair] — ₱150.00 */}
-                                        {s.service_name} [{s.service_category?.name || 'General'}] — ₱{Number(s.price || 0).toFixed(2)}
+₱{Number(s.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                     </option>
                                 ))}
                                 </select>

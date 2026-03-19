@@ -71,7 +71,7 @@ export default function Shop({ shop }) {
                             <div className="mt-2 font-medium">Appointment: {s.appointment_required ? "Required" : "No"}</div>
                             <div className="mt-2 font-medium">Note: {s.notes}</div>
                             <div>
-                                ₱{Number(s.price).toFixed(2)}
+₱{Number(s.price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </div>
 
                         </li>
@@ -101,7 +101,7 @@ export default function Shop({ shop }) {
 {attr.pivot?.item_name || attr.name}
                                         <span>
                                             {attr.pivot?.price
-                                                ? `+₱${Number(attr.pivot.price).toFixed(2)}`
+                                                ? `₱${Number(attr.pivot.price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
                                                 : "Free"}
                                         </span>
 

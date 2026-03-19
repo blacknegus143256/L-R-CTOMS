@@ -163,12 +163,12 @@ export default function OrdersPage() {
                                                 <div>
                                                     <div className="text-xs text-stone-500 uppercase tracking-wide">Service</div>
                                                     <div className="font-medium text-stone-800">{order.service?.service_name || 'N/A'}</div>
-                                                    <div className="text-sm text-stone-600">₱{Number(order.service?.price || 0).toFixed(2)} base</div>
+                                                    <div className="font-bold">₱{Number(order.service?.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                                                 </div>
                                                 <div>
                                                     <div className="text-xs text-stone-500 uppercase tracking-wide">Total</div>
                                                     <div className="text-xl font-bold text-amber-700">
-                                                        ₱{Number(order.total_price).toFixed(2)}
+                                                        ₱{Number(order.total_price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                                     </div>
                                                 </div>
                                                 <div>
@@ -193,7 +193,7 @@ export default function OrdersPage() {
                                                             <span key={idx} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-1 text-sm text-amber-800 border border-amber-200">
                                                                 {item.attribute?.name || 'Option'}
                                                                 {item.price > 0 && (
-                                                                    <span className="text-amber-600">+₱{Number(item.price).toFixed(2)}</span>
+                                                                    <span className="font-bold">₱{Number(item.price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                                                                 )}
                                                             </span>
                                                         ))}
@@ -254,7 +254,7 @@ export default function OrdersPage() {
                                                     onClick={() => handleStatusUpdate(order.id, 'Completed')}
                                                     className="rounded-lg bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
                                                 >
-                                                    Complete
+                                                    Mark as Complete
                                                 </button>
                                             )}
 
@@ -317,17 +317,17 @@ export default function OrdersPage() {
                                 <div className="bg-stone-50 rounded-lg p-4 space-y-2">
                                     <div className="flex justify-between">
                                         <span className="text-stone-600">{selectedOrder.service?.service_name}</span>
-                                        <span className="text-stone-800">₱{Number(selectedOrder.service?.price || 0).toFixed(2)}</span>
+                                        <span className="font-bold">₱{Number(selectedOrder.service?.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                                     </div>
                                     {selectedOrder.items && selectedOrder.items.map((item, idx) => (
                                         <div key={idx} className="flex justify-between">
                                             <span className="text-stone-600">+ {item.attribute?.name || 'Option'}</span>
-                                            <span className="text-stone-800">₱{Number(item.price || 0).toFixed(2)}</span>
+                                            <span className="font-bold">₱{Number(item.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                                         </div>
                                     ))}
                                     <div className="border-t border-stone-200 pt-2 flex justify-between font-bold">
                                         <span className="text-stone-800">Total</span>
-                                        <span className="text-amber-700">₱{Number(selectedOrder.total_price).toFixed(2)}</span>
+                                        <span>₱{Number(selectedOrder.total_price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                                     </div>
                                 </div>
                             </div>

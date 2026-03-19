@@ -146,7 +146,7 @@ export default function ServicesPage() {
                             list.map((s) => (
                                 <tr key={s.id} className="border-b border-stone-100">
                                     <td className="px-4 py-3">{s.service_category}</td>
-                                    <td className="px-4 py-3">₱{Number(s.starting_price).toFixed(2)}</td>
+₱{Number(s.starting_price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                                     <td className="px-4 py-3">{s.turnaround_time || '—'}</td>
                                     <td className="px-4 py-3">
                                         {s.is_available ? (
