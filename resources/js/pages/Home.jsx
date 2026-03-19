@@ -5,8 +5,11 @@ import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
 
-export default function Home() {
+export default function Home(header, children) {
     const [user, setUser] = useState(null);
+    
+    const currentUser = usePage().props.auth.user;
+
     const [categories, setCategories] = useState([]);
     const [services, setServices] = useState([]);
     const [shops, setShops] = useState([]);
@@ -26,6 +29,7 @@ export default function Home() {
     const [showModal, setShowModal] = useState(false);
     const [selectedShop, setSelectedShop] = useState(null);
     const [modalLoading, setModalLoading] = useState(false);
+    
 
     const [openDropdowns, setOpenDropdowns] = useState({});
 
@@ -181,7 +185,9 @@ export default function Home() {
                     {auth.user ? (
                         <div className="flex gap-6 items-center">
                             <Link href="/dashboard" className="text-stone-600 hover:text-amber-700 font-medium">Dashboard</Link>
+                            {currentUser.role === 'customer' && (
                             <Link href="/my-orders" className="text-stone-600 hover:text-amber-700 font-medium">My Orders</Link>
+                            )}
                             <Link href="/profile" className="px-4 py-2 bg-stone-100 text-stone-700 rounded-full hover:bg-stone-200 transition">Hi, {auth.user.name}</Link>
                             <Link href="/logout" method="post" as="button" className="text-red-600 text-sm hover:underline">Log out</Link>
                         </div>
@@ -379,6 +385,7 @@ export default function Home() {
                                                                         <ul className="space-y-1">
                                                                             {shopServices.map((s, idx) => (
                                                                                 <li key={idx} className="border-b border-stone-50 last:border-0 pb-1">
+                                                                                    <div className="font-medium text-bold">{s.service_name || 'Standard Service'}</div>
                                                                                     <div className="font-medium text-xs">{s.service_description || 'Standard Service'}</div>
                                                                                     <div className="text-lg font-bold text-amber-700">₱{Number(s.price ?? 0).toFixed(2)}</div>
                                                                                 </li>

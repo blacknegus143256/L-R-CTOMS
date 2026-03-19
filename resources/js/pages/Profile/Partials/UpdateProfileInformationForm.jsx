@@ -111,7 +111,7 @@ export default function UpdateProfileInformation({
                 <button
                 type="button"
                 onClick={() => setOpenMap(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
+                className="button-small bg-blue-600 text-white rounded"
             >
                 Set Location from Map
             </button>

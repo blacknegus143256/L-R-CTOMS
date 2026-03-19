@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\Dashboard\ServiceController as DashboardServiceCont
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ShopController;
 use Illuminate\Support\Facades\Route;
-
+use Illuminate\Http\Request;
 // Public API (no auth required)
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/services', [ServiceController::class, 'index']);
@@ -34,10 +34,23 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 
 // Auth (sanctum)
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    $user = $request->user();
+    $shops = [];
+    if ($user->shop) {
+        $shops = [$user->shop];
+    }
+    return response()->json([
+        'user' => $user,
+        'shops' => $shops,
+    ]);
+});
+
+// Auth (sanctum protected)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
-
+    
     // Dashboard: my shops
     Route::get('/dashboard/shops', [DashboardShopController::class, 'index']);
     Route::get('/dashboard/shops/{shop}', [DashboardShopController::class, 'show']);

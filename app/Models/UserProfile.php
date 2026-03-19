@@ -11,12 +11,14 @@ class UserProfile extends Model
     protected $table = 'users_profile';
 
     protected $fillable = [
+        'user_id',
         'phone',
         'barangay',
         'street',
         'latitude',
         'longitude',
     ];
+
 
     public function user()
     {

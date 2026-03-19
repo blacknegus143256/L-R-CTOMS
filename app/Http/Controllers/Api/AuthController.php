@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
-
+use Illuminate\Support\Facades\Auth;
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
@@ -23,13 +23,17 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'role' => $request->role ?? 'customer',
         ]);
+        
+        Auth::login($user);
 
         $token = $user->createToken('dashboard')->plainTextToken;
 
         return response()->json([
-            'user' => $user->only('id', 'name', 'email'),
+            'user' => $user->only('id', 'name', 'email', 'role'),
             'token' => $token,
+            'profile' => $user->profile,
             'token_type' => 'Bearer',
         ], 201);
     }
@@ -50,11 +54,14 @@ class AuthController extends Controller
         }
 
         $user->tokens()->where('name', 'dashboard')->delete();
+        Auth::login($user);
+        
         $token = $user->createToken('dashboard')->plainTextToken;
 
         return response()->json([
-            'user' => $user->only('id', 'name', 'email'),
+            'user' => $user->only('id', 'name', 'email', 'role'),
             'token' => $token,
+            'profile' => $user->profile,
             'token_type' => 'Bearer',
         ]);
     }
@@ -69,11 +76,13 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->load('tailoringShops:id,shop_name,address,contact_number');
+        $user->load('tailoringShops:id,shop_name,status,user_id,is_active,description,contact_person,contact_role',
+        'profile');
 
         return response()->json([
-            'user' => $user->only('id', 'name', 'email'),
+            'user' => $user->only('id', 'name', 'email', 'role'),
             'shops' => $user->tailoringShops,
+            'profile' => $user->profile,
         ]);
     }
 }

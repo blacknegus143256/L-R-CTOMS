@@ -28,6 +28,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role', // Add role to fillable
+        'shop_name', // Add shop_name to fillable
     ];
 
     /**
@@ -55,18 +56,18 @@ class User extends Authenticatable
     protected static function booted()
     {
         static::created(function ($user) {
-            $user->profile()->create([]);
+            $user->profile()->create([
+                'user_id' => $user->id
+            ]);
         });
     }
 
-    public function tailoringShops(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+
+    public function tailoringShops()
     {
-        return $this->belongsToMany(\App\Models\TailoringShop::class, 'shop_user');
+        return $this->hasMany(\App\Models\TailoringShop::class, 'user_id');
     }
-    public function shop()
-{
-    return $this->hasOne(TailoringShop::class, 'user_id');
-}
+
     public function profile()
     {
         return $this->hasOne(UserProfile::class, 'user_id');

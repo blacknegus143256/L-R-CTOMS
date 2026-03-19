@@ -16,8 +16,6 @@ class TailoringShop extends Model
         'shop_name',
         'contact_person',
         'contact_role',
-        'address',
-        'contact_number',
         'is_active',
         'status',
     ];

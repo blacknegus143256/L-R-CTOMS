@@ -18,6 +18,7 @@ export function AuthProvider({ children }) {
     const [shops, setShops] = useState([]);
     const [token, setTokenState] = useState(() => localStorage.getItem(TOKEN_KEY));
     const [loading, setLoading] = useState(!!token);
+    const [profile, setProfile] = useState(null);
 
     const setToken = useCallback((newToken) => {
         setTokenState(newToken);
@@ -29,46 +30,31 @@ export function AuthProvider({ children }) {
             setAxiosToken(null);
             setUser(null);
             setShops([]);
+            setProfile(null);
         }
     }, []);
 
     useEffect(() => {
-        if (token) {
-            setAxiosToken(token);
-            axios.get('/api/user')
-                .then((res) => {
-                    setUser(res.data.user);
-                    setShops(res.data.shops || []);
-                })
-                .catch(() => setToken(null))
-                .finally(() => setLoading(false));
-        } else {
-            setLoading(false);
-        }
-    }, [token, setToken]);
+        // Inertia provides user via page props.auth.user, no API fetch needed
+        setLoading(false);
+    }, []);
 
-    const login = useCallback(async (email, password) => {
-        const { data } = await axios.post('/api/login', { email, password });
-        setToken(data.token);
-        return data;
-    }, [setToken]);
 
-    const register = useCallback(async (name, email, password, password_confirmation) => {
-        const { data } = await axios.post('/api/register', { name, email, password, password_confirmation });
-        setToken(data.token);
-        setUser(data.user);
-        setShops([]);
-        return data;
-    }, [setToken]);
+    const login = useCallback(async () => {
+        // Inertia web auth handles login, no API call needed
+    }, []);
+    
+    const register = useCallback(async () => {
+        // Inertia web auth handles register, no API call needed
+    }, []);
 
-    const logout = useCallback(async () => {
-        try {
-            await axios.post('/api/logout');
-        } catch (_) {}
+
+    const logout = useCallback(() => {
         setToken(null);
     }, [setToken]);
 
-    const value = { user, shops, token, loading, login, register, logout, setToken };
+
+    const value = { user, shops, profile, token, loading, login, register, logout, setToken };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
