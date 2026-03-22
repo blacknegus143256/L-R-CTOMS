@@ -14,6 +14,7 @@ use App\Models\TailoringShop;
 use App\Models\Order;
 use App\Http\Controllers\Api\Dashboard\OrderController;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\HomeController;
 
 // For the Super Admin
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -148,9 +149,7 @@ Route::get('/shop/{shop}',  function ($shop){
     ]);
 });
 
-Route::get('/', function () {
-    return Inertia::render('Home');
-})->name('home');
+Route::get('/', [HomeController::class, 'index'])->name('home');
 
 
 Route::middleware('auth')->group(function () {
