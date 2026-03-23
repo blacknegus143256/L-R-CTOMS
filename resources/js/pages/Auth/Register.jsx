@@ -163,8 +163,8 @@ if (data.role !== 'store_admin') {
                 </div>
 
                 <div className="flex items-center gap-4 mt-6">
-                    <p className="text-sm text-stone-600">
-                        Already have an account? <Link href="/login" className="font-medium text-amber-600 hover:underline">Sign in</Link>
+                    <p className="text-sm text-orchid-blue">
+                        Already have an account? <Link href="/login" className="font-medium text-orchid-purple hover:text-orchid-blue hover:underline transition-colors">Sign in</Link>
                     </p>
                 </div>
 
@@ -175,6 +175,18 @@ if (data.role !== 'store_admin') {
                     disabled={processing}>
                         {processing ? 'Creating account…' : 'Register'}
                     </PrimaryButton>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-stone-100 text-center">
+                    <p className="text-sm text-stone-500">
+                        Already a member?{' '}
+                        <Link
+                            href={route('login')}
+                            className="font-bold text-orchid-purple hover:text-orchid-blue transition-colors duration-200 underline underline-offset-4"
+                        >
+                            Sign In Here
+                        </Link>
+                    </p>
                 </div>
             </form>
         </GuestLayout>
