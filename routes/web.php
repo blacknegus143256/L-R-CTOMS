@@ -89,25 +89,29 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
 Route::get('/dashboard', function () {
     $user = Auth::user();
     
-    // Get orders for this user
+    if ($user->role === 'super_admin') {
+        return redirect()->route('super.dashboard');
+    }
+    
+    if ($user->role === 'store_admin') {
+        return redirect()->route('store.dashboard');
+    }
+
+    // Process logic ONLY for regular Customers
     $orders = \App\Models\Order::where('user_id', $user->id)->get();
     
-    // Calculate stats
     $activeCount = $orders->whereIn('status', ['Pending', 'Accepted', 'In Progress', 'Appointment Scheduled'])->count();
     $readyCount = $orders->where('status', 'Ready')->count();
     $totalSpent = $orders->where('status', 'Completed')->sum('total_price');
     
-    // Get recent orders with shop info
     $recentOrders = \App\Models\Order::where('user_id', $user->id)
         ->with('tailoring_shop')
         ->latest()
         ->take(5)
         ->get();
     
-    // Get user's measurements from profile
     $measurements = $user->profile;
     
-    // Get recommended shops (3 random approved shops)
     $recommendedShops = \App\Models\TailoringShop::where('status', 'approved')
         ->where('is_active', true)
         ->inRandomOrder()
