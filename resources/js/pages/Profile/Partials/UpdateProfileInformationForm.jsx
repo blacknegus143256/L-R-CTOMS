@@ -4,10 +4,8 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MapLibrePicker from "@/Components/MapLibrePicker";
-import { useState } from "react";
-
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
@@ -28,14 +26,13 @@ export default function UpdateProfileInformation({
 
     const submit = (e) => {
         e.preventDefault();
-
         patch(route('profile.update'));
     };
 
     return (
         <section className={className}>
             <header>
-                <h2 className="text-lg font-medium text-gray-900">
+                <h2 className="text-lg font-black text-stone-900 tracking-tight">
                     Profile Information
                 </h2>
 
@@ -50,7 +47,7 @@ export default function UpdateProfileInformation({
 
                     <TextInput
                         id="name"
-                        className="mt-1 block w-full"
+                        className="mt-1 block w-full bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.name}
                         onChange={(e) => setData('name', e.target.value)}
                         required
@@ -67,7 +64,7 @@ export default function UpdateProfileInformation({
                     <TextInput
                         id="email"
                         type="email"
-                        className="mt-1 block w-full"
+                        className="mt-1 block w-full bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.email}
                         onChange={(e) => setData('email', e.target.value)}
                         required
@@ -78,57 +75,59 @@ export default function UpdateProfileInformation({
                 </div>
                 <div>
                 <InputLabel htmlFor="phone" value="Phone" />
-                <TextInput
-                    id="phone"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={11}
-                    className="mt-1 block w-full"
-                    value={data.phone}
-                    onChange={(e) => setData('phone', e.target.value)}
-                />
+                    <TextInput
+                        id="phone"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={11}
+                        className="mt-1 block w-full bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
+                        value={data.phone}
+                        onChange={(e) => setData('phone', e.target.value)}
+                    />
                 <InputError message={errors.phone} className="mt-2" />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <InputLabel htmlFor="barangay" value="Barangay" />
                     <TextInput
                         id="barangay"
+                        className="mt-1 block w-full bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.barangay}
                         onChange={(e) => setData('barangay', e.target.value)}
                     />
                 </div>
-
-                <div>
+    
+                <div className="relative">
                     <InputLabel htmlFor="street" value="Street" />
                     <TextInput
                         id="street"
+                        className="mt-1 block w-full bg-stone-50 pr-24 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.street}
                         onChange={(e) => setData('street', e.target.value)}
                     />
+                    <button
+                        type="button"
+                        onClick={() => setOpenMap(true)}
+                        className="absolute right-1 bottom-1 px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight bg-orchid-blue text-white rounded-lg hover:bg-orchid-purple transition-all"
+                    >
+                        Pin Map
+                    </button>
                 </div>
-                <button
-                type="button"
-                onClick={() => setOpenMap(true)}
-                className="button-small bg-blue-600 text-white rounded"
-            >
-                Set Location from Map
-            </button>
             </div>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
                     <div>
                         <p className="mt-2 text-sm text-gray-800">
                             Your email address is unverified.
-                            <Link
-                                href={route('verification.send')}
-                                method="post"
-                                as="button"
-                                className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            >
-                                Click here to re-send the verification email.
-                            </Link>
+                        <Link
+                            href={route('verification.send')}
+                            method="post"
+                            as="button"
+                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-orchid-blue focus:ring-offset-2"
+                        >
+                            Click here to re-send the verification email.
+                        </Link>
                         </p>
 
                         {status === 'verification-link-sent' && (
@@ -158,7 +157,7 @@ export default function UpdateProfileInformation({
             </form>
             {openMap && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white w-3/4   h-6/6 rounded-xl p-4 relative">
+                <div className="bg-white w-3/4 h-3/4 rounded-xl p-4 relative">
                     
                     <button
                         onClick={() => setOpenMap(false)}
@@ -177,7 +176,7 @@ export default function UpdateProfileInformation({
                         <button
                             type="button"
                             onClick={() => setOpenMap(false)}
-                            className="px-2 py-2 bg-green-600 text-white rounded"
+                            className="px-2 py-2 bg-orchid-blue hover:bg-orchid-purple text-white rounded focus:ring-2 focus:ring-orchid-blue/50 focus:outline-none"
                         >
                             Save Location
                         </button>

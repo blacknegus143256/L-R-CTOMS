@@ -84,9 +84,20 @@ class AttributeTypeSeeder extends Seeder
                     'Collar Stays'
                 ],
             ],
-        ];
+                't-shirt' => [
+                    'name' => 'T-Shirt Styles',
+                    'types' => [
+                        'V-Neck',
+                        'Crew Neck', 
+                        'Oversized',
+                        'Polo',
+                        'Sleeveless'
+                    ],
+                ],
+            ];
 
         foreach ($categories as $slug => $data) {
+
             // Create category
             $category = AttributeCategory::firstOrCreate(
                 ['slug' => $slug],

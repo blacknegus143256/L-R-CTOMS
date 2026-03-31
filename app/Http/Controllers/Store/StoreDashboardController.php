@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\TailoringShop;
 use App\Models\Order;
 use App\Models\OrderItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -14,8 +15,8 @@ class StoreDashboardController extends Controller
 {
     public function index()
     {
-        // Fetch the shop owned by the logged-in Store Admin
-        $shop = TailoringShop::where('user_id', Auth::id())->first();
+        $userId = Auth::id();
+        $shop = TailoringShop::where('user_id', $userId)->first();
 
         if (!$shop) {
             return Inertia::render('StoreAdmin/Dashboard', [
@@ -28,7 +29,6 @@ class StoreDashboardController extends Controller
             ]);
         }
 
-        // KPI Stats
         $totalRevenue = Order::where('tailoring_shop_id', $shop->id)
             ->where('status', 'Completed')
             ->sum('total_price');
@@ -37,7 +37,6 @@ class StoreDashboardController extends Controller
             ->where('status', 'Pending')
             ->count();
 
-        // Monthly Growth - compare this month vs last month
         $thisMonth = Order::where('tailoring_shop_id', $shop->id)
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
@@ -52,12 +51,10 @@ class StoreDashboardController extends Controller
             ? round((($thisMonth - $lastMonth) / $lastMonth) * 100, 1) 
             : ($thisMonth > 0 ? 100 : 0);
 
-        // Active Customers - unique customers who placed orders
         $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
             ->distinct()
             ->count('user_id');
 
-        // Top Services - most ordered services
         $topServices = Order::where('tailoring_shop_id', $shop->id)
             ->select('service_id', DB::raw('count(*) as total'))
             ->with('service:id,service_name')
@@ -66,7 +63,6 @@ class StoreDashboardController extends Controller
             ->take(5)
             ->get();
 
-        // Top Materials - most used attributes from order_items
         $topMaterials = OrderItem::whereHas('order', function($query) use ($shop) {
                 $query->where('tailoring_shop_id', $shop->id);
             })
@@ -77,7 +73,6 @@ class StoreDashboardController extends Controller
             ->take(5)
             ->get();
 
-        // Urgent Orders - orders nearing deadline (within 48 hours)
         $urgentOrders = Order::where('tailoring_shop_id', $shop->id)
             ->whereIn('status', ['Accepted', 'In Progress', 'Appointment Scheduled'])
             ->whereNotNull('expected_completion_date')
@@ -87,9 +82,8 @@ class StoreDashboardController extends Controller
             ->take(5)
             ->get();
 
-        // Recent Activity - simulated from recent orders
         $recentOrders = Order::where('tailoring_shop_id', $shop->id)
-            ->with('customer:id,name')
+            ->with('customer:id,name', 'service:id,service_name')
             ->latest()
             ->take(5)
             ->get();
@@ -116,6 +110,27 @@ class StoreDashboardController extends Controller
             'topMaterials' => $topMaterials,
             'urgentOrders' => $urgentOrders,
             'recentActivity' => $recentActivity,
+        ]);
+    }
+
+    public function updateDescription(Request $request)
+    {
+        $request->validate([
+            'description' => 'nullable|string|max:500'
+        ]);
+
+        $userId = Auth::id();
+        $shop = TailoringShop::where('user_id', $userId)->first();
+
+        if (!$shop) {
+            return response()->json(['message' => 'Shop not found.'], 404);
+        }
+
+        $shop->update(['description' => $request->description]);
+
+        return response()->json([
+            'message' => 'Description updated successfully.', 
+            'description' => $shop->fresh()->description
         ]);
     }
 }

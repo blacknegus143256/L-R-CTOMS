@@ -11,7 +11,7 @@ export default function LocationMapModal({ location, onClose }) {
 
         const map = new maplibregl.Map({
             container: mapContainer.current,
-            style: 'https://api.maptiler.com/maps/streets/style.json?key=',
+            style: `https://api.maptiler.com/maps/streets/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}`,
             center: [location.lng, location.lat],
             zoom: 17,
         });

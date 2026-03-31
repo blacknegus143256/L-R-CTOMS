@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -14,7 +14,7 @@ import Footer from '@/Components/Home/Footer';
 
 
 export default function Home({ auth, categories: initialCategories, services: initialServices, shops: initialShops, uniqueServiceCategories: initialUniqueCategories }) {
-    const { router } = usePage();
+
     const currentUser = auth.user;
 
     const categories = initialCategories || [];
@@ -150,13 +150,14 @@ const [locationModalOpen, setLocationModalOpen] = useState(false);
         setTimeout(() => setHighlightCarousel(false), 2000);
     }, []);
 
-    const handlePlaceOrder = (shop) => {
+const handlePlaceOrder = (shop) => {
         if (!auth.user) {
             router.visit('/login');
             return;
         }
-        const name = shop?.shop_name ?? 'selected shop';
-        alert(`Proceeding with order at ${name} for ${auth.user.name}...`);
+
+        // This sends them to your Shop page and triggers the modal automatically
+        router.visit(`/shop/${shop.id}?order=true`);
     };
 
     const selectedAttributeNames = useMemo(() => {
@@ -239,7 +240,10 @@ const [locationModalOpen, setLocationModalOpen] = useState(false);
             </motion.div>
 
             {/* 2. DISCOVERY CAROUSEL */}
-            <motion.div variants={slideFromRight}>
+            <motion.div variants={slideFromRight}
+onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
+    onMouseLeave={() => setIsCarouselPaused(false)}  // Resume from current spot
+    >
                 <ShopCarousel
                     shops={filteredShops}
                     isPaused={isCarouselPaused}

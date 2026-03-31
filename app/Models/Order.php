@@ -11,26 +11,35 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
+protected $fillable = [
         'tailoring_shop_id',
         'user_id',
         'customer_id',
         'service_id',
+        'style_tag',
+        'material_source',
+        'material_dropoff_date',
+        'design_image',
+        'measurement_type',
+        'measurement_date',
+        'measurement_snapshot',
         'status',
         'expected_completion_date',
         'total_price',
         'notes',
     ];
 
-    protected $with = ['user', 'customer', 'service', 'items'];
-
     protected function casts(): array
     {
         return [
             'expected_completion_date' => 'date',
+            'material_dropoff_date' => 'date',
             'total_price' => 'decimal:2',
+            'measurement_snapshot' => 'array',
         ];
     }
+
+    protected $with = ['user.profile', 'customer', 'service', 'items'];
 
     public function tailoringShop(): BelongsTo
     {

@@ -17,6 +17,13 @@ class UserProfile extends Model
         'street',
         'latitude',
         'longitude',
+        'neck',
+        'chest',
+        'waist',
+        'hips',
+        'sleeve_length',
+        'shoulder_width',
+        'inseam',
     ];
 
 

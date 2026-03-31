@@ -13,7 +13,7 @@ function setAxiosToken(token) {
     }
 }
 
-export function AuthProvider({ children }) {
+function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [shops, setShops] = useState([]);
     const [token, setTokenState] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -58,6 +58,8 @@ export function AuthProvider({ children }) {
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+export default AuthProvider;
 
 export function useAuth() {
     const ctx = useContext(AuthContext);

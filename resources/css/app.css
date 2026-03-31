@@ -9,8 +9,25 @@
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
+    .bg-orchid-purple {
+        background-color: rgba(168, 85, 247, 0.1);
+    }
+    .bg-orchid-blue {
+        background-color: rgba(168, 85, 247, 0.05);
+    }
+    .hover\:bg-orchid-blue\/10:hover {
+        background-color: rgba(168, 85, 247, 0.1);
+    }
+    .shadow-orchid-purple\/50 {
+        box-shadow: 0 4px 6px rgba(168, 85, 247, 0.5);
+    }
+}
 
-    .electric-mesh-layer {
+/* Custom Scrollbar for Sidebar and Main Content */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+.electric-mesh-layer {
         background-image:
             radial-gradient(circle at 0% 0%, rgba(69, 104, 220, 0.55) 0%, transparent 45%),
             radial-gradient(circle at 100% 100%, rgba(176, 106, 179, 0.55) 0%, transparent 45%),
@@ -20,12 +37,20 @@
         animation: electric-breathe 12s ease-in-out infinite;
     }
 
-    .row-sweep {
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.row-sweep {
         position: relative;
         overflow: hidden;
     }
 
-    .row-sweep::after {
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0; /* Soft stone color */
+    border-radius: 10px;
+}
+.row-sweep::after {
         content: '';
         position: absolute;
         inset: 0;
@@ -35,24 +60,20 @@
         pointer-events: none;
         z-index: 1;
     }
-
     .row-sweep:hover::after {
         transform: translateX(100%);
     }
-
     .winner-gradient-border {
         background: linear-gradient(135deg, #4568dc, #b06ab3, #4568dc);
         padding: 2px;
         border-radius: 0.75rem;
         display: inline-block;
     }
-
     .winner-gradient-inner {
         border-radius: calc(0.75rem - 2px);
         background: linear-gradient(135deg, rgba(69, 104, 220, 0.12), rgba(176, 106, 179, 0.12));
         padding: 0.35rem 0.65rem;
     }
-
     .savings-bubble {
         display: inline-flex;
         align-items: center;
@@ -65,8 +86,9 @@
         background: linear-gradient(90deg, #ec4899, #d946ef);
         box-shadow: 0 0 12px rgba(236, 72, 153, 0.55);
     }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: #d8b4fe; /* Orchid Purple tint on hover */
 }
-
 @keyframes electric-breathe {
     0%,
     100% {
@@ -76,3 +98,5 @@
         background-position: 100% 50%, 0% 50%, center;
     }
 }
+/* Rest of existing app.css content preserved */
+

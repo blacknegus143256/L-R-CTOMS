@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react'; // Add useEffect here
 import { motion } from 'framer-motion';
 import SourceRefIcon from '@/Components/Home/SourceRefIcon';
 
@@ -25,8 +25,15 @@ export default function ShopCarousel({
             >
                 <motion.div
                     className="flex gap-4 p-4"
-                    animate={isPaused ? { x: 0 } : { x: ['0%', '-50%'] }}
-                    transition={isPaused ? { duration: 0 } : { repeat: Infinity, duration: 20, ease: 'linear' }}
+animate={{ x: ['0%', '-50%'] }} 
+                    transition={{ 
+                        repeat: Infinity, 
+                        duration: 30, 
+                        ease: 'linear' 
+                    }}
+                    style={{ 
+                        animationPlayState: isPaused ? 'paused' : 'running' 
+                    }}
                 >
                     {[...shops, ...shops].map((shop, idx) => {
                         const selected = selectedIds.includes(String(shop.id));

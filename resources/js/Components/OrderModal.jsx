@@ -1,44 +1,82 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
-import { router } from '@inertiajs/react';
-import { useForm, usePage } from '@inertiajs/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { router, useForm, usePage } from '@inertiajs/react';
+
+import ServiceSelection from './OrderWizard/ServiceSelection.jsx';
+import DesignContext from './OrderWizard/DesignContext.jsx';
+import MaterialSourcing from './OrderWizard/MaterialSourcing.jsx';
+import FitLogistics from './OrderWizard/FitLogistics.jsx';
+import Logistics from './OrderWizard/Logistics.jsx';
+import OrderSummary from './OrderWizard/OrderSummary.jsx';
 
 export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
-    const { data, setData, post, processing, errors, reset } = useForm({
-        service_id: '',
-        attributes: [],
-        notes: '',
+  const { data, setData, post, processing, errors, reset } = useForm({
+    service_id: '',
+    style_tag: '',
+    material_source: 'tailor_choice',
+    design_image: null,
+    measurement_type: 'profile',
+    measurement_date: '',
+    attributes: [],
+    notes: '',
+  });
+  
+const [step, setStep] = useState(0); // 0:Service, 1:Design, 2:Material, 3:Logistics, 4:Fit, 5:Summary
+  const [materialDropoffDate, setMaterialDropoffDate] = useState('');
+  const [profileMeasurementsLocal, setProfileMeasurementsLocal] = useState({}); // Will sync with auth.user.profile in useEffect
+
+  const [selectedAttributes, setSelectedAttributes] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [styleTag, setStyleTag] = useState('');
+  const [materialSource, setMaterialSource] = useState(null);
+  const [measurementType, setMeasurementType] = useState('profile');
+  const [measurementDate, setMeasurementDate] = useState('');
+  const [designImagePreview, setDesignImagePreview] = useState(null);
+  const [designImageFile, setDesignImageFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [profileCheckLoading, setProfileCheckLoading] = useState(true);
+  const [profileComplete, setProfileComplete] = useState(true);
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+
+  const { auth } = usePage().props; // Get auth data from Inertia
+  // Compute the selected service
+  const service = shop?.services?.find(
+    s => String(s.id) === String(selectedServiceId)
+  ) || null;
+
+  // Group attributes by category
+  const attributesByCategory = useMemo(() => {
+    if (!shop?.attributes) return {};
+    
+    const grouped = {};
+    shop.attributes.forEach(attr => {
+      const categoryName = attr.attribute_category?.name || 'Other';
+      if (!grouped[categoryName]) {
+        grouped[categoryName] = [];
+      }
+      grouped[categoryName].push(attr);
     });
+    return grouped;
+  }, [shop?.attributes]);
 
-    const [step, setStep] = useState(1); // 1: select attributes, 2: confirm
-    const [selectedAttributes, setSelectedAttributes] = useState([]);
-    const [notes, setNotes] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [profileCheckLoading, setProfileCheckLoading] = useState(true);
-    const [profileComplete, setProfileComplete] = useState(true);
-    const [selectedServiceId, setSelectedServiceId] = useState('');
-
-    const { auth } = usePage().props; // Get auth data from Inertia
-    // Compute the selected service
-    const service = shop?.services?.find(
-        s => String(s.id) === String(selectedServiceId)
-    ) || null;
-
-    // Group attributes by category
-    const attributesByCategory = useMemo(() => {
-        if (!shop?.attributes) return {};
-        
-        const grouped = {};
-        shop.attributes.forEach(attr => {
-            const categoryName = attr.attribute_category?.name || 'Other';
-            if (!grouped[categoryName]) {
-                grouped[categoryName] = [];56
-            }
-            grouped[categoryName].push(attr);
-        });
-        return grouped;
-    }, [shop?.attributes]);
+// Filtered for Job Card - Expanded for Move 2 merging
+    const styleAttrs = [
+      ...(attributesByCategory['Style'] || []),
+      ...(attributesByCategory['T-Shirt Styles'] || []),
+      ...(attributesByCategory['Leg Cut'] || []),
+      ...(attributesByCategory['Necklines'] || [])
+    ];
+    const materialAttrs = [
+      ...(attributesByCategory['Fabric'] || []),
+      ...(attributesByCategory['Material'] || []),
+      ...(attributesByCategory['Fasteners'] || []),
+      ...(attributesByCategory['Elastic'] || []),
+      ...(attributesByCategory['Style'] || []),
+      ...(attributesByCategory['T-Shirt Styles'] || []),
+      ...(attributesByCategory['Necklines'] || [])
+    ];
+  const profileMeasurements = profileMeasurementsLocal || auth.user?.profile || {}; // Use local first for updates
 
     // Calculate total price
     const totalPrice = useMemo(() => {
@@ -55,9 +93,10 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     }, [service?.price, selectedAttributes, shop?.attributes]);
 
     // Check user profile on mount
-    useEffect(() => {
+useEffect(() => {
     if (isOpen) {
         setProfileCheckLoading(true);
+        setProfileMeasurementsLocal(auth.user?.profile || {});
         
         if (!auth?.user) {
             setProfileComplete(false);
@@ -68,33 +107,53 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
             
             const hasPhone = !!userProfile?.phone;
             const hasBarangay = !!userProfile?.barangay;
-            const hasStreet = !!userProfile?.street; // Based on your DB, some are NULL
+            const hasStreet = !!userProfile?.street;
+            const requiredMeasurements = ['chest', 'waist', 'neck', 'inseam', 'sleeve_length', 'shoulder_width'];
+            const hasMeasurements = requiredMeasurements.every(key => userProfile?.[key] != null && userProfile[key] !== '');
 
-            if (hasPhone && hasBarangay || hasStreet) {
+            if (hasPhone && hasBarangay && hasStreet && hasMeasurements) {
                 setProfileComplete(true);
                 setError(null);
             } else {
                 setProfileComplete(false);
-                setError("Please complete your profile details (Phone/Address) to continue.");
+                let missing = [];
+                if (!hasPhone) missing.push('phone');
+                if (!hasBarangay) missing.push('barangay');
+                if (!hasStreet) missing.push('street');
+                if (!hasMeasurements) missing.push('measurements');
+                setError(`Please complete your profile (${missing.join(', ')}) before ordering custom tailoring services.`);
             }
         }
         setProfileCheckLoading(false);
     }
 }, [isOpen, auth]);
 
-    // Reset state when service changes
-    useEffect(() => {
-        if (service) {
-            setSelectedAttributes([]);
-            setNotes('');
-            setStep(1);
-            setError(null);
-        }
-    }, [service]);
 
-    useEffect(() => {
+useEffect(() => {
+    if (selectedServiceId) {
+        setSelectedAttributes([]);
+        setNotes(''); // Clear notes for the NEW service
+        setError(null);
+    }
+}, [selectedServiceId]);
+
+useEffect(() => {
         setData('service_id', selectedServiceId);
     }, [selectedServiceId]);
+
+    // Sync local state to form data
+    useEffect(() => {
+        setData('style_tag', styleTag);
+        setData('material_source', materialSource);
+        setData('measurement_type', measurementType);
+        setData('material_dropoff_date', materialDropoffDate);
+        setData('notes', notes);
+        setData('attributes', selectedAttributes);
+        if (designImageFile) {
+            setData('design_image', designImageFile);
+        }
+    }, [styleTag, materialSource, measurementType, materialDropoffDate, notes, selectedAttributes, designImageFile, setData]);
+
 
     const toggleAttribute = (attrId) => {
         setSelectedAttributes(prev => 
@@ -103,6 +162,44 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                 : [...prev, attrId]
         );
     };
+
+    const handleServiceSelect = (serviceId) => {
+        setSelectedServiceId(serviceId);
+        setData('service_id', serviceId);
+        setStep(1);
+    };
+
+    const handleDesignImage = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setDesignImageFile(file);
+            const preview = URL.createObjectURL(file);
+            setDesignImagePreview(preview);
+        }
+    };
+
+
+const validateCurrentStep = () => {
+    if (step === 0) return !!selectedServiceId;
+    if (step === 1) return service ? true : false;
+    if (step === 2) return !!materialSource;
+    if (step === 3) return !!materialDropoffDate; // Logistics date required
+    if (step === 4) return !!measurementType; // Enable button, let guard handle profile check
+    if (step === 5) return true;
+    return false;
+};
+
+
+    const handleNext = () => {
+        if (validateCurrentStep()) {
+            setStep(step + 1);
+        }
+    };
+
+    const handleBack = () => {
+        setStep(Math.max(0, step - 1));
+    };
+
 
     const handleSubmit = (e) => {
     e.preventDefault();
@@ -115,16 +212,32 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     setError(null);
     setLoading(true);
 
-    // Sync the local component state to the useForm 'data' object right before sending
-    setData(prev => ({
-        ...prev,
-        attributes: selectedAttributes,
-        notes: notes
-    }));
+    // Hydrate the date for Laravel validation
+    let formattedDate = measurementDate;
+    if (measurementDate && measurementDate.length === 10) {
+        formattedDate = `${measurementDate} 00:00:00`;
+    }
 
-    // Use the post method from useForm
-    // Ensure this route matches a POST route in your web.php
-    post(`/shops/${shop.id}/orders`, {
+    // --- 2. PREPARE MULTIPART DATA ---
+    // We create a fresh object to avoid the async "setData" delay
+    const submissionData = {
+        ...data,
+        service_id: selectedServiceId,
+        style_tag: styleTag,
+        material_source: materialSource,
+        measurement_type: measurementType,
+        measurement_date: formattedDate,
+        measurement_snapshot: profileMeasurementsLocal,
+        notes: notes, // Uses the current local state "notes"
+        attributes: selectedAttributes,
+        design_image: designImageFile,
+    };
+
+    // --- 3. SUBMIT MANUALLY ---
+    // Note: We use router.post instead of 'post' from useForm to ensure 
+    // we send the manual 'submissionData' object immediately.
+    router.post(`/shops/${shop.id}/orders`, submissionData, {
+        forceFormData: true, // Required for image uploads
         preserveScroll: true,
         onSuccess: () => {
             reset();
@@ -133,8 +246,12 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
         },
         onError: (err) => {
             setLoading(false);
-            console.log("Database/Validation Error:", err);
-            setError("Failed to save order. Please check your inputs.");
+            console.log("Submission Error Details:", err);
+            if (err.measurement_date) {
+                setError(err.measurement_date);
+            } else {
+                setError("Failed to save order. Please check the Job Card details.");
+            }
         },
         onFinish: () => setLoading(false),
     });
@@ -144,13 +261,21 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white shadow-xl">
+            <div className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-auto rounded-xl bg-white shadow-xl">
                 {/* Header */}
                 <div className="flex items-start justify-between border-b border-stone-200 p-6">
                     <div>
-                        <h2 className="text-2xl font-semibold text-stone-800">
-                            {step === 1 ? 'Customize Your Order' : 'Confirm Order'}
+<h2 className="text-2xl font-semibold text-stone-800">
+                            Job Card Wizard
                         </h2>
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                            {['Service', 'Design', 'Material', 'Logistics', 'Fit', 'Review'].map((label, index) => (
+                              <span key={index} className={`px-2 py-1 rounded-full text-xs ${step === index ? 'bg-amber-100 text-amber-800 font-semibold' : 'bg-stone-100 text-stone-500'}`}>
+                                {label}
+                              </span>
+                            ))}
+                        </div>
+
                         <p className="mt-1 text-stone-600">{service ? service.service_name : "Select a service"}</p>
                     </div>
                     <button
@@ -163,7 +288,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                     </button>
                 </div>
 
-                {/* Loading Profile Check */}
+{/* Loading Profile Check */}
                 {profileCheckLoading && (
                     <div className="p-6">
                         <div className="flex justify-center py-8">
@@ -172,222 +297,101 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                     </div>
                 )}
 
-                {/* Step 1: Select Attributes */}
-                {!profileCheckLoading && step === 1 && (
-                    <form onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
-                        <div className="p-6">
-                            {/* Error Message */}
-                            {error && !profileComplete && (
-                                <div className="mb-4 rounded-lg bg-amber-50 p-3 text-amber-700 border border-amber-200">
-                                    <div className="font-medium">{error}</div>
-                                    <button
-                                        type="button"
-                                        onClick={() => router.get(route('profile.edit'))}
-                                        className="mt-2 text-sm underline hover:text-amber-800"
-                                    >
-                                        Go to Profile →
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Service Selection */}
-                            <div className="mb-6">
-                                <label className="mb-2 block text-sm font-medium text-stone-700">
-                                    Select Service
-                                </label>
-
-                                <select
-                                    value={selectedServiceId}
-                                    onChange={(e) => setSelectedServiceId(e.target.value)}
-                                    className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                >
-                                    <option value="">Choose a service</option>
-
-                                    {shop.services.map(s => (
-                                    <option key={s.id} value={s.id}>
-                                        {/* Shows: Hemming [Repair] — ₱150.00 */}
-₱{Number(s.price || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                                    </option>
-                                ))}
-                                </select>
-                            </div>
-
-                            {/* Base Price */}
-                            <div className="mb-6 rounded-lg bg-amber-50 p-4 border border-amber-200">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-stone-700">Base Service Price</span>
-                                    <span className="text-xl font-semibold text-amber-700">
-                                        ₱{Number(service?.price || 0).toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Attribute Options */}
-                            {Object.keys(attributesByCategory).length > 0 ? (
-                                <div className="space-y-6">
-                                    {Object.entries(attributesByCategory).map(([category, attrs]) => (
-                                        <div key={category}>
-                                            <h3 className="mb-3 font-medium text-stone-800">{category}</h3>
-                                            <div className="grid gap-2 sm:grid-cols-2">
-                                                {attrs.map(attr => {
-                                                    const isSelected = selectedAttributes.includes(attr.id);
-                                                    const price = attr.pivot?.price || 0;
-                                                    
-                                                    return (
-                                                        <label
-                                                            key={attr.id}
-                                                            className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
-                                                                isSelected 
-                                                                    ? 'border-amber-500 bg-amber-50' 
-                                                                    : 'border-stone-200 hover:border-stone-300'
-                                                            }`}
-                                                        >
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isSelected}
-                                                                onChange={() => toggleAttribute(attr.id)}
-                                                                className="h-5 w-5 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
-                                                            />
-                                                            <div className="flex-1">
-
-                                                                <div className="font-medium text-stone-800">
-                                                                    {attr.pivot?.item_name || attr.name}
-                                                                </div>
-
-                                                                {attr.pivot?.notes && (
-                                                                    <div className="text-xs text-stone-500">{attr.pivot.notes}</div>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-amber-700 font-medium">
-                                                                {price > 0 ? `+₱${Number(price).toFixed(2)}` : 'Free'} - {attr.pivot.unit}
-                                                            </div>
-                                                            <div className="sr-only">{attr.pivot?.unit}</div>
-                                                        </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-center text-stone-500">No additional options available for this service.</p>
-                            )}
-
-                            {/* Notes */}
-                            <div className="mt-6">
-                                <label className="mb-2 block text-sm font-medium text-stone-700">
-                                    Notes (optional)
-                                </label>
-                                <textarea
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Any special instructions..."
-                                    rows={3}
-                                    className="w-full rounded-lg border border-stone-300 px-4 py-2 text-stone-800 placeholder-stone-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                />
-                            </div>
-
-                            {/* Total & Next Button */}
-                            <div className="mt-6 flex items-center justify-between border-t border-stone-200 pt-4">
-                                <div>
-                                    <div className="text-sm text-stone-500">Total</div>
-                                    <div className="text-2xl font-bold text-amber-700">
-                                        ₱{totalPrice.toFixed(2)}
-                                    </div>
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={!selectedServiceId}
-                                    className="rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Continue
-                                </button>
+{error && (
+                    <div className="p-4 bg-red-100 border border-red-400 text-red-800 rounded-xl mb-6 mx-6 backdrop-blur-sm shadow-lg">
+                        <div className="flex items-start gap-3">
+                            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            <div>
+                                <p className="font-medium">Order Submission Error</p>
+                                <p className="text-sm">{error}</p>
                             </div>
                         </div>
-                    </form>
+                    </div>
                 )}
+                {!profileCheckLoading && (
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={step}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex-grow"
+                        >
+                            {{
+                                0: <ServiceSelection shop={shop} onServiceSelect={handleServiceSelect} disabled={profileCheckLoading} />,
+                                1: <DesignContext 
+                                      service={service}
+                                      styleTag={styleTag} 
+                                      setStyleTag={setStyleTag}
+                                      designImagePreview={designImagePreview}
+                                      setDesignImageFile={setDesignImageFile}
+                                      handleDesignImage={handleDesignImage}
+                                      styleAttrs={styleAttrs}
+                                      notes={notes}
+                                      setNotes={setNotes}
+                                      error={error}
+                                      onNext={handleNext}
+                                      canNext={validateCurrentStep()}
+                                      onBack={handleBack}
+                                    />,
+                                2: <MaterialSourcing 
+                                      service={service}
+                                      materialSource={materialSource}
+                                      setMaterialSource={setMaterialSource}
+                                      materialAttrs={materialAttrs}
+                                      selectedAttributes={selectedAttributes}
+                                      toggleAttribute={toggleAttribute}
+                                    onNext={handleNext}
+                                      canNext={validateCurrentStep()}
+                                      onBack={handleBack}
+                                    />,
+                                3: <Logistics 
+                                      service={service}
+                                      materialDropoffDate={materialDropoffDate}
+                                      setMaterialDropoffDate={setMaterialDropoffDate}
+                                      materialSource={materialSource}
+                                      setMaterialSource={setMaterialSource}
+                                      setProfileMeasurements={setProfileMeasurementsLocal}
+                                      onNext={handleNext}
+                                      canNext={validateCurrentStep()}
+                                      onBack={handleBack}
+                                    />,
 
-                {/* Step 2: Confirm Order */}
-                {!profileCheckLoading && step === 2 && (
-                    <form onSubmit={handleSubmit}>
-                        <div className="p-6">
-                            {error && (
-                                <div className="mb-4 rounded-lg bg-red-50 p-3 text-red-700 border border-red-200">
-                                    {error}
-                                </div>
-                            )}
+                                4: <FitLogistics 
+                                      service={service}
+                                      measurementType={measurementType}
+                                      setMeasurementType={setMeasurementType}
+                                      profileComplete={profileComplete}
+                                      profileMeasurements={profileMeasurements}
+                                      onUpdateMeasurements={setProfileMeasurementsLocal}
+                                      onNext={handleNext}
+                                      canNext={validateCurrentStep()}
+                                      onBack={handleBack}
+                                    />,
+5: <OrderSummary 
+                                      service={service}
+                                      shop={shop}
+                                      auth={auth}
+                                      styleTag={styleTag}
+                                      materialSource={materialSource}
+                                      measurementType={measurementType}
+                                      materialDropoffDate={materialDropoffDate}
+                                      notes={notes}
+                                      selectedAttributes={selectedAttributes}
+                                      designImagePreview={designImagePreview}
+                                      totalPrice={totalPrice}
+                                      onSubmit={handleSubmit}
+                                      loading={loading}
+                                      profileComplete={profileComplete}
+                                      onBack={handleBack}
+                                    />
 
-                            {/* Order Summary */}
-                            <div className="rounded-lg bg-stone-50 p-4">
-                                <h3 className="font-medium text-stone-800 mb-3">Order Summary</h3>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-stone-600">Service</span>
-                                        <span className="text-stone-800">{service?.service_name}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-stone-600">Base Price</span>
-                                        <span className="text-stone-800">₱{Number(service?.price || 0).toFixed(2)}</span>
-                                    </div>
-                                    
-                                    {selectedAttributes.length > 0 && (
-                                        <>
-                                            <div className="border-t border-stone-200 pt-2 mt-2">
-                                                <span className="text-stone-600">Selected Options:</span>
-                                            </div>
-                                            {selectedAttributes.map(attrId => {
-                                                const attr = shop?.attributes?.find(a => a.id === attrId);
-                                                const price = attr?.pivot?.price || 0;
-                                                return (
-                                                    <div key={attrId} className="flex justify-between pl-2">
-                                                        <span className="text-stone-600">+ {attr?.pivot?.item_name || attr?.name}</span>
-                                                        <span className="text-stone-800">₱{Number(price).toFixed(2)}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </>
-                                    )}
-                                    
-                                    {notes && (
-                                        <div className="border-t border-stone-200 pt-2 mt-2">
-                                            <div className="text-stone-600">Notes:</div>
-                                            <div className="text-stone-800 text-right">{notes}</div>
-                                        </div>
-                                    )}
-                                    
-                                    <div className="border-t border-stone-200 pt-2 flex justify-between font-bold">
-                                        <span className="text-stone-800">Total</span>
-                                        <span className="text-amber-700">₱{totalPrice.toFixed(2)}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Profile Notice */}
-                            {!profileComplete && (
-                                <div className="mt-4 rounded-lg bg-amber-50 p-3 text-amber-700 border border-amber-200 text-sm">
-                                    Your order will be linked to your account. Please ensure your profile is complete.
-                                </div>
-                            )}
-
-                            {/* Action Buttons */}
-                            <div className="mt-6 flex items-center justify-between">
-                                <button
-                                    type="button"
-                                    onClick={() => setStep(1)}
-                                    className="rounded-lg border border-stone-300 px-4 py-2 font-medium text-stone-700 hover:bg-stone-50"
-                                >
-                                    Back
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading || !profileComplete}
-                                    className="rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? 'Placing Order...' : 'Confirm Order'}
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                            }[step]}
+                        </motion.div>
+                    </AnimatePresence>
                 )}
             </div>
         </div>

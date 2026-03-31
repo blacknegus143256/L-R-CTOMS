@@ -10,6 +10,7 @@ use App\Models\TailoringShop;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class CustomerOrderController extends Controller
 {
@@ -35,12 +36,24 @@ class CustomerOrderController extends Controller
             return response()->json(['message' => 'Shop not found.'], 404);
         }
 
-        $valid = $request->validate([
+$valid = $request->validate([
             'service_id' => 'required|integer|exists:services,id',
+            'style_tag' => 'nullable|string|max:255',
+'material_source' => 'required|in:customer,shop',
+            'design_image' => 'nullable|image|max:5120',
+            'measurement_type' => 'required|in:profile,inperson',
+            'material_dropoff_date' => 'required|date|after_or_equal:today',
             'attributes' => 'nullable|array',
+
             'attributes.*' => 'integer|exists:attribute_types,id',
             'notes' => 'nullable|string',
         ]);
+
+    // Handle image upload
+    if ($request->hasFile('design_image')) {
+        $imagePath = $request->file('design_image')->store('orders/images', 'public');
+        $valid['design_image'] = $imagePath;
+    }
 
         // Verify service belongs to this shop
         $service = $shop->services()->find($valid['service_id']);
@@ -81,15 +94,30 @@ class CustomerOrderController extends Controller
             }
         }
 
-        // Create order
-        $order = Order::create([
+        $user = $request->user();
+        $orderData = [
             'tailoring_shop_id' => $shop->id,
             'customer_id' => $customer->id,
             'service_id' => $valid['service_id'],
-            'status' => 'Pending',
-            'total_price' => $totalPrice,
-            'notes' => $valid['notes'] ?? null,
-        ]);
+            'style_tag' => $valid['style_tag'] ?? null,
+            'material_source' => $valid['material_source'],
+            'design_image' => $valid['design_image'] ?? null,
+            'measurement_type' => $valid['measurement_type'],
+'material_dropoff_date' => $valid['material_dropoff_date'],
+        ];
+
+        if ($valid['measurement_type'] === 'profile' && $user->profile) {
+            $orderData['measurement_snapshot'] = $user->profile->only([
+                'chest', 'waist', 'neck', 'inseam', 'sleeve', 'shoulder'
+            ]);
+        }
+
+        $orderData['status'] = ($valid['material_source'] === 'customer') ? 'Awaiting Materials' : 'Pending';
+
+        $orderData['total_price'] = $totalPrice;
+        $orderData['notes'] = $valid['notes'] ?? null;
+
+        $order = Order::create($orderData);
 
         // Create order items
         foreach ($attributesData as $attrData) {

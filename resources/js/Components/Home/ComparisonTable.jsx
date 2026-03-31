@@ -78,8 +78,8 @@ export default function ComparisonTable({
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => onPlaceOrder?.(shop)}
-                                                className="px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold rounded-xl shadow-sm hover:opacity-95"
+                                                onClick={() => onPlaceOrder(shop)}
+                                                className="px-3 py-1 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white text-xs font-bold rounded-xl shadow-sm hover:opacity-95"
                                             >
                                                 Place Order
                                             </button>

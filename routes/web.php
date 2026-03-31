@@ -50,11 +50,11 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
         
         // Get orders for this shop with related data
         $orders = Order::where('tailoring_shop_id', $shopId)
-            ->with(['customer', 'service', 'items.attribute', 'tailoringShop'])
+            ->with(['user.profile', 'customer', 'service', 'items.attribute', 'tailoringShop'])
             ->latest()
             ->get();
 
-        return Inertia::render('dashboard/OrdersPage', [
+        return Inertia::render('StoreAdmin/OrdersPage', [
             'shopId' => $shopId,
             'shop' => $shop,
             'orders' => $orders
@@ -135,11 +135,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-orders', function () {
         // Get orders for the current logged in user
         $orders = Order::where('user_id', Auth::id())
-            ->with(['service', 'items.attribute', 'tailoringShop'])
+            ->with(['user.profile', 'service', 'items.attribute', 'tailoringShop'])
             ->latest()
             ->get();
             
-        return Inertia::render('dashboard/CustomerOrdersPage', [
+        return Inertia::render('dashboard/MyOrders', [
             'orders' => $orders
         ]);
     })->name('customer.orders');

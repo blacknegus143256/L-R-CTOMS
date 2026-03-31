@@ -47,6 +47,18 @@ const getTimeColor = (deadline) => {
 export default function Dashboard() {
     const { props } = usePage();
     const { shop, stats, topServices, topMaterials, urgentOrders, recentActivity } = props;
+
+    const [description, setDescription] = useState(shop?.description || '');
+    const [editingDescription, setEditingDescription] = useState(false);
+
+    const updateDescription = () => {
+        router.post('/store/update-description', { description }, {
+            preserveState: true,
+            onSuccess: () => {
+                setEditingDescription(false);
+            },
+        });
+    };
     const [filteredUrgentOrders, setFilteredUrgentOrders] = useState(urgentOrders || []);
 
     const handleDayFilter = (dayName) => {

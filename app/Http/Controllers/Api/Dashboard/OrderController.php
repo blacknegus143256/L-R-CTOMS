@@ -10,6 +10,7 @@ use App\Models\TailoringShop;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class OrderController extends Controller
 {
@@ -129,12 +130,23 @@ class OrderController extends Controller
     public function publicStore(Request $request, TailoringShop $shop)
 {
     // 1. Validation (Note: customer_id is NOT required here because it's the auth user)
-    $valid = $request->validate([
+$valid = $request->validate([
         'service_id' => 'required|exists:services,id',
+        'style_tag' => 'nullable|string|max:255',
+        'material_source' => 'required|in:customer,shop,tailor_choice',
+        'design_image' => 'nullable|image|max:5120', // 5MB
+        'measurement_type' => 'required|in:profile,scheduled',
+        'measurement_date' => 'nullable|date_format:Y-m-d H:i:s|required_if:measurement_type,scheduled',
         'attributes' => 'nullable|array',
         'attributes.*' => 'integer|exists:attribute_types,id',
         'notes' => 'nullable|string',
     ]);
+
+    // Handle design_image upload
+    if ($request->hasFile('design_image')) {
+        $imagePath = $request->file('design_image')->store('orders/images', 'public');
+        $valid['design_image'] = $imagePath;
+    }
 
     $service = $shop->services()->findOrFail($valid['service_id']);
 
@@ -161,14 +173,30 @@ class OrderController extends Controller
     }
 
     // 3. Create the Order (Linking it to the logged-in user)
-    $order = Order::create([
+    $user = Auth::user();
+    $orderData = [
         'tailoring_shop_id' => $shop->id,
-        'user_id' => Auth::id(), // The customer's User ID
+        'user_id' => $user->id,
         'service_id' => $valid['service_id'],
-        'status' => 'Pending',
-        'total_price' => $totalPrice,
-        'notes' => $valid['notes'] ?? null,
-    ]);
+        'style_tag' => $valid['style_tag'] ?? null,
+        'material_source' => $valid['material_source'],
+        'design_image' => $valid['design_image'] ?? null,
+        'measurement_type' => $valid['measurement_type'],
+        'measurement_date' => $valid['measurement_date'] ?? null,
+    ];
+
+    // Snapshot Protocol
+    if ($valid['measurement_type'] === 'profile' && $user->profile) {
+        $orderData['measurement_snapshot'] = $user->profile->only([
+            'chest', 'waist', 'neck', 'inseam', 'sleeve', 'shoulder' // Add actual measurement fields from profile
+        ]);
+    }
+
+    $orderData['status'] = 'Pending';
+    $orderData['total_price'] = $totalPrice;
+    $orderData['notes'] = $valid['notes'] ?? null;
+
+    $order = Order::create($orderData);
 
     // 4. Create Order Items
     foreach ($attributesData as $attrData) {

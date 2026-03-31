@@ -14,6 +14,8 @@ class TailoringShop extends Model
     protected $fillable = [
         'user_id',
         'shop_name',
+        'slug',
+        'description',
         'contact_person',
         'contact_role',
         'is_active',
