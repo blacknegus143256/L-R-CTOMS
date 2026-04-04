@@ -36,6 +36,8 @@ protected $fillable = [
             'material_dropoff_date' => 'date',
             'total_price' => 'decimal:2',
             'measurement_snapshot' => 'array',
+            'required_measurements' => 'array',
+            'submitted_measurements' => 'array',
         ];
     }
 

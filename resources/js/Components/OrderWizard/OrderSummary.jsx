@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { router } from '@inertiajs/react';
+import MapLibrePicker from '../MapLibrePicker.jsx';
 
 export default function OrderSummary({ 
   service, 
@@ -6,7 +8,8 @@ export default function OrderSummary({
   auth,
   styleTag, 
   materialSource, 
-  measurementType, 
+  measurementPreference, 
+  measurementDate, 
   materialDropoffDate,
   notes, 
   selectedAttributes, 
@@ -21,33 +24,91 @@ export default function OrderSummary({
 
   const categorySlug = service.service_category?.slug || '';
   const isRepair = categorySlug.includes('repairs') || categorySlug.includes('alterations');
-  const isSewing = categorySlug.includes('custom-sewing') || categorySlug.includes('formal-wear');
 
   const detailedOptions = selectedAttributes.map(id => {
     const attr = shop?.attributes?.find(a => a.id === id);
-    return {
-      name: attr?.name || 'Unknown',
-      category: attr?.attribute_category?.name || 'Detail',
-      price: Number(attr?.pivot?.price || 0)
-    };
+    return { name: attr?.name || 'Unknown', category: attr?.attribute_category?.name || 'Detail', price: Number(attr?.pivot?.price || 0) };
   });
 
-  const profileMeasurements = auth.user.profile?.measurements || {};
-  const profileSum = Object.values(profileMeasurements).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+  // Local state for inline edits
+  const [localPhone, setLocalPhone] = useState(auth.user.profile?.phone || '');
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
+  
+  // Map picker local state
+  const [tempProfile, setTempProfile] = useState({
+    latitude: auth.user.profile?.latitude || '',
+    longitude: auth.user.profile?.longitude || '',
+    address: auth.user.profile?.address || '',
+    barangay: auth.user.profile?.barangay || '',
+    street: auth.user.profile?.street || '',
+    purok: auth.user.profile?.purok || '',
+  });
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+
+  const handleSetData = (field, value) => {
+    setTempProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveLocation = () => {
+    if (!tempProfile.latitude || !tempProfile.longitude) return;
+    setIsSavingLocation(true);
+    
+    router.patch('/profile', { 
+      ...auth.user, 
+      latitude: tempProfile.latitude,
+      longitude: tempProfile.longitude,
+      address: tempProfile.address || '',
+      barangay: tempProfile.barangay || '',
+      street: tempProfile.street || '',
+      purok: tempProfile.purok || '',
+    }, {
+      preserveState: true,
+      preserveScroll: true,
+      onSuccess: () => {
+        setIsSavingLocation(false);
+        setShowMapModal(false);
+      },
+      onError: (errors) => {
+        console.error(errors);
+        setIsSavingLocation(false);
+      }
+    });
+  };
+
+  // Strictly bind missing status to the authentic user profile, not the typing state!
   const isPhoneMissing = !auth.user.profile?.phone;
   const isMapMissing = !auth.user.profile?.latitude;
-  const isFitMissing = !isRepair && profileSum === 0;
+
+  const handleSavePhone = () => {
+    if (localPhone.trim().length < 10) return;
+    setIsSavingPhone(true);
+    
+    router.patch('/profile', { 
+      ...auth.user, 
+      phone: localPhone.trim() 
+    }, {
+      preserveState: true, // CRITICAL: Tells Inertia not to wipe the modal state
+      preserveScroll: true,
+      onSuccess: () => setIsSavingPhone(false),
+      onError: (errors) => {
+        console.error(errors);
+        setIsSavingPhone(false);
+      }
+    });
+  };
 
   const summaryItems = [
-    { label: isSewing ? 'Target Style' : 'Issue Description', value: notes },
+    { label: 'Notes', value: notes },
     { label: 'Service', value: service.service_name + ' - ' + (service.price ? `₱${service.price.toLocaleString()}` : 'Price TBD') },
-    { label: 'Material', value: materialSource.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) },
-    { label: 'Drop-off Date', value: materialDropoffDate ? new Date(materialDropoffDate).toLocaleDateString() : 'TBD' },
-    ...(measurementType === 'profile' ? [{ label: 'Fit Method', value: 'Profile Measurements' }] : []),
+    { label: 'Material', value: materialSource?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) },
+    ...(materialSource === 'dropoff' ? [{ label: 'Drop-off Date', value: materialDropoffDate ? new Date(materialDropoffDate).toLocaleDateString() : 'TBD' }] : []),
+    { label: 'Fit Method', value: measurementPreference === 'self_measured' ? 'I will provide measurements' : 'In-Shop Fitting' },
+    ...(measurementPreference === 'workshop_fitting' ? [{ label: 'Fitting Date', value: measurementDate ? new Date(measurementDate).toLocaleDateString() : (materialDropoffDate ? new Date(materialDropoffDate).toLocaleDateString() : 'TBD') }] : []),
   ];
 
   return (
-    <div className="p-6">
+    <div className="p-6 relative">
       <h3 className="text-lg font-semibold mb-6 text-center">Order Summary</h3>
 
       <div className="space-y-6 mb-8">
@@ -59,11 +120,6 @@ export default function OrderSummary({
             <div className="flex-1 min-w-0">
               <h4 className="text-xl font-black text-stone-900 mb-1 truncate">{service.service_name}</h4>
               <p className="text-stone-600 mb-2">{service.service_category?.name}</p>
-              <div className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
-                isRepair ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {isRepair ? 'Repair Order' : 'Bespoke Order'}
-              </div>
             </div>
           </div>
         </div>
@@ -76,100 +132,113 @@ export default function OrderSummary({
             </div>
           ))}
         </div>
-
-        {designImagePreview && (
-          <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
-            <h5 className="font-semibold mb-2 text-stone-800">Reference Image</h5>
-            <img src={designImagePreview} alt="Design reference" className="w-full max-h-48 rounded-lg object-cover shadow-md" />
-          </div>
-        )}
-
-{detailedOptions.length > 0 && (
-          <div className="space-y-3">
-            <h5 className="font-semibold text-stone-800 border-b border-stone-200 pb-2">Customization Breakdown</h5>
-            {detailedOptions.map((option, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200">
-                <span className="px-2 py-1 bg-gray-200 text-xs font-medium text-gray-800 rounded-full">[ {option.category} ]</span>
-                <span className="font-bold text-stone-800 flex-1 px-4">{option.name}</span>
-                <span className="text-emerald-600 font-bold">+₱{option.price.toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-
-        <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl mb-8">
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-amber-800">Total</span>
-            <span className="text-4xl font-black bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent tracking-tight">
-              ₱{totalPrice?.toLocaleString() || '0.00'}
-            </span>
-          </div>
-          <p className="text-sm text-amber-700 mt-1">Includes service + options. Final price confirmed at fitting.</p>
+      <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl mb-8">
+        <div className="flex items-baseline justify-between">
+          <span className="text-3xl font-black text-amber-800">Total</span>
+          <span className="text-4xl font-black text-amber-600 tracking-tight">₱{totalPrice?.toLocaleString() || '0.00'}</span>
         </div>
+      </div>
 
-        {/* Smart Guard Checklist */}
-        <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
-          <h4 className="text-lg font-bold text-amber-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
-            </svg>
-            Pre-Order Checklist
-          </h4>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 {isPhoneMissing ? 'border-amber-400' : 'border-emerald-400'}">
-              <span className="text-xl font-bold {isPhoneMissing ? 'text-amber-600' : 'text-emerald-600'}">{isPhoneMissing ? '❌' : '✅'}</span>
-              <span className="text-sm font-medium {isPhoneMissing ? 'text-amber-900' : 'text-emerald-900'}">{isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}</span>
-              {isPhoneMissing && <button className="ml-auto px-4 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700" onClick={() => {}}>Add Phone</button>}
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 {isMapMissing ? 'border-amber-400' : 'border-emerald-400'}">
-              <span className="text-xl font-bold {isMapMissing ? 'text-amber-600' : 'text-emerald-600'}">{isMapMissing ? '❌' : '✅'}</span>
-              <span className="text-sm font-medium {isMapMissing ? 'text-amber-900' : 'text-emerald-900'}">{isMapMissing ? 'Home Location not pinned' : 'Location Verified'}</span>
-              {isMapMissing && <button className="ml-auto px-4 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700" onClick={() => {}}>Pin Map</button>}
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 {isFitMissing ? 'border-amber-400' : 'border-emerald-400'}">
-              <span className="text-xl font-bold {isFitMissing ? 'text-amber-600' : 'text-emerald-600'}">{isFitMissing ? '❌' : '✅'}</span>
-              <span className="text-sm font-medium {isFitMissing ? 'text-amber-900' : 'text-emerald-900'}">{isFitMissing ? 'Missing Body Measurements' : 'Body Measurements Complete'}</span>
-            </div>
+      {/* INLINE CHECKLIST - NO REDIRECTS */}
+      <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
+        <h4 className="text-lg font-bold text-amber-900 mb-4">Pre-Order Checklist</h4>
+        <div className="space-y-3">
+          
+          {/* Phone Checklist Item */}
+          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isPhoneMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
+            <span className="text-xl">{isPhoneMissing ? '❌' : '✅'}</span>
+            <span className="text-sm font-medium text-stone-800">{isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}</span>
+            
+            {isPhoneMissing && (
+              <div className="ml-auto flex items-center gap-2">
+                <input 
+                  type="tel" 
+                  value={localPhone} 
+                  onChange={(e) => setLocalPhone(e.target.value)}
+                  placeholder="09xxxxxxxxx"
+                  className="px-3 py-2 border border-amber-300 rounded-lg text-sm w-32 focus:ring-2 focus:ring-amber-500"
+                />
+                <button 
+                  type="button" 
+                  onClick={handleSavePhone}
+                  disabled={isSavingPhone}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {isSavingPhone ? '...' : 'Save'}
+                </button>
+              </div>
+            )}
           </div>
-          <p className="text-xs text-amber-700 mt-3 text-center font-medium">
-            Complete all items before submitting your Job Card
-          </p>
+          
+          {/* Map Checklist Item */}
+          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isMapMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
+            <span className="text-xl">{isMapMissing ? '❌' : '✅'}</span>
+            <span className="text-sm font-medium text-stone-800">{isMapMissing ? 'Home Location not pinned' : 'Location Verified'}</span>
+            
+            {isMapMissing && (
+              <button 
+                type="button" 
+                onClick={() => setShowMapModal(true)} 
+                className="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700"
+              >
+                Pin Map
+              </button>
+            )}
+          </div>
         </div>
-
+      </div>
 
       <div className="flex gap-3 pt-4 border-t border-stone-200">
-
-        <button
+        <button type="button" onClick={onBack} className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50">← Back</button>
+        <button 
           type="button"
-          onClick={onBack}
-          className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50"
+          onClick={onSubmit} 
+          disabled={isPhoneMissing || isMapMissing || loading} 
+          className="flex-1 rounded-lg bg-emerald-600 px-8 py-4 font-bold text-xl text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          ← Back to Fit
-        </button>
-        <button
-          onClick={onSubmit}
-          disabled={isPhoneMissing || isMapMissing || isFitMissing || loading}
-          className="flex-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-4 font-bold text-xl text-white hover:from-emerald-700 hover:to-teal-700 focus:outline-none focus:ring-4 focus:ring-emerald-500 shadow-2xl transform hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5 Ascent 5.373 0 0 5.373 0 12h4zm2 Ascent 5.291A7.962 7 Ascent 4 12H0c0  Ascent 3.042 Ascent 1.135 Ascent 5.824 Ascent 3 Ascent 7.938l3-2.647z"></path>
-              </svg>
-              Creating Job Card...
-            </>
-          ) : (
-            '✅ Confirm & Submit Order'
-          )}
+          {loading ? 'Creating Job Card...' : '✅ Confirm & Submit Order'}
         </button>
       </div>
-      {(isPhoneMissing || isMapMissing || isFitMissing) && (
-        <p className="text-sm text-rose-600 mt-2 text-center font-medium">
-          Please complete the checklist above to enable ordering.
-        </p>
+
+      {/* User Location Picker Modal */}
+      {showMapModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-stone-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-stone-900">📍 Pin Your Home Location</h3>
+                <button 
+                  onClick={() => setShowMapModal(false)} 
+                  className="p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <MapLibrePicker data={tempProfile} setData={handleSetData} />
+            </div>
+            <div className="p-6 border-t border-stone-200 bg-stone-50 flex gap-3 justify-end">
+              <button 
+                type="button"
+                onClick={() => setShowMapModal(false)} 
+                className="px-6 py-3 border border-stone-300 text-stone-700 rounded-xl hover:bg-stone-100 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveLocation} 
+                disabled={isSavingLocation || !tempProfile.latitude || !tempProfile.longitude}
+                className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingLocation ? 'Saving Location...' : '💾 Save Location'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -89,10 +89,7 @@ export default function DesignContext({
                 <img src={designImagePreview} alt="Preview" className="flex-1 max-h-48 rounded-lg shadow-md object-cover" />
                 <button
                   type="button"
-                  onClick={() => {
-                    setDesignImagePreview(null);
-                    setDesignImageFile(null);
-                  }}
+onClick={() => handleDesignImage({ target: { files: [] } })}
                   className="px-4 py-2 bg-red-500/90 hover:bg-red-600 text-white text-sm font-medium rounded-lg shadow-sm transition-all flex-shrink-0 whitespace-nowrap"
                 >
                   Clear Image

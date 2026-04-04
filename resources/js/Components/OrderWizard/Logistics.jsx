@@ -6,33 +6,18 @@ export default function Logistics({
   setMaterialDropoffDate,
   materialSource,
   setMaterialSource,
-  setProfileMeasurements,
   onNext,
-  canNext,
   onBack
 }) {
   if (!service) return null;
 
   const today = new Date().toISOString().split('T')[0];
-  const isDroppingOff = materialSource === 'dropoff';
+  const isDroppingOff = materialSource === 'customer';
+  const isWorkshop = materialSource === 'tailor_choice';
 
-  const effectiveCanNext =
-   materialSource === 'workshop' ||
-   (materialSource &&
-  (!isDroppingOff || materialDropoffDate));
-  React.useEffect(() => {
-  if (!materialSource) {
-    // Example logic — adjust based on your real data
-    if (service?.allows_dropoff === false) {
-      setMaterialSource('workshop');
-    } else if (service?.requires_dropoff) {
-      setMaterialSource('dropoff');
-    }
-    else {
-    setMaterialSource('workshop'); // ✅ fallback
-  }
-  }
-}, [service, materialSource]);
+  // Strictly require a choice. If dropoff, strictly require a date.
+  const effectiveCanNext = isWorkshop || (isDroppingOff && !!materialDropoffDate);
+
   return (
     <div className="p-6">
       <h3 className="text-lg font-semibold mb-6">Logistics</h3>
@@ -52,7 +37,7 @@ export default function Logistics({
         </div>
       </div>
 
-      {/* Choice Cards */}
+      {/* Choice Cards - NO PRE-SELECTION */}
       <div className="grid md:grid-cols-2 gap-6 mb-8">
         {/* Yes - Drop Off */}
         <label className="group cursor-pointer">
@@ -60,22 +45,20 @@ export default function Logistics({
             type="radio"
             name="dropping_off"
             checked={isDroppingOff}
-            onChange={() => setMaterialSource('dropoff')}
+            onChange={() => {
+              setMaterialSource('customer'); // ✅ Fixed
+              setMaterialDropoffDate(''); 
+            }}
             className="sr-only"
           />
-          <div className="h-48 border-2 rounded-2xl p-8 text-center transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer border-emerald-300 hover:border-emerald-400 bg-emerald-50/50">
-            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-emerald-400 to-green-400 rounded-3xl flex items-center justify-center">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`h-48 border-2 rounded-2xl p-8 text-center transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer ${isDroppingOff ? 'border-emerald-400 bg-emerald-50 shadow-lg ring-2 ring-emerald-200' : 'border-stone-300 hover:border-emerald-300'}`}>
+            <div className={`w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center ${isDroppingOff ? 'bg-gradient-to-br from-emerald-400 to-green-400' : 'bg-stone-200'}`}>
+              <svg className={`w-10 h-10 ${isDroppingOff ? 'text-white' : 'text-stone-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
-            <h4 className="text-2xl font-bold text-emerald-800 mb-2">Yes, I will bring my own fabric/items</h4>
-            <p className="text-emerald-700 font-medium mb-4">Select drop-off date below</p>
-            {isDroppingOff && (
-              <div className="text-sm bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full mx-auto w-fit font-medium mb-2">
-                ✅ Selected
-              </div>
-            )}
+            <h4 className="text-xl font-bold text-stone-800 mb-2">Yes, I will bring materials</h4>
+            <p className="text-stone-600 font-medium mb-4">Select drop-off date below</p>
           </div>
         </label>
 
@@ -84,46 +67,40 @@ export default function Logistics({
           <input
             type="radio"
             name="dropping_off"
-            checked={!isDroppingOff}
-            onChange={() => setMaterialSource('workshop')}
+            checked={isWorkshop}
+            onChange={() => {
+              setMaterialSource('tailor_choice'); // ✅ Fixed
+              setMaterialDropoffDate(''); 
+            }}
             className="sr-only"
           />
-          <div className={`h-48 border-2 rounded-2xl p-8 text-center transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer ${!isDroppingOff ? 'border-blue-300 bg-blue-50/50 shadow-lg' : 'border-stone-300 hover:border-blue-400'}`}>
-            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-blue-400 to-indigo-400 rounded-3xl flex items-center justify-center">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`h-48 border-2 rounded-2xl p-8 text-center transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer ${isWorkshop ? 'border-blue-400 bg-blue-50 shadow-lg ring-2 ring-blue-200' : 'border-stone-300 hover:border-blue-300'}`}>
+            <div className={`w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center ${isWorkshop ? 'bg-gradient-to-br from-blue-400 to-indigo-400' : 'bg-stone-200'}`}>
+              <svg className={`w-10 h-10 ${isWorkshop ? 'text-white' : 'text-stone-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h4 className="text-2xl font-bold text-blue-800 mb-2">No, use workshop materials/already provided</h4>
-            <p className="text-blue-700 font-medium mb-4">Skip date picker</p>
-            {!isDroppingOff && (
-              <div className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full mx-auto w-fit font-medium mb-2">
-                ✅ Selected
-              </div>
-            )}
+            <h4 className="text-xl font-bold text-stone-800 mb-2">No, use workshop materials</h4>
+            <p className="text-stone-600 font-medium mb-4">Skip date picker</p>
           </div>
         </label>
       </div>
 
       {isDroppingOff && (
-        <>
-          <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-3xl">
-            <label className="block text-sm font-semibold text-emerald-800 mb-4">
-              📅 Drop-off Date <span className="text-amber-600">*</span>
-            </label>
-            <input
-              type="date"
-              value={materialDropoffDate}
-              onChange={(e) => setMaterialDropoffDate(e.target.value)}
-              min={today}
-              className="w-full rounded-2xl border-2 border-emerald-300 px-6 py-4 text-lg font-semibold text-stone-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-lg bg-white"
-              required
-            />
-            <p className="text-sm text-emerald-700 mt-2 font-medium">Select date starting from today</p>
-          </div>
-          </>
-        )}
-      
+        <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-3xl animate-fade-in-up">
+          <label className="block text-sm font-semibold text-emerald-800 mb-4">
+            📅 Drop-off Date <span className="text-amber-600">*</span>
+          </label>
+          <input
+            type="date"
+            value={materialDropoffDate}
+            onChange={(e) => setMaterialDropoffDate(e.target.value)}
+            min={today}
+            className="w-full max-w-md rounded-2xl border-2 border-emerald-300 px-6 py-4 text-lg font-semibold text-stone-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-lg bg-white"
+            required
+          />
+        </div>
+      )}
 
       <div className="mt-8 flex gap-3 pt-4 border-t border-stone-200">
         <button
@@ -145,4 +122,3 @@ export default function Logistics({
     </div>
   );
 }
-

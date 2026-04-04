@@ -185,12 +185,8 @@ $valid = $request->validate([
         'measurement_date' => $valid['measurement_date'] ?? null,
     ];
 
-    // Snapshot Protocol
-    if ($valid['measurement_type'] === 'profile' && $user->profile) {
-        $orderData['measurement_snapshot'] = $user->profile->only([
-            'chest', 'waist', 'neck', 'inseam', 'sleeve', 'shoulder' // Add actual measurement fields from profile
-        ]);
-    }
+    // Legacy snapshot removed - using new JSON measurement system
+    $orderData['measurement_preference'] = $valid['measurement_preference'] ?? null;
 
     $orderData['status'] = 'Pending';
     $orderData['total_price'] = $totalPrice;

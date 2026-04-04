@@ -20,7 +20,7 @@ export default function MyOrders({ auth, orders = [] }) {
                         {orders.length === 0 ? (
                             <div className="bg-white p-12 rounded-[2rem] text-center border border-stone-200 shadow-sm">
                                 <p className="text-stone-500 font-medium">No orders found.</p>
-                                <Link href="/shops" className="mt-4 inline-block text-orchid-blue font-bold hover:text-orchid-purple">
+                                <Link href="/" className="mt-4 inline-block text-orchid-blue font-bold hover:text-orchid-purple">
                                     Browse Shop →
                                 </Link>
                             </div>

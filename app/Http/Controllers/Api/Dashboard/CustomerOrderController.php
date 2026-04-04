@@ -106,11 +106,8 @@ $valid = $request->validate([
 'material_dropoff_date' => $valid['material_dropoff_date'],
         ];
 
-        if ($valid['measurement_type'] === 'profile' && $user->profile) {
-            $orderData['measurement_snapshot'] = $user->profile->only([
-                'chest', 'waist', 'neck', 'inseam', 'sleeve', 'shoulder'
-            ]);
-        }
+        // Legacy snapshot removed - using new JSON measurement system
+        $orderData['measurement_preference'] = $valid['measurement_preference'] ?? null;
 
         $orderData['status'] = ($valid['material_source'] === 'customer') ? 'Awaiting Materials' : 'Pending';
 

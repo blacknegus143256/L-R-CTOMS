@@ -55,7 +55,7 @@ class ProfileController extends Controller
         $profileData
         );
         
-        return Redirect::route('profile.edit');
+        return Redirect::back();
     }
 
     /**

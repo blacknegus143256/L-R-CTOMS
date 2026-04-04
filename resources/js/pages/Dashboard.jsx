@@ -126,54 +126,27 @@ export default function Dashboard() {
                         </div>
                         <div className="flex-1">
                             <h3 className="text-2xl font-black bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-4">Your Perfect Fit</h3>
-                            {measurements && (measurements.chest || measurements.waist || measurements.neck) ? (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                                    {measurements.chest && (
-                                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                                            <span className="font-mono text-slate-600">Chest</span>
-                                            <div className="text-2xl font-black text-slate-900">{measurements.chest}"</div>
-                                        </div>
-                                    )}
-                                    {measurements.waist && (
-                                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                                            <span className="font-mono text-slate-600">Waist</span>
-                                            <div className="text-2xl font-black text-slate-900">{measurements.waist}"</div>
-                                        </div>
-                                    )}
-                                    {measurements.neck && (
-                                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                                            <span className="font-mono text-slate-600">Neck</span>
-                                            <div className="text-2xl font-black text-slate-900">{measurements.neck}"</div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <motion.div 
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-8 text-center border-2 border-dashed border-slate-300"
+                            <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-8 text-center border-2 border-dashed border-slate-300"
+                            >
+                                <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                <h4 className="text-xl font-bold text-slate-700 mb-2">Define Your Silhouette</h4>
+                                <p className="text-slate-600 mb-6">Update your measurements for perfect tailor quotes.</p>
+                                <Link 
+                                    href="/profile" 
+                                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-slate-950 to-slate-800 text-white font-bold rounded-2xl hover:shadow-2xl hover:shadow-slate-900/25 transition-all duration-300 text-sm hover:scale-105"
                                 >
-                                    <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    Update Measurements
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                     </svg>
-                                    <h4 className="text-xl font-bold text-slate-700 mb-2">Define Your Silhouette</h4>
-                                    <p className="text-slate-600 mb-6">Update your measurements for perfect tailor quotes.</p>
-                                    <Link 
-                                        href="/profile" 
-                                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-slate-950 to-slate-800 text-white font-bold rounded-2xl hover:shadow-2xl hover:shadow-slate-900/25 transition-all duration-300 text-sm hover:scale-105"
-                                    >
-                                        Update Measurements
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                                        </svg>
-                                    </Link>
-                                </motion.div>
-                            )}
-                            {measurements && (
-                                <Link href="/profile" className="mt-6 inline-block text-sm font-bold text-orchid-purple hover:text-orchid-blue underline">
-                                    Edit Measurements →
                                 </Link>
-                            )}
+                            </motion.div>
+
                         </div>
                     </div>
                 </motion.div>
