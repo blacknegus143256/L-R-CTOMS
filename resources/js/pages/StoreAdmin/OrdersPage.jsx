@@ -16,7 +16,9 @@ export default function OrdersPage() {
     const [filterStatus, setFilterStatus] = useState('All');
     const [showAppointmentModal, setShowAppointmentModal] = useState(false);
     const [appointmentDate, setAppointmentDate] = useState('');
-    const [pendingStatusOrder, setPendingStatusOrder] = useState(null);
+const [pendingStatusOrder, setPendingStatusOrder] = useState(null);
+    const [showMeasurementRequestModal, setShowMeasurementRequestModal] = useState(false);
+const [customMeasurements, setCustomMeasurements] = useState('');
 
     // Stats for tabs
     const stats = {
@@ -43,10 +45,14 @@ export default function OrdersPage() {
         });
     };
 
-    const handleAcceptClick = (order) => {
-        if (order.service?.appointment_required) {
-            setPendingStatusOrder({ id: order.id, status: 'Appointment Scheduled' });
+const handleAcceptClick = (order) => {
+        setPendingStatusOrder(order);
+
+        if (order.measurement_type === 'scheduled') {
             setShowAppointmentModal(true);
+        } else if (order.measurement_type === 'profile') {
+            setCustomMeasurements(''); // Clear the text area
+            setShowMeasurementRequestModal(true);
         } else {
             handleStatusUpdate(order.id, 'Accepted');
         }
@@ -59,6 +65,29 @@ export default function OrdersPage() {
         }
         handleStatusUpdate(pendingStatusOrder.id, pendingStatusOrder.status, appointmentDate);
     };
+
+    const handleMeasurementSubmit = () => {
+        if (!customMeasurements.trim()) {
+            alert('Please type the required measurements.');
+            return;
+        }
+        
+        // Convert the comma-separated string into an array of clean strings
+        const requestedArr = customMeasurements.split(',').map(m => m.trim()).filter(Boolean);
+        
+        const payload = {
+            status: 'Accepted',
+            measurement_snapshot: { requested: requestedArr }
+        };
+
+        router.patch(`/store/orders/${pendingStatusOrder.id}/status`, payload, {
+            onSuccess: () => {
+                setShowMeasurementRequestModal(false);
+                window.location.reload();
+            }
+        });
+    };
+
 
     const filteredOrders = filterStatus === 'All' 
         ? orders 
@@ -267,6 +296,38 @@ export default function OrdersPage() {
                     </div>
                 </div>
             )}
+
+            {/* Measurement Request Modal */}
+            {/* Measurement Request Modal */}
+            {showMeasurementRequestModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowMeasurementRequestModal(false)}>
+                    <div className="mx-4 max-w-lg w-full rounded-2xl bg-white p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold text-stone-800 mb-2">Request Measurements</h3>
+                        <p className="text-sm text-stone-600 mb-6">
+                            Type the specific measurements you need the customer to provide, separated by commas.
+                        </p>
+                        
+                        <div className="mb-8">
+                            <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
+                                Required Measurements
+                            </label>
+                            <textarea 
+                                rows={4}
+                                className="w-full border border-stone-300 rounded-xl p-4 text-sm focus:ring-indigo-500 focus:border-indigo-500 shadow-inner"
+                                placeholder="e.g. High bust, Chest circumference, Underbust, Waist circumference"
+                                value={customMeasurements}
+                                onChange={(e) => setCustomMeasurements(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowMeasurementRequestModal(false)} className="flex-1 px-4 py-3 border border-stone-300 rounded-xl text-stone-700 hover:bg-stone-50 font-bold transition-colors">Cancel</button>
+                            <button onClick={handleMeasurementSubmit} className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold shadow-md transition-colors">Send Request</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
