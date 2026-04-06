@@ -234,6 +234,32 @@ $valid = $request->validate([
     }
 
     /**
+     * Update measurements for customer order.
+     * PATCH /my-orders/{order}/measurements
+     */
+    public function updateMeasurements(Request $request, Order $order)
+    {
+        $user = $request->user();
+
+        // Verify order belongs to this user
+        if ($order->user_id !== $user->id) {
+            abort(403, 'Forbidden.');
+        }
+
+        $validated = $request->validate([
+            'measurements' => 'required|array',
+            'measurements.*' => 'numeric|min:0',
+        ]);
+
+        $snapshot = $order->measurement_snapshot ?? ['requested' => [], 'values' => []];
+        $snapshot['values'] = $validated['measurements'];
+
+        $order->update(['measurement_snapshot' => $snapshot]);
+
+        return back()->with('message', 'Measurements submitted successfully!');
+    }
+
+    /**
      * Check if user has complete profile for ordering.
      * GET /api/customer/profile-check
      */

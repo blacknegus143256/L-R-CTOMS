@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { router } from '@inertiajs/react';
 import StatusBadge from './StatusBadge';
 import TimelineNode from './TimelineNode';
 import DateRow from './DateRow';
@@ -9,9 +10,37 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
 
     const profile = order?.user?.profile || order?.customer || {};
     const requestedMeasurements = order.measurement_snapshot?.requested || [];
+    const snapshotValues = order.measurement_snapshot?.values || {};
+
+    const [localMeasurements, setLocalMeasurements] = useState({});
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSaveMeasurements = () => {
+        setIsSaving(true);
+        router.patch('/profile', {
+            ...order.user,
+            ...localMeasurements
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                setIsSaving(false);
+                alert('Draft measurements saved to your profile!');
+            },
+            onError: () => {
+                setIsSaving(false);
+                alert('Failed to save draft. Please try again.');
+            }
+        });
+    };
 
     const getMaterialSourceText = (source) => {
-        if (source === 'customer') return 'Customer Provided';
+        if (source === 'customer') {
+          if (order.items && order.items.length > 0) {
+            return 'Customer Provided + Shop Add-ons';
+          }
+          return 'Customer Provided';
+        }
         if (source === 'tailor_choice' || source === 'shop') return 'Workshop Provided';
         return 'Not Specified';
     };
@@ -63,6 +92,50 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                         
                         {/* LEFT COLUMN: Design Context (Takes up 2/3 of the space) */}
                         <div className="lg:col-span-2 space-y-8">
+                            {/* Customer Details */}
+                            <section>
+                                <h3 className="text-[11px] font-black text-stone-900 uppercase tracking-[0.2em] mb-4">Customer Details</h3>
+                                <div className="bg-stone-50 p-6 rounded-3xl border border-stone-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="flex items-center gap-3 p-4 bg-white border border-stone-100 rounded-xl">
+                                        <svg className="w-5 h-5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                        </svg>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Name</span>
+                                            <span className="font-semibold text-stone-900">{order.user?.name || order.customer?.name || 'Not Provided'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 p-4 bg-white border border-stone-100 rounded-xl">
+                                        <svg className="w-5 h-5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.27 7.27c.883.883 2.307.883 3.19 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                        </svg>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Email</span>
+                                            <span className="font-semibold text-stone-900">{order.user?.email || order.customer?.email || 'Not Provided'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 p-4 bg-white border border-stone-100 rounded-xl">
+                                        <svg className="w-5 h-5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                                        </svg>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Phone</span>
+                                            <span className="font-semibold text-stone-900">{profile.phone || order.customer?.phone_number || 'Not Provided'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 p-4 bg-white border border-stone-100 rounded-xl">
+                                        <svg className="w-5 h-5 text-stone-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        </svg>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Address</span>
+                                            <span className="font-semibold text-stone-900">{profile.street ? `${profile.street}, ${profile.barangay}` : profile.city ? profile.city : 'Not Provided'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
                             <section>
                                 <h3 className="text-[11px] font-black text-stone-900 uppercase tracking-[0.2em] mb-4">Design Context</h3>
                                 <div className="bg-stone-50 p-6 rounded-3xl border border-stone-200 flex flex-col md:flex-row gap-6">
@@ -157,14 +230,29 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                             requestedMeasurements.map((measure, idx) => {
                                                 // Intelligent mapping: attempts to map custom text like "Chest circumference" to "chest_circumference" in the DB.
                                                 const profileKey = measure.toLowerCase().replace(/ /g, '_');
-                                                const val = profile[profileKey];
+                                                const val = snapshotValues[profileKey];
 
-                                                return (
+                                                return isAdmin ? (
                                                     <SpecRow 
                                                         key={idx} 
                                                         label={measure.toUpperCase()} 
-                                                        value={val ? `${val} IN` : 'Pending Entry'} 
+                                                        value={val ? `${val} IN` : 'TBA'} 
                                                     />
+                                                ) : (
+                                                    <div key={idx} className="flex justify-between items-center p-3 bg-white border border-indigo-100 rounded-xl shadow-sm">
+                                                        <span className="font-bold text-sm text-indigo-900 capitalize">{measure}</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            value={localMeasurements[profileKey] || ''}
+                                                            onChange={(e) => setLocalMeasurements({
+                                                                ...localMeasurements,
+                                                                [profileKey]: e.target.value
+                                                            })}
+                                                            className="w-20 text-right border border-indigo-200 rounded-lg px-2 py-1 text-sm font-bold bg-indigo-50 focus:ring-indigo-500 focus:border-indigo-500"
+                                                            placeholder="0.0"
+                                                        />
+                                                    </div>
                                                 );
                                             })
                                         ) : (
@@ -172,6 +260,45 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                                 <p className="text-xs text-indigo-600 font-medium">Awaiting shop measurement request.</p>
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {/* Customer Action Buttons */}
+                                {!isAdmin && requestedMeasurements.length > 0 && (
+                                    <div className="flex flex-col gap-3 mt-6 pt-4 border-t border-stone-100">
+                                        <button 
+                                            onClick={handleSaveMeasurements}
+                                            disabled={isSaving}
+                                            className="w-full py-3 bg-stone-100 text-stone-700 text-sm font-bold rounded-xl hover:bg-stone-200 transition shadow-sm disabled:opacity-50"
+                                        >
+                                            {isSaving ? 'Saving...' : '💾 Save to Profile (Draft)'}
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={() => {
+                                                setIsSaving(true);
+                                                // Save to order measurements as FINAL submission
+                                                router.patch(`/my-orders/${order.id}/measurements`, {
+                                                    measurements: localMeasurements
+                                                }, {
+                                                    preserveScroll: true,
+                                                    preserveState: true,
+                                                    onSuccess: () => {
+                                                        setIsSaving(false);
+                                                        alert('✅ Final measurements have been securely sent to the shop!');
+                                                        onClose(); // Close the modal because they are done!
+                                                    },
+                                                    onError: () => {
+                                                        setIsSaving(false);
+                                                        alert('Failed to send measurements. Please check your inputs.');
+                                                    }
+                                                });
+                                            }}
+                                            disabled={isSaving}
+                                            className="w-full py-4 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition shadow-md disabled:opacity-50"
+                                        >
+                                            📤 Send as Final Measurement
+                                        </button>
                                     </div>
                                 )}
                             </section>

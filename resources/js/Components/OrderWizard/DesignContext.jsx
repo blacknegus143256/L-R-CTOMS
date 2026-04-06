@@ -12,7 +12,8 @@ export default function DesignContext({
   setNotes,
   error,
   onNext,
-  canNext
+  canNext,
+  onBack,
 }) {
   if (!service) return null;
 
@@ -103,7 +104,7 @@ onClick={() => handleDesignImage({ target: { files: [] } })}
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => step > 0 && setStep(step - 1)}
+              onClick={onBack}
               className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50 transition-colors"
             >
               ← Back

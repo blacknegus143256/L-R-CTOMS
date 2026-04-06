@@ -25,15 +25,18 @@ export default function OrderSummary({
   const categorySlug = service.service_category?.slug || '';
   const isRepair = categorySlug.includes('repairs') || categorySlug.includes('alterations');
 
-  const detailedOptions = selectedAttributes.map(id => {
-    const attr = shop?.attributes?.find(a => a.id === id);
-    return { name: attr?.name || 'Unknown', category: attr?.attribute_category?.name || 'Detail', price: Number(attr?.pivot?.price || 0) };
-  });
+  // No attributes display needed in summary - handled by totalPrice
 
   // Local state for inline edits
   const [localPhone, setLocalPhone] = useState(auth.user.profile?.phone || '');
   const [showMapModal, setShowMapModal] = useState(false);
   const [isSavingPhone, setIsSavingPhone] = useState(false);
+  
+  // Profile completeness check
+  const isProfileComplete = auth.user.profile?.phone && 
+                           auth.user.profile?.street && 
+                           auth.user.profile?.barangay && 
+                           auth.user.profile?.latitude;
   
   // Map picker local state
   const [tempProfile, setTempProfile] = useState({
@@ -132,6 +135,29 @@ export default function OrderSummary({
             </div>
           ))}
         </div>
+
+        {/* Requested Attributes & Items */}
+        {selectedAttributes.length > 0 && (
+          <div>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-3">Requested Add-ons</span>
+            <div className="flex flex-col gap-2">
+              {selectedAttributes.map((attrId) => {
+                const attr = shop?.attributes?.find(a => a.id === attrId);
+                if (!attr) return null;
+                const category = attr.attribute_category?.name || 'Add-on';
+                return (
+                  <div key={attrId} className="flex justify-between items-center p-3 bg-white border border-stone-200 rounded-xl shadow-sm">
+                    <div>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500 block mb-0.5">{category}</span>
+                      <span className="text-sm font-bold text-stone-800">{attr.name}</span>
+                    </div>
+                    <span className="text-sm font-black text-indigo-600">+₱{attr.pivot?.price?.toLocaleString()}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl mb-8">
@@ -141,61 +167,74 @@ export default function OrderSummary({
         </div>
       </div>
 
-      {/* INLINE CHECKLIST - NO REDIRECTS */}
-      <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
-        <h4 className="text-lg font-bold text-amber-900 mb-4">Pre-Order Checklist</h4>
-        <div className="space-y-3">
-          
-          {/* Phone Checklist Item */}
-          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isPhoneMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
-            <span className="text-xl">{isPhoneMissing ? '❌' : '✅'}</span>
-            <span className="text-sm font-medium text-stone-800">{isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}</span>
-            
-            {isPhoneMissing && (
-              <div className="ml-auto flex items-center gap-2">
-                <input 
-                  type="tel" 
-                  value={localPhone} 
-                  onChange={(e) => setLocalPhone(e.target.value)}
-                  placeholder="09xxxxxxxxx"
-                  className="px-3 py-2 border border-amber-300 rounded-lg text-sm w-32 focus:ring-2 focus:ring-amber-500"
-                />
-                <button 
-                  type="button" 
-                  onClick={handleSavePhone}
-                  disabled={isSavingPhone}
-                  className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {isSavingPhone ? '...' : 'Save'}
-                </button>
+      {/* Profile Complete Summary or Checklist */}
+      {!isProfileComplete ? (
+        <>
+          {/* INLINE CHECKLIST - NO REDIRECTS */}
+          <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
+            <h4 className="text-lg font-bold text-amber-900 mb-4">Pre-Order Checklist</h4>
+            <div className="space-y-3">
+              
+              {/* Phone Checklist Item */}
+              <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isPhoneMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
+                <span className="text-xl">{isPhoneMissing ? '❌' : '✅'}</span>
+                <span className="text-sm font-medium text-stone-800">{isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}</span>
+                
+                {isPhoneMissing && (
+                  <div className="ml-auto flex items-center gap-2">
+                    <input 
+                      type="tel" 
+                      value={localPhone} 
+                      onChange={(e) => setLocalPhone(e.target.value)}
+                      placeholder="09xxxxxxxxx"
+                      className="px-3 py-2 border border-amber-300 rounded-lg text-sm w-32 focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={handleSavePhone}
+                      disabled={isSavingPhone}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {isSavingPhone ? '...' : 'Save'}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+              
+              {/* Map Checklist Item */}
+              <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isMapMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
+                <span className="text-xl">{isMapMissing ? '❌' : '✅'}</span>
+                <span className="text-sm font-medium text-stone-800">{isMapMissing ? 'Home Location not pinned' : 'Location Verified'}</span>
+                
+                {isMapMissing && (
+                  <button 
+                    type="button" 
+                    onClick={() => setShowMapModal(true)} 
+                    className="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700"
+                  >
+                    Pin Map
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-          
-          {/* Map Checklist Item */}
-          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isMapMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
-            <span className="text-xl">{isMapMissing ? '❌' : '✅'}</span>
-            <span className="text-sm font-medium text-stone-800">{isMapMissing ? 'Home Location not pinned' : 'Location Verified'}</span>
-            
-            {isMapMissing && (
-              <button 
-                type="button" 
-                onClick={() => setShowMapModal(true)} 
-                className="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700"
-              >
-                Pin Map
-              </button>
-            )}
+        </>
+      ) : (
+        <div className="p-6 bg-emerald-50 border-2 border-emerald-200 rounded-2xl mb-8 shadow-lg">
+          <h4 className="text-lg font-bold text-emerald-900 mb-4">✅ Profile Complete</h4>
+          <div className="text-sm font-medium text-emerald-800">
+            Phone: {auth.user.profile.phone} | 
+            Address: {auth.user.profile.street}, {auth.user.profile.barangay}
           </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3 pt-4 border-t border-stone-200">
         <button type="button" onClick={onBack} className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50">← Back</button>
         <button 
           type="button"
           onClick={onSubmit} 
-          disabled={isPhoneMissing || isMapMissing || loading} 
+          disabled={!isProfileComplete || loading} 
           className="flex-1 rounded-lg bg-emerald-600 px-8 py-4 font-bold text-xl text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {loading ? 'Creating Job Card...' : '✅ Confirm & Submit Order'}

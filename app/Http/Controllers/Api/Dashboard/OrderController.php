@@ -28,7 +28,7 @@ class OrderController extends Controller
         }
 
         $orders = $shop->orders()
-            ->with(['customer:id,name,phone_number', 'service:id,service_name,price', 'items.attribute'])
+->with(['customer:id,name,phone_number', 'service:id,service_name,price,service_category_id', 'service.serviceCategory', 'items.attribute'])
             ->latest()
             ->get();
 
@@ -137,6 +137,10 @@ $valid = $request->validate([
         'design_image' => 'nullable|image|max:5120', // 5MB
         'measurement_type' => 'required|in:profile,scheduled',
         'measurement_date' => 'nullable|date_format:Y-m-d H:i:s|required_if:measurement_type,scheduled',
+        
+        // ADD THIS LINE:
+        'material_dropoff_date' => 'nullable|date',
+        
         'attributes' => 'nullable|array',
         'attributes.*' => 'integer|exists:attribute_types,id',
         'notes' => 'nullable|string',
@@ -183,6 +187,9 @@ $valid = $request->validate([
         'design_image' => $valid['design_image'] ?? null,
         'measurement_type' => $valid['measurement_type'],
         'measurement_date' => $valid['measurement_date'] ?? null,
+        
+        // ADD THIS LINE:
+        'material_dropoff_date' => $valid['material_dropoff_date'] ?? null,
     ];
 
     // Legacy snapshot removed - using new JSON measurement system

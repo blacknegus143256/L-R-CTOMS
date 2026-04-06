@@ -149,7 +149,29 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     if (designImageFile) {
       setData('design_image', designImageFile);
     }
-  }, [styleTag, materialSource, measurementPreference, materialDropoffDate, notes, selectedAttributes, designImageFile, setData]);
+}, [styleTag, materialSource, measurementPreference, materialDropoffDate, notes, selectedAttributes, designImageFile, setData]);
+
+
+
+
+  // 🧹 AUTO-RESET: Completely wipe the modal clean whenever it closes
+  useEffect(() => {
+    if (!isOpen) {
+      reset(); // Clear Inertia form
+      setStep(0); // Go back to the first page
+      setSelectedServiceId('');
+      setStyleTag('');
+      setMaterialSource(null);
+      setMeasurementPreference('self_measured');
+      setMeasurementDate('');
+      setMaterialDropoffDate('');
+      setSelectedAttributes([]);
+      setNotes('');
+      setDesignImageFile(null);
+      setDesignImagePreview(null);
+      setError(null);
+    }
+  }, [isOpen]);
 
   const toggleAttribute = (attrId) => {
     setSelectedAttributes(prev => 
@@ -226,6 +248,10 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       measurement_type: measurementPreference === 'workshop_fitting' ? 'scheduled' : 'profile',
       
       measurement_date: formattedDate,
+      
+      // EXPLICITLY ADD THIS LINE:
+      material_dropoff_date: materialDropoffDate, 
+      
       notes: notes,
       attributes: selectedAttributes,
       design_image: designImageFile,

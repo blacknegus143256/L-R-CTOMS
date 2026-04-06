@@ -50,7 +50,7 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
         
         // Get orders for this shop with related data
         $orders = Order::where('tailoring_shop_id', $shopId)
-            ->with(['user.profile', 'customer', 'service', 'items.attribute', 'tailoringShop'])
+            ->with(['user.profile', 'customer', 'service.serviceCategory', 'items.attribute', 'tailoringShop'])
             ->latest()
             ->get();
 
@@ -61,17 +61,17 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
         ]);
     })->name('store.orders.page');
     
-    // Update order status
+    // Update order status (improved with validation & mass assignment)
     Route::patch('/store/orders/{order}/status', function (\Illuminate\Http\Request $request, $orderId) {
         $order = Order::findOrFail($orderId);
         
-        $order->status = $request->status;
+        $validated = $request->validate([
+            'status' => 'required|string|in:Pending,Accepted,Appointment Scheduled,In Progress,Ready,Completed,Cancelled',
+            'expected_completion_date' => 'nullable|date',
+            'measurement_snapshot' => 'nullable|array',
+        ]);
         
-        if ($request->expected_completion_date) {
-            $order->expected_completion_date = $request->expected_completion_date;
-        }
-        
-        $order->save();
+        $order->update($validated);
         
         return back()->with('message', 'Order status updated successfully!');
     })->name('store.orders.update-status');
@@ -135,7 +135,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-orders', function () {
         // Get orders for the current logged in user
         $orders = Order::where('user_id', Auth::id())
-            ->with(['user.profile', 'service', 'items.attribute', 'tailoringShop'])
+            ->with(['user.profile', 'service.serviceCategory', 'items.attribute', 'tailoringShop'])
             ->latest()
             ->get();
             
@@ -143,6 +143,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'orders' => $orders
         ]);
     })->name('customer.orders');
+
+    // Customer measurement submission
+    Route::patch('/my-orders/{order}/measurements', [\App\Http\Controllers\Api\Dashboard\CustomerOrderController::class, 'updateMeasurements'])->name('customer.orders.measurements');
 });
 
 Route::get('/shop/{shop}',  function ($shop){

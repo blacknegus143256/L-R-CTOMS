@@ -83,30 +83,63 @@ export default function MaterialSourcing({
         </label>
       </div>
 
-      {/* Move 3: Conditional Fabric List */}
-      {materialSource === 'shop' && materialAttrs && materialAttrs.length > 0 && (
-        <div className="mb-8">
-          <h4 className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-4">Available Fabrics</h4>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            {materialAttrs.map(attr => (
-              <button
-                key={attr.id}
-                type="button"
-                onClick={() => toggleAttribute(attr.id)}
-                className={`p-4 rounded-2xl border-2 text-left transition-all hover:shadow-md ${
-                  selectedAttributes.includes(attr.id)
-                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                    : 'border-stone-200 hover:border-emerald-300'
-                }`}
-              >
-                <div className="font-bold text-stone-800 text-sm">{attr.name}</div>
-                {attr.pivot?.price > 0 && (
-                  <div className="text-emerald-600 text-xs font-bold mt-1">+₱{attr.pivot.price}</div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Dynamic Helper Text */}
+      <div className="mb-6 p-4 rounded-xl bg-stone-50 border border-stone-200">
+        {materialSource === 'customer' ? (
+          <p className="text-sm text-stone-600 font-medium">
+            <span className="font-bold text-indigo-600">Optional Add-ons:</span> You are bringing your own main materials. If you need us to provide specific add-ons (like zippers or buttons), select them below. If you want the tailor to choose the best matching add-ons, simply leave this blank!
+          </p>
+        ) : (
+          <p className="text-sm text-stone-600 font-medium">
+            <span className="font-bold text-emerald-600">Choose Your Materials:</span> Select your desired fabrics and specifications below. If you aren't sure, leave this blank and our tailor will recommend the best options for your design!
+          </p>
+        )}
+      </div>
+
+      {/* Move 3: Catalog always visible */}
+      {materialAttrs && materialAttrs.length > 0 && (
+        // Group the flat array into categorized buckets
+        (() => {
+          const groupedMaterials = materialAttrs.reduce((acc, attr) => {
+            const categoryName = attr.attributeCategory?.name || attr.attribute_category?.name || 'Additional Options';
+            if (!acc[categoryName]) {
+              acc[categoryName] = [];
+            }
+            acc[categoryName].push(attr);
+            return acc;
+          }, {});
+          return (
+            <div className="space-y-8">
+              {Object.entries(groupedMaterials).map(([categoryName, items]) => (
+                <div key={categoryName} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                  <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-4">
+                    {categoryName}
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {items.map(attr => {
+                      const isSelected = selectedAttributes.includes(attr.id);
+                      return (
+                        <button
+                          key={attr.id}
+                          type="button"
+                          onClick={() => toggleAttribute(attr.id)}
+                          className={`p-3 text-left rounded-xl border-2 transition-all ${
+                            isSelected 
+                              ? 'border-indigo-500 bg-indigo-50' 
+                              : 'border-stone-100 hover:border-indigo-200'
+                          }`}
+                        >
+                          <span className="block font-bold text-stone-800">{attr.name}</span>
+                          <span className="block text-xs font-bold text-stone-500">+₱{attr.pivot?.price || 0}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()
       )}
 
       {/* Success Message for "Own Material" */}
