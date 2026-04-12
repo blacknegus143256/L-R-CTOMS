@@ -4,6 +4,8 @@ import StatCard from '@/Components/Dashboard/StatCard';
 import OrderProgress from '@/Components/Dashboard/OrderProgress';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
+import { FiZap, FiCheck, FiHash, FiClipboard, FiArrowRight, FiSearch, FiPackage, FiStar, FiMapPin } from 'react-icons/fi';
+import { TbCurrencyPeso } from 'react-icons/tb';
 
 const STATUS_COLORS = {
     'Pending': 'bg-orchid-purple/20 text-orchid-purple border-orchid-purple/30',
@@ -59,9 +61,7 @@ export default function Dashboard() {
                         value={stats?.active || 0}
                         variant="pending"
                         icon={(props) => (
-                            <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
+                            <FiZap {...props} />
                         )}
                     />
                     <StatCard 
@@ -69,9 +69,7 @@ export default function Dashboard() {
                         value={stats?.ready || 0}
                         variant="revenue"
                         icon={(props) => (
-                            <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
+                            <FiCheck {...props} />
                         )}
                     />
                     <StatCard 
@@ -79,9 +77,7 @@ export default function Dashboard() {
                         value={`₱${Number(stats?.totalSpent || 0).toLocaleString('en-US')}`}
                         variant="growth"
                         icon={(props) => (
-                            <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <TbCurrencyPeso {...props} />
                         )}
                     />
                 </motion.div>
@@ -95,9 +91,7 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between mb-8">
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 bg-gradient-to-br from-orchid-purple to-orchid-blue rounded-3xl flex items-center justify-center shadow-2xl">
-                                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                                    </svg>
+                                    <FiHash className="w-8 h-8 text-white" />
                                 </div>
                                 <div>
                                     <h3 className="text-2xl font-black bg-gradient-to-r from-stone-800 to-stone-600 bg-clip-text text-transparent">Order #{latestOrder.id}</h3>
@@ -114,15 +108,13 @@ export default function Dashboard() {
                 )}
 
                 {/* My Fit Card */}
-                <motion.div 
+                {/* <motion.div 
                     variants={{ hidden: { opacity: 0, x: -30 }, visible: { opacity: 1, x: 0 } }}
                     className="bg-gradient-to-br from-slate-50/70 to-slate-100/70 backdrop-blur-xl rounded-3xl p-8 border border-slate-200/50 shadow-xl"
                 >
                     <div className="flex items-start gap-6">
                         <div className="w-20 h-20 bg-gradient-to-br from-slate-200 to-slate-300 rounded-3xl flex items-center justify-center shadow-2xl">
-                            <svg className="w-10 h-10 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
+                            <FiClipboard className="w-10 h-10 text-slate-600" />
                         </div>
                         <div className="flex-1">
                             <h3 className="text-2xl font-black bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-4">Your Perfect Fit</h3>
@@ -131,9 +123,7 @@ export default function Dashboard() {
                                 animate={{ opacity: 1 }}
                                 className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-2xl p-8 text-center border-2 border-dashed border-slate-300"
                             >
-                                <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
+                                <FiClipboard className="w-16 h-16 text-slate-400 mx-auto mb-4" />
                                 <h4 className="text-xl font-bold text-slate-700 mb-2">Define Your Silhouette</h4>
                                 <p className="text-slate-600 mb-6">Update your measurements for perfect tailor quotes.</p>
                                 <Link 
@@ -149,7 +139,7 @@ export default function Dashboard() {
 
                         </div>
                     </div>
-                </motion.div>
+                </motion.div> */}
 
                 {/* Quick Actions */}
                 <motion.div 
@@ -160,16 +150,14 @@ export default function Dashboard() {
                         <div className="absolute inset-0 bg-gradient-to-r from-orchid-purple/5 to-orchid-blue/5 scale-125 group-hover:scale-100 transition-transform duration-700 -z-10" />
                         <div className="relative z-10 flex flex-col items-center text-center">
                             <div className="w-16 h-16 bg-gradient-to-br from-orchid-purple to-orchid-blue rounded-2xl flex items-center justify-center mb-4 shadow-xl group-hover:shadow-2xl group-hover:shadow-orchid-purple/50 transition-shadow">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
+                                <FiSearch className="w-8 h-8 text-white" />
                             </div>
                             <h4 className="text-xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent mb-2">Browse Shops</h4>
                             <p className="text-stone-600 font-medium">Discover tailors near you</p>
                         </div>
                     </Link>
 
-                    <Link href="/profile" className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-50/80 to-slate-100/80 p-8 border border-slate-200/50 hover:border-slate-300 hover:shadow-2xl hover:shadow-slate-500/10 transition-all duration-500 backdrop-blur-sm">
+                    {/* <Link href="/profile" className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-50/80 to-slate-100/80 p-8 border border-slate-200/50 hover:border-slate-300 hover:shadow-2xl hover:shadow-slate-500/10 transition-all duration-500 backdrop-blur-sm">
                         <div className="absolute inset-0 bg-gradient-to-r from-slate-100/50 scale-125 group-hover:scale-100 transition-transform duration-700 -z-10" />
                         <div className="relative z-10 flex flex-col items-center text-center">
                             <div className="w-16 h-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center mb-4 shadow-xl group-hover:shadow-2xl group-hover:shadow-slate-400/50 transition-shadow">
@@ -180,15 +168,13 @@ export default function Dashboard() {
                             <h4 className="text-xl font-black bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent mb-2">Update Measurements</h4>
                             <p className="text-stone-600 font-medium">Perfect fit every time</p>
                         </div>
-                    </Link>
+                    </Link> */}
 
                     <Link href="/my-orders" className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-50/80 to-emerald-100/80 p-8 border border-emerald-200/50 hover:border-emerald-300 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all duration-500 backdrop-blur-sm">
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-100/50 scale-125 group-hover:scale-100 transition-transform duration-700 -z-10" />
                         <div className="relative z-10 flex flex-col items-center text-center">
                             <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-2xl flex items-center justify-center mb-4 shadow-xl group-hover:shadow-2xl group-hover:shadow-emerald-500/50 transition-shadow">
-                                <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.42 3.42v5.638a3.42 3.42 0 01-3.42 3.42h-7.278a3.42 3.42 0 01-3.42-3.42V8.117a3.42 3.42 0 013.42-3.42z" />
-                                </svg>
+                                <FiPackage className="w-8 h-8 text-white" />
                             </div>
                             <h4 className="text-xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent mb-2">Track Orders</h4>
                             <p className="text-stone-600 font-medium">See live updates</p>
@@ -204,9 +190,7 @@ export default function Dashboard() {
                     >
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-2xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent flex items-center gap-3">
-                                <svg className="w-8 h-8 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
+                                <FiStar className="w-8 h-8 text-amber-500" style={{ fill: 'currentColor' }} />
                                 Recent Orders
                             </h3>
                             <Link href="/my-orders" className="text-lg font-bold bg-gradient-to-r from-orchid-purple to-orchid-blue bg-clip-text text-transparent hover:underline">
@@ -253,9 +237,7 @@ export default function Dashboard() {
                     >
                         <div className="flex items-center justify-between mb-8">
                             <h3 className="text-2xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent flex items-center gap-3">
-                                <svg className="w-8 h-8 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.65 9.65L7 18l-4.95-4.95a7 7 0 010-9.65zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                </svg>
+                                <FiMapPin className="w-8 h-8 text-emerald-500" style={{ fill: 'currentColor' }} />
                                 Featured Tailors
                             </h3>
                             <Link href="/" className="text-lg font-bold bg-gradient-to-r from-orchid-purple to-orchid-blue bg-clip-text text-transparent hover:underline">
@@ -292,9 +274,7 @@ export default function Dashboard() {
                                     <div className="absolute bottom-4 right-4">
                                         <Link href={`/shop/${shop.id}`} className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-slate-950 to-slate-800 text-white font-black rounded-2xl hover:shadow-2xl hover:shadow-slate-900/50 transition-all duration-300 text-sm hover:scale-105 backdrop-blur-sm">
                                             Book Now
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                                            </svg>
+                                            <FiArrowRight className="w-4 h-4" />
                                         </Link>
                                     </div>
                                 </motion.div>

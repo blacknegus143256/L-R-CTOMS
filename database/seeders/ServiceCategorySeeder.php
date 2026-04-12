@@ -15,6 +15,7 @@ class ServiceCategorySeeder extends Seeder
             ['name' => 'Repairs', 'slug' => 'repairs'],
             ['name' => 'Embroidery', 'slug' => 'embroidery'],
             ['name' => 'Formal Wear', 'slug' => 'formal-wear'],
+            ['name' => 'Printing', 'slug' => 'printing'],
         ];
 
         foreach ($categories as $category) {

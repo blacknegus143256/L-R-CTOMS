@@ -6,7 +6,7 @@ import ServiceSelection from './OrderWizard/ServiceSelection.jsx';
 import DesignContext from './OrderWizard/DesignContext.jsx';
 import MaterialSourcing from './OrderWizard/MaterialSourcing.jsx';
 import FitLogistics from './OrderWizard/FitLogistics.jsx';
-
+import { FiX, FiAlertCircle } from 'react-icons/fi';
 import Logistics from './OrderWizard/Logistics.jsx';
 import OrderSummary from './OrderWizard/OrderSummary.jsx';
 
@@ -27,9 +27,10 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   const [profileMeasurementsLocal, setProfileMeasurementsLocal] = useState({}); // Will sync with auth.user.profile in useEffect
 
   const [selectedAttributes, setSelectedAttributes] = useState([]);
+  const [attributeQuantities, setAttributeQuantities] = useState({});
   const [notes, setNotes] = useState('');
   const [styleTag, setStyleTag] = useState('');
-  const [materialSource, setMaterialSource] = useState(null);
+  const [materialSource, setMaterialSource] = useState('tailor_choice');
   const [measurementPreference, setMeasurementPreference] = useState('self_measured');
   const [measurementDate, setMeasurementDate] = useState('');
   const [designImagePreview, setDesignImagePreview] = useState(null);
@@ -40,6 +41,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   const [profileComplete, setProfileComplete] = useState(true);
   const [selectedServiceId, setSelectedServiceId] = useState('');
 
+  const isDroppingOff = materialSource === 'customer';
   const { auth } = usePage().props; // Get auth data from Inertia
   // Compute the selected service
   const service = shop?.services?.find(
@@ -84,14 +86,15 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     let total = Number(service?.price) || 0;
     
     selectedAttributes.forEach(attrId => {
-      const attr = shop?.attributes?.find(a => a.id === attrId);
+      const attr = shop?.attributes?.find(a => a.pivot?.id == attrId);
+      const qty = attributeQuantities[attrId] || 1;
       if (attr?.pivot?.price) {
-        total += Number(attr.pivot.price);
+        total += Number(attr.pivot.price) * qty;
       }
     });
     
     return total;
-  }, [service?.price, selectedAttributes, shop?.attributes]);
+  }, [service?.price, selectedAttributes, attributeQuantities, shop?.attributes]);
 
   // Check user profile on mount
   useEffect(() => {
@@ -149,7 +152,26 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     if (designImageFile) {
       setData('design_image', designImageFile);
     }
-}, [styleTag, materialSource, measurementPreference, materialDropoffDate, notes, selectedAttributes, designImageFile, setData]);
+  }, [styleTag, materialSource, measurementPreference, materialDropoffDate, notes, selectedAttributes, designImageFile, setData]);
+
+  // Auto-skip ServiceSelection if service_id in URL
+  useEffect(() => {
+    if (!isOpen || !shop?.services?.length) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const preselectedServiceId = urlParams.get('service_id');
+    
+    if (preselectedServiceId) {
+      const serviceIdNum = parseInt(preselectedServiceId);
+      const serviceToSelect = shop.services.find(s => s.id === serviceIdNum);
+      
+      if (serviceToSelect) {
+        setSelectedServiceId(serviceToSelect.id);
+        setStep(1); // Skip directly to Design step
+      }
+    }
+  }, [isOpen, shop?.services]);
+
 
 
 
@@ -174,11 +196,24 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   }, [isOpen]);
 
   const toggleAttribute = (attrId) => {
-    setSelectedAttributes(prev => 
-      prev.includes(attrId) 
+    setSelectedAttributes(prev => {
+      const newSelected = prev.includes(attrId) 
         ? prev.filter(id => id !== attrId)
-        : [...prev, attrId]
-    );
+        : [...prev, attrId];
+      
+      if (newSelected.includes(attrId)) {
+        setAttributeQuantities(qty => ({ ...qty, [attrId]: 1 }));
+      } else {
+        const { [attrId]: _, ...rest } = qty;
+        setAttributeQuantities(rest);
+      }
+      
+      return newSelected;
+    });
+  };
+
+  const updateAttributeQuantity = (attrId, qty) => {
+    setAttributeQuantities(prev => ({ ...prev, [attrId]: qty }));
   };
 
   const handleServiceSelect = (serviceId) => {
@@ -203,7 +238,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     if (step === 0) return !!selectedServiceId;
     if (step === 1) return service ? true : false;
     if (step === 2) return !!materialSource;
-    if (step === 3) return materialSource === 'tailor_choice' || !!materialDropoffDate;
+    if (step === 3) return materialSource !== 'customer' || !!materialDropoffDate;
     if (step === 4) return !!measurementPreference;
     if (step === 5) return true;
     return false;
@@ -254,6 +289,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       
       notes: notes,
       attributes: selectedAttributes,
+      attribute_quantities: attributeQuantities,
       design_image: designImageFile,
     };
 
@@ -306,9 +342,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
             onClick={onClose}
             className="text-stone-400 hover:text-stone-600"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <FiX className="h-6 w-6" />
           </button>
         </div>
 
@@ -324,9 +358,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
         {error && (
           <div className="p-4 bg-red-100 border border-red-400 text-red-800 rounded-xl mb-6 mx-6 backdrop-blur-sm shadow-lg">
             <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
+              <FiAlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="font-medium">Order Submission Error</p>
                 <p className="text-sm">{error}</p>
@@ -368,6 +400,8 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                       materialAttrs={materialAttrs}
                       selectedAttributes={selectedAttributes}
                       toggleAttribute={toggleAttribute}
+                      attributeQuantities={attributeQuantities}
+                      updateAttributeQuantity={updateAttributeQuantity}
                       onNext={handleNext}
                       canNext={validateCurrentStep()}
                       onBack={handleBack}
@@ -405,6 +439,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                       materialDropoffDate={materialDropoffDate}
                       notes={notes}
                       selectedAttributes={selectedAttributes}
+                      attributeQuantities={attributeQuantities}
                       designImagePreview={designImagePreview}
                       totalPrice={totalPrice}
                       onSubmit={handleSubmit}

@@ -15,7 +15,7 @@ export default function ServiceCategoryPills({ categories, selected, toggle }) {
     return (
         <div className="w-full border-y border-stone-200 bg-white sticky top-0 z-30">
             <div className="max-w-7xl mx-auto px-4 py-3 flex gap-2 overflow-x-auto scrollbar-hide">
-                <span className="text-xs font-bold text-stone-500 uppercase self-center shrink-0">Services</span>
+                {/* <span className="text-xs font-bold text-stone-500 uppercase self-center shrink-0">Services</span> */}
                 {categories.map((category) => {
                     const active = selected.includes(category);
                     return (

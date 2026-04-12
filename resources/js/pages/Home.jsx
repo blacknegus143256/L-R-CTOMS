@@ -5,12 +5,19 @@ import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
 import HeroSearch from '@/Components/Home/HeroSearch';
+
 import ShopCarousel from '@/Components/Home/ShopCarousel';
 import ServiceCategoryPills from '@/Components/Home/ServiceCategoryPills';
 import MaterialFilters from '@/Components/Home/MaterialFilters';
 import ShopActionCard from '@/Components/Home/ShopActionCard';
-import ComparisonTable from '@/Components/Home/ComparisonTable';
+import { FiMapPin, FiArrowRight } from 'react-icons/fi';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import ComparisonTable from '@/Components/Home/ComparisonTable'; // Preserved for future
+import ShopCoverCarousel from '@/Components/Home/ShopCoverCarousel';
+
 import Footer from '@/Components/Home/Footer';
+
+
 
 
 export default function Home({ auth, categories: initialCategories, services: initialServices, shops: initialShops, uniqueServiceCategories: initialUniqueCategories }) {
@@ -26,8 +33,8 @@ export default function Home({ auth, categories: initialCategories, services: in
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [selectedServiceCategories, setSelectedServiceCategories] = useState([]);
     const [search, setSearch] = useState('');
-    const [compareLoading, setCompareLoading] = useState(false);
-const [locationModalOpen, setLocationModalOpen] = useState(false);
+const [compareLoading, setCompareLoading] = useState(false);
+    const [locationModalOpen, setLocationModalOpen] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState(null);
 
     const [showModal, setShowModal] = useState(false);
@@ -39,7 +46,7 @@ const [locationModalOpen, setLocationModalOpen] = useState(false);
 
     const [openDropdowns, setOpenDropdowns] = useState({});
 
-    // Client-side filtering with Inertia props
+// Client-side filtering with Inertia props
     const filteredShops = useMemo(() => {
         let filtered = shops;
 
@@ -150,14 +157,20 @@ const [locationModalOpen, setLocationModalOpen] = useState(false);
         setTimeout(() => setHighlightCarousel(false), 2000);
     }, []);
 
-const handlePlaceOrder = (shop) => {
+    const handlePlaceOrder = (shop, serviceId = null) => {
         if (!auth.user) {
             router.visit('/login');
             return;
         }
 
+        let url = `/shop/${shop.id}?order=true`;
+        if (serviceId) {
+            url += `&service_id=${serviceId}`;
+        }
+        
         // This sends them to your Shop page and triggers the modal automatically
-        router.visit(`/shop/${shop.id}?order=true`);
+        // with the specific service_id in the URL
+        router.visit(url);
     };
 
     const selectedAttributeNames = useMemo(() => {
@@ -256,18 +269,27 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
                 />
             </motion.div>
 
-            {/* 3. SERVICE PILLS */}
-            <ServiceCategoryPills
-                categories={initialUniqueCategories?.length ? initialUniqueCategories : uniqueServiceCategories}
-                selected={selectedServiceCategories}
-                toggle={toggleServiceCategory}
-            />
+            {/* 3. SERVICE PILLS - Prominent Primary Filter */}
+            <motion.div variants={fadeUp} className="px-4 max-w-7xl mx-auto mb-8">
+                <h2 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-orchid-purple via-orchid-blue to-orchid-pink bg-clip-text text-transparent mb-8 px-2 border-l-8 border-orchid-blue pl-6 tracking-tight">
+                    Services:
+                
+                <ServiceCategoryPills
+                    categories={initialUniqueCategories?.length ? initialUniqueCategories : uniqueServiceCategories}
+                    selected={selectedServiceCategories}
+                    toggle={toggleServiceCategory}
+                />
+                </h2>
+            </motion.div>
 
             {/* 4. MAIN INTERACTION AREA (SIDEBAR + TABLE) */}
             <motion.div variants={riseSpring} className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow">
                 <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
                     {/* SIDEBAR */}
-                    <motion.div variants={unrollLeft}>
+                    <motion.div 
+                        variants={unrollLeft}
+                        className="sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto pr-4 lg:pr-0 -mr-4 lg:mr-0 scrollbar-thin scrollbar-thumb-stone-400 scrollbar-track-transparent"
+                    >
                         <MaterialFilters
                             categories={categories}
                             selectedAttributes={selectedAttributes}
@@ -280,54 +302,87 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
                     </motion.div>
 
                     {/* COMPARISON ENGINE */}
-                    <main className="min-w-0 space-y-4">
-                        <motion.div variants={fadeUp} layout className="rounded-xl border border-stone-200 bg-white p-4 shadow-lg">
-                            <h2 className="mb-3 font-semibold text-stone-800 text-center">Compare Your Selected Units</h2>
-                            <div className="grid gap-8 lg:grid-cols-2 max-w-4xl mx-auto">
-                                <ShopActionCard
-                                    slot={1}
-                                    shopId={shop1Id}
-                                    otherShopId={shop2Id}
-                                    shops={filteredShops}
-                                    setShopId={setShop1Id}
-                                    imageUrl="/images/Tailorcut.jpg"
-                                    accentClass="hover:shadow-orchid-blue/25 border-orchid-blue/20"
-                                    emptyHoverClass="hover:border-orchid-blue hover:bg-slate-50"
-                                />
-                                <ShopActionCard
-                                    slot={2}
-                                    shopId={shop2Id}
-                                    otherShopId={shop1Id}
-                                    shops={filteredShops}
-                                    setShopId={setShop2Id}
-                                    imageUrl="/images/alterations-vs-tailoring.jpg"
-                                    accentClass="hover:shadow-orchid-purple/25 border-orchid-purple/20"
-                                    emptyHoverClass="hover:border-orchid-purple hover:bg-slate-50"
-                                />
-                            </div>
-                        </motion.div>
+<main className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredShops.map((shop) => {
+              const activeCategory = selectedServiceCategories[0];
+              const matchingService = activeCategory 
+                ? shop.services.find(s => s.service_category?.name === activeCategory) 
+                : null;
+              const priceDisplay = matchingService 
+                ? `${activeCategory}: ₱${matchingService.price}` 
+                : 'View Services';
+              
+              return (
+                <motion.div
+                  key={shop.id}
+                  variants={fadeUp}
+                  className="group bg-white rounded-2xl shadow-md hover:shadow-xl overflow-hidden transition-all duration-300 border border-stone-100 hover:border-orchid-200 hover:-translate-y-1"
+                >
+                  {/* Integrated Flowbite-Style Image Carousel */}
+                  <ShopCoverCarousel 
+                      shop={shop} 
+                      selectedAttributes={selectedAttributes} 
+                      getShopInitials={getShopInitials} 
+                  />
+                  <div className="p-6 pt-5">
+                    <h3 className="text-xl font-bold text-stone-900 truncate mb-2 group-hover:text-orchid-600 transition-colors">
 
-                        <ComparisonTable
-                            compareLoading={compareLoading}
-                            compareShops={compareShops}
-                            categories={categories}
-                            uniqueServiceCategories={uniqueServiceCategories}
-                            onViewProfile={handleViewProfile}
-                            onSwapShop={(idx) => (idx === 0 ? setShop1Id('') : setShop2Id(''))}
-                            onPlaceOrder={handlePlaceOrder}
-                            onOpenLocationMap={(loc) => {
-                                setSelectedLocation(loc);
-                                setLocationModalOpen(true);
-                            }}
-                            onGhostClick={onGhostClick}
-                        />
-                    </main>
+                      {shop.shop_name}
+                    </h3>
+                    
+    <div className="mb-4">
+    <div className="flex items-center gap-1.5 mt-1 mb-2">
+        <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+        {shop.user?.profile?.latitude && shop.user?.profile?.longitude ? (
+            <a 
+                href={`https://www.google.com/maps?q=${shop.user?.profile?.latitude},${shop.user?.profile?.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-stone-600 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+                title="View on Google Maps"
+            >
+                {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
+            </a>
+        ) : (
+            <span className="text-sm text-stone-600 font-medium truncate">
+                {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : "Location not specified"}
+            </span>
+        )}
+    </div>
+</div>
+                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      matchingService 
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                        : 'bg-stone-100 text-stone-700'
+                    }`}>
+                      {priceDisplay}
+                    </div>
+                  </div>
+                  
+                  {/* Footer */}
+                  <div className="border-t border-stone-100 p-6">
+                    <button
+                      onClick={() => handleViewProfile(shop.id)}
+                      className="w-full bg-gradient-to-r from-orchid-blue to-orchid-purple hover:from-orchid-blue/90 hover:to-orchid-purple/90 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02]"
+                    >
+                      View Profile
+                      <FiArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </main>
                 </div>
             </motion.div>
 
             {/* 5. MODALS AND FOOTER */}
             {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm">
                     <ViewProfile shop={selectedShop} onClose={() => setShowModal(false)} onPlaceOrder={handlePlaceOrder} />
                 </div>
             )}

@@ -32,6 +32,7 @@ protected $fillable = [
     protected function casts(): array
     {
         return [
+            'status' => \App\Enums\OrderStatus::class,
             'expected_completion_date' => 'date',
             'material_dropoff_date' => 'date',
             'total_price' => 'decimal:2',

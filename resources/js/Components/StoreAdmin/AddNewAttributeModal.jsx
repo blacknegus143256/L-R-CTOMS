@@ -1,7 +1,6 @@
 import Modal from '@/Components/Modal';
 import { Plus } from 'lucide-react';
 
-
 export default function AddNewAttributeModal({
     isOpen,
     onClose,
@@ -15,46 +14,92 @@ export default function AddNewAttributeModal({
 }) {
     const category = categories?.find(c => c.id === targetCategoryId);
     const categoryName = category?.name || '';
-    // Filter types belonging to this category
     const filteredTypes = attributeTypes.filter(
         type => Number(type.attribute_category_id) === Number(targetCategoryId || 0)
     );
 
     return (
         <Modal show={isOpen} onClose={onClose}>
-            <form onSubmit={onSubmit} className="p-8 bg-white/95 backdrop-blur-3xl rounded-3xl shadow-2xl border border-emerald-200/50">
-                <h2 className="text-2xl font-black bg-gradient-to-r from-emerald-900 to-emerald-600 bg-clip-text text-transparent mb-6">
-                    Add New {categoryName} Item
+            <form onSubmit={onSubmit} className="p-6 max-h-[80vh] overflow-y-auto bg-white/95 backdrop-blur-3xl rounded-3xl shadow-2xl border border-emerald-200/50">
+                <h2 className="text-2xl font-black bg-gradient-to-r from-emerald-900 to-emerald-600 bg-clip-text text-transparent mb-4">
+                    Add {categoryName} Item
                 </h2>
 
-                {/* ATTRIBUTE TYPE DROPDOWN */}
-                <div className="mt-6">
+                {/* IMAGE UPLOAD */}
+                <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 mb-2">
-                        {categoryName} Type *
+                        Product Image
                     </label>
-                    <select
-                        className="w-full mt-2 border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-3 px-4 text-slate-800"
-                        value={data.attribute_type_id || ''}
-                        onChange={e => setData('attribute_type_id', e.target.value)}
-                        required
-                    >
-                        <option value="">Select {categoryName} Type</option>
-                        {filteredTypes.map(type => (
-                            <option key={type.id} value={type.id}>
-                                {type.name}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="relative mt-1 border-2 border-dashed border-emerald-300 rounded-xl p-6 bg-emerald-50/50 hover:border-emerald-400 transition-all cursor-pointer">
+                        <input
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            onChange={e => setData('image', e.target.files[0] || null)}
+                        />
+                        {data.image ? (
+                            <div className="flex items-center gap-3 text-emerald-700">
+                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-emerald-100 flex-shrink-0">
+                                    <img src={URL.createObjectURL(data.image)} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                                <span className="font-bold text-sm truncate max-w-[200px]">{data.image.name}</span>
+                            </div>
+                        ) : (
+                            <div className="text-center text-emerald-600">
+                                <Plus className="w-12 h-12 mx-auto mb-2 opacity-60" />
+                                <p className="font-semibold">Click to upload</p>
+                                <p className="text-xs text-emerald-500 mt-1">JPEG, PNG up to 2MB</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {/* ATTRIBUTE TYPE */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            {categoryName} Type *
+                        </label>
+                        <select
+                            className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
+                            value={data.attribute_type_id || ''}
+                            onChange={e => setData('attribute_type_id', e.target.value)}
+                            required
+                        >
+                            <option value="">Select Type</option>
+                            {filteredTypes.map(type => (
+                                <option key={type.id} value={type.id}>
+                                    {type.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* PRICE */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            Price (₱)
+                        </label>
+                        <input
+                            type="number"
+                            className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
+                            value={data.price || ''}
+                            onChange={e => setData('price', e.target.value)}
+                            placeholder="250.00"
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
                 </div>
 
                 {/* ITEM NAME */}
-                <div className="mt-6">
+                <div className="mb-4">
                     <label className="block text-sm font-bold text-slate-700 mb-2">
                         Item Name / Details *
                     </label>
                     <input
                         type="text"
-                        className="w-full mt-2 border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-3 px-4 text-slate-800"
+                        className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
                         value={data.item_name || ''}
                         onChange={e => setData('item_name', e.target.value)}
                         placeholder="e.g., Blue Floral Cotton V-Neck"
@@ -62,74 +107,59 @@ export default function AddNewAttributeModal({
                     />
                 </div>
 
-                {/* PRICE */}
-                <div className="mt-6">
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                        Price (₱)
-                    </label>
-                    <input
-                        type="number"
-                        className="w-full mt-2 border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-3 px-4 text-slate-800"
-                        value={data.price || ''}
-                        onChange={e => setData('price', e.target.value)}
-                        placeholder="250.00"
-                        min="0"
-                        step="0.01"
-                    />
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {/* UNIT */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            Unit
+                        </label>
+                        <select
+                            className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
+                            value={data.unit || 'per piece'}
+                            onChange={e => setData('unit', e.target.value)}
+                        >
+                            <option value="per meter">Per Meter</option>
+                            <option value="per yard">Per Yard</option>
+                            <option value="per piece">Per Piece (e.g., T-Shirts, Buttons)</option>
+                            <option value="per set">Per Set</option>
+                        </select>
+                    </div>
 
-                {/* UNIT */}
-                <div className="mt-6">
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                        Unit
-                    </label>
-                    <select
-                        className="w-full mt-2 border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-3 px-4 text-slate-800"
-                        value={data.unit || 'per piece'}
-                        onChange={e => setData('unit', e.target.value)}
-                    >
-                        <option value="per yard">per yard</option>
-                        <option value="per meter">per meter</option>
-                        <option value="per piece">per piece</option>
-                        <option value="per set">per set</option>
-                        <option value="per inch">per inch</option>
-                    </select>
+                    {/* AVAILABILITY */}
+                    <div className="flex items-center pt-1">
+                        <input
+                            type="checkbox"
+                            id="is_available"
+                            checked={data.is_available !== false}
+                            onChange={e => setData('is_available', e.target.checked)}
+                            className="h-5 w-5 text-emerald-600 border-stone-200 focus:ring-emerald-500 rounded-xl shadow-sm"
+                        />
+                        <label htmlFor="is_available" className="ml-3 text-sm font-semibold text-slate-700 select-none">
+                            Available
+                        </label>
+                    </div>
                 </div>
 
                 {/* NOTES */}
-                <div className="mt-6">
+                <div className="mb-6">
                     <label className="block text-sm font-bold text-slate-700 mb-2">
                         Notes (Optional)
                     </label>
                     <textarea
-                        className="w-full mt-2 border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-3 px-4 text-slate-800 resize-vertical"
+                        className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm resize-vertical"
                         value={data.notes || ''}
                         onChange={e => setData('notes', e.target.value)}
-                        rows={3}
-                        placeholder="Special supplier info, quality notes, etc..."
+                        rows="3"
+                        placeholder="Special notes..."
                     />
                 </div>
 
-                {/* AVAILABILITY */}
-                <div className="mt-6 flex items-center">
-                    <input
-                        type="checkbox"
-                        id="is_available"
-                        checked={data.is_available !== false}
-                        onChange={e => setData('is_available', e.target.checked)}
-                        className="h-5 w-5 text-emerald-600 border-stone-200 focus:ring-emerald-500 rounded-xl shadow-sm"
-                    />
-                    <label htmlFor="is_available" className="ml-3 text-lg font-bold text-slate-700 select-none">
-                        Available for customers
-                    </label>
-                </div>
-
-                {/* ACTIONS */}
-                <div className="mt-10 flex justify-end gap-4 pt-6 border-t border-emerald-200/30">
+                {/* ACTIONS - tighter */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-emerald-200/50">
                     <button 
                         type="button" 
                         onClick={onClose} 
-                        className="px-8 py-4 text-slate-600 font-bold hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all duration-300 shadow-md hover:shadow-slate-200"
+                        className="px-6 py-2.5 text-slate-600 font-semibold hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all text-sm"
                         disabled={processing}
                     >
                         Cancel
@@ -137,14 +167,13 @@ export default function AddNewAttributeModal({
                     <button
                         type="submit"
                         disabled={processing}
-                        className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black px-10 py-4 rounded-2xl shadow-xl hover:shadow-emerald-500/50 hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 flex items-center gap-2 text-lg"
+                        className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold px-8 py-2.5 rounded-xl shadow-lg hover:shadow-emerald-400/50 hover:scale-[1.02] transition-all disabled:opacity-50 text-sm flex items-center gap-2"
                     >
-                        <Plus className="w-5 h-5" />
-                        Add to Inventory
+                        <Plus className="w-4 h-4" />
+                        Add Item
                     </button>
                 </div>
             </form>
         </Modal>
     );
 }
-

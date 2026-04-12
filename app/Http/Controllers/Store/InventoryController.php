@@ -11,24 +11,31 @@ use App\Models\AttributeType;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InventoryController extends Controller
 {
+    public function servicesIndex()
+    {
+        $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
+        return Inertia::render('StoreAdmin/ServicesPage', [
+            'shop' => $shop,
+            'services' => Service::where('tailoring_shop_id', $shop->id)->get(),
+            'serviceCategories' => ServiceCategory::orderBy('name')->get(),
+        ]);
+    }
+
     public function index()
     {
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         return Inertia::render('StoreAdmin/Inventory', [
             'shop' => $shop,
-            'services' => Service::where('tailoring_shop_id', $shop->id)->get(),
             // Get categories and their possible attributes (Linen, Cotton, etc.)
             'categories' => AttributeCategory::with('attributeTypes')->get(),
             'attributeTypes' => AttributeType::all(),
-            // Get service categories from database
-            'serviceCategories' => ServiceCategory::orderBy('name')->get(),
             // Get what this shop currently has in stock
             'shopAttributes' => $shop->attributes()->orderByPivot('created_at', 'desc')->get(),
         ]);
-
     }
 
     public function addServices(Request $request)
@@ -45,7 +52,8 @@ class InventoryController extends Controller
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
-            ]);
+            'checkout_type' => 'required|string|in:fixed_price,requires_quote',
+        ]);
             
         // Store the service_category_id as service_category value
         Service::create([
@@ -59,6 +67,7 @@ class InventoryController extends Controller
             'rush_service_available' => $request->boolean('rush_service_available', false),
             'appointment_required' => $request->boolean('appointment_required', false),
             'notes' => $request->notes ?? '',
+            'checkout_type' => $request->checkout_type ?? 'requires_quote',
         ]);
 
         return redirect()->back()->with('message', 'Service added successfully!');
@@ -78,6 +87,7 @@ class InventoryController extends Controller
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
+            'checkout_type' => 'sometimes|string|in:fixed_price,requires_quote',
         ]);
 
         $service = Service::where('id', $id)
@@ -95,6 +105,7 @@ class InventoryController extends Controller
             'rush_service_available' => $request->boolean('rush_service_available', false),
             'appointment_required' => $request->boolean('appointment_required', false),
             'notes' => $request->notes ?? '',
+            'checkout_type' => $request->checkout_type ?? $service->checkout_type,
         ]);
         
         return redirect()->back()->with('message', 'Service updated successfully!');
@@ -120,23 +131,28 @@ class InventoryController extends Controller
             'item_name' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
         ]);
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
-        
         // Add to shop inventory with item_name
+        $image_url = null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('materials', 'public');
+            $image_url = $path;
+        }
+
         $shop->attributes()->attach($request->attribute_type_id, [
             'item_name' => $request->item_name ?? '',
             'price' => $request->price,
             'unit' => $request->unit,
             'notes' => $request->notes ?? '',
             'is_available' => true,
-            ]);
+            'image_url' => $image_url,
+        ]);
             
-        // Check if shop already has this attribute
-            return redirect()->back()->with('message', 'New attribute added to your inventory!');
-        }
-
+        return redirect()->back()->with('message', 'New attribute added to your inventory!');
+    }
 
     public function storeCategory(Request $request)
     {
@@ -152,7 +168,7 @@ class InventoryController extends Controller
         return redirect()->back()->with('message', 'New category added to the system!');
     }
 
-    public function updateShopAttribute(Request $request, $id)
+    public function updateShopAttribute(Request $request, $pivotId)
     {
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
@@ -160,16 +176,35 @@ class InventoryController extends Controller
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
             'item_name' => 'nullable|string|max:255',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
         ]);
 
-        // Update the pivot table data
-        $shop->attributes()->updateExistingPivot($id, [
+        $image_url = null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('materials', 'public');
+            $image_url = $path;
+        }
+
+        // Build the update array
+        $updateData = [
             'price' => $request->price,
             'unit' => $request->unit,
             'item_name' => $request->item_name ?? '',
             'notes' => $request->notes ?? '',
             'is_available' => $request->boolean('is_available', true),
-        ]);
+        ];
+        
+        // Only update image if a new one was provided
+        if ($image_url) {
+            $updateData['image_url'] = $image_url;
+        }
+
+        // Instead of updateExistingPivot (which updates all matching attribute_type_ids),
+        // we directly update the specific pivot table row using the unique $pivotId.
+        DB::table('shop_attributes')
+            ->where('id', $pivotId)
+            ->where('tailoring_shop_id', $shop->id)
+            ->update($updateData);
 
         return redirect()->back()->with('message', 'Attribute updated successfully!');
     }

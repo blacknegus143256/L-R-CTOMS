@@ -14,12 +14,14 @@ class OrderItem extends Model
         'order_id',
         'attribute_type_id',
         'price',
+        'quantity', // CRITICAL FIX
     ];
 
     protected function casts(): array
     {
         return [
             'price' => 'decimal:2',
+            'quantity' => 'decimal:2',
         ];
     }
 

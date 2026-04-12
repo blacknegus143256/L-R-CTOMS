@@ -41,6 +41,7 @@ class ServiceController extends Controller
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
+            'checkout_type' => 'required|string|in:fixed_price,requires_quote',
         ]);
 
         $service = $shop->services()->create($valid);
@@ -66,6 +67,7 @@ class ServiceController extends Controller
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
+            'checkout_type' => 'sometimes|string|in:fixed_price,requires_quote',
         ]);
 
         $service->update($valid);

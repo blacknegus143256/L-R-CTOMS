@@ -7,14 +7,15 @@ export default function Logistics({
   materialSource,
   setMaterialSource,
   onNext,
-  onBack
+  onBack,
+  canNext
 }) {
   if (!service) return null;
 
   const isDroppingOff = materialSource === 'customer';
 
   // Strictly require date only if dropping off
-  const effectiveCanNext = materialSource !== 'customer' || !!materialDropoffDate;
+  const effectiveCanNext = !isDroppingOff || !!materialDropoffDate;
 
   return (
     <div className="p-6">
@@ -73,7 +74,7 @@ export default function Logistics({
         <button
           type="button"
           onClick={onNext}
-          disabled={!effectiveCanNext}
+          disabled={!canNext}
           className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-4 font-bold text-white text-lg hover:from-emerald-700 hover:to-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-500 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
           Next: Measurements →

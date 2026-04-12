@@ -6,6 +6,7 @@ import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import MapLibrePicker from "@/Components/MapLibrePicker";
+import { FiX } from 'react-icons/fi';
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
@@ -41,7 +42,7 @@ export default function UpdateProfileInformation({
                 </p>
             </header>
 
-            <form onSubmit={submit} className="mt-6 space-y-6">
+            <form onSubmit={submit} className="mt-10 space-y-10">
                 <div>
                     <InputLabel htmlFor="name" value="Name" />
 
@@ -156,31 +157,39 @@ export default function UpdateProfileInformation({
                 </div>
             </form>
             {openMap && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white w-3/4 h-3/4 rounded-xl p-4 relative">
-                    
-                    <button
-                        onClick={() => setOpenMap(false)}
-                        className="absolute top-2 right-2 text-gray-600"
-                    >
-                        ✕
-                    </button>
-        
-                    <h3 className="text-lg font-semibold mb-1">
-                        Select Location
-                    </h3>
-        
+            <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+                <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden relative">
+                    <div className="flex items-center justify-between p-3 px-5 border-b border-stone-200 shrink-0">
+                            <h3 className="text-xl font-black text-stone-800">
+                             Select Your Location
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setOpenMap(false)}
+                                className="p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-900 rounded-xl transition-colors"
+                            >
+                                <FiX className="w-4 h-4" />
+                            </button>
+                        </div>
+        <div className="flex-1 overflow-y-auto p-4 bg-stone-50/50">
                     <MapLibrePicker data={data} setData={setData} />
-        
-                    <div className="mt-4 flex justify-end">
-                        <button
-                            type="button"
-                            onClick={() => setOpenMap(false)}
-                            className="px-2 py-2 bg-orchid-blue hover:bg-orchid-purple text-white rounded focus:ring-2 focus:ring-orchid-blue/50 focus:outline-none"
-                        >
-                            Save Location
-                        </button>
-                    </div>
+        </div>
+                    <div className="p-3 px-5 border-t border-stone-200 bg-white shrink-0 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setOpenMap(false)}
+                                className="px-5 py-2 font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOpenMap(false)}
+                                className="px-6 py-2 font-black text-white bg-gradient-to-r from-orchid-blue to-orchid-purple hover:shadow-lg hover:shadow-orchid-blue/30 rounded-xl transition-all"
+                            >
+                                Confirm Location
+                            </button>
+                        </div>
                 </div>
             </div>
         )}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { router } from '@inertiajs/react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { router, usePage } from '@inertiajs/react';
 import StatusBadge from './StatusBadge';
 import TimelineNode from './TimelineNode';
 import DateRow from './DateRow';
@@ -8,12 +8,114 @@ import SpecRow from './SpecRow';
 export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     if (!order) return null;
 
+    const { props } = usePage();
+    
+    // Get potential shop objects from both contexts
+    const shopFromProps = props.shop || props.auth?.shop;
+    const shopFromOrder = order?.tailoringShop || order?.tailoring_shop;
+
+    // Smart fallback: prioritize the shop object that ACTUALLY has the attributes loaded
+    const shop = shopFromProps?.attributes 
+        ? shopFromProps 
+        : (shopFromOrder?.attributes 
+            ? shopFromOrder 
+            : (shopFromProps || shopFromOrder || {}));
+            
+    const availableShopAttributes = useMemo(() => shop.attributes || [], [shop.attributes]);
+
     const profile = order?.user?.profile || order?.customer || {};
-    const requestedMeasurements = order.measurement_snapshot?.requested || [];
-    const snapshotValues = order.measurement_snapshot?.values || {};
 
     const [localMeasurements, setLocalMeasurements] = useState({});
     const [isSaving, setIsSaving] = useState(false);
+
+// New editing states
+    const [isEditingInvoice, setIsEditingInvoice] = useState(false);
+
+    // New derived state function to map order items precisely to shop pivot IDs
+    const mapOrderItemsToSelectedState = useMemo(() => () => {
+        return order.items?.map(item => {
+            // Cross-check master attribute ID and exact price to find the correct shop inventory item
+            const matchingShopAttr = availableShopAttributes.find(a => 
+                parseInt(a.attribute_type_id || a.id) === parseInt(item.attribute_type_id) &&
+                Number(a.pivot?.price) === Number(item.price)
+            );
+            
+            // Return precisely calculated pivot IDs
+            return {
+                pivot_id: matchingShopAttr ? parseInt(matchingShopAttr.pivot.id) : null,
+                qty: Number(item.quantity) || 1
+            };
+        }).filter(item => item.pivot_id !== null) || []; // Filter any generic fallbacks
+    }, [order.items, availableShopAttributes]);
+
+    // Initialize state with precision mapper
+    const [selectedItems, setSelectedItems] = useState(mapOrderItemsToSelectedState());
+
+    // BUG FIX: Synchronize internal state with parent props when order is updated after saving
+    useEffect(() => {
+        setSelectedItems(mapOrderItemsToSelectedState());
+    }, [order, mapOrderItemsToSelectedState]);
+
+    const calculateNewTotal = useMemo(() => {
+        const basePrice = Number(order.service?.price || 0);
+        
+        const addonsTotal = selectedItems.reduce((sum, item) => {
+            const attr = availableShopAttributes.find(a => a.pivot?.id === item.pivot_id);
+            const attrPrice = Number(attr?.pivot?.price || 0);
+            return sum + (attrPrice * item.qty);
+        }, 0);
+
+        return basePrice + addonsTotal;
+    }, [order.service?.price, selectedItems, availableShopAttributes]);
+
+    const handleSaveInvoice = () => {
+        const validItems = selectedItems.filter(item => item.qty > 0);
+        router.patch(`/api/shops/${shop.id}/orders/${order.id}`, {
+            total_price: calculateNewTotal,
+            attributes: validItems
+        }, {
+            onSuccess: () => { 
+                setIsEditingInvoice(false); 
+                
+                router.reload({ preserveScroll: true });
+                alert("Invoice Updated!");
+                // The pure Inertia SPA way to refresh data smoothly
+            },
+            preserveScroll: true
+        });
+    };
+
+    const toggleAttribute = (pivotId) => {
+        setSelectedItems(prev => {
+            const exists = prev.find(item => item.pivot_id === pivotId);
+            if (exists) {
+                return prev.filter(item => item.pivot_id !== pivotId);
+            } else {
+                return [...prev, { pivot_id: pivotId, qty: 1 }];
+            }
+        });
+    };
+
+    const handleQtyChange = (pivotId, newQty) => {
+        setSelectedItems(prev => 
+            prev.map(item => 
+                item.pivot_id === pivotId 
+                    ? { ...item, qty: newQty } // Removed the Math.max(0.01) clamp to allow smooth typing
+                    : item
+            )
+        );
+    };
+
+    // Group attributes by category
+    const groupedAttributes = useMemo(() => {
+        const groups = {};
+        availableShopAttributes.forEach(attr => {
+            const category = attr.attributeCategory?.name || attr.attribute_category?.name || 'Uncategorized';
+            if (!groups[category]) groups[category] = [];
+            groups[category].push(attr);
+        });
+        return groups;
+    }, [availableShopAttributes]);
 
     const handleSaveMeasurements = () => {
         setIsSaving(true);
@@ -51,11 +153,15 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
         return 'Not Specified';
     };
 
+    const canEditInvoice = isAdmin && ['Pending', 'Accepted', 'Appointment Scheduled'].includes(order.status);
+
+    const currentTotal = isEditingInvoice ? calculateNewTotal : Number(order.total_price);
+
+    const getSelectedItem = (pivotId) => selectedItems.find(item => item.pivot_id === parseInt(pivotId));
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden flex flex-col max-h-[95vh]">
-                
-                {/* Header */}
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[90rem] overflow-hidden flex flex-col max-h-[95vh]">
                 <div className="p-8 border-b border-stone-100 flex justify-between items-start bg-stone-50/30">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
@@ -64,7 +170,6 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                         </div>
                         <div className="flex items-baseline gap-3">
                             <h3 className="text-xl font-bold text-stone-700">{order.service?.service_name}</h3>
-                            {/* Service Category Added Here */}
                             <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest px-2 py-1 bg-indigo-50 rounded-md">
                                 {order.service?.serviceCategory?.name || order.service?.service_category?.name || 'Custom Service'}
                             </span>
@@ -90,7 +195,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                 <div className="flex-1 overflow-y-auto p-8 lg:p-10">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                         
-                        {/* LEFT COLUMN: Design Context (Takes up 2/3 of the space) */}
+                        {/* LEFT COLUMN: Design Context */}
                         <div className="lg:col-span-2 space-y-8">
                             {/* Customer Details */}
                             <section>
@@ -163,27 +268,60 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                         )}
                                         
                                         <div>
-                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-2">Requested Attributes & Items</span>
+                                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-2">Material & Add-on Charges</span>
                                             {order.items && order.items.length > 0 ? (
                                                 <div className="flex flex-col gap-2">
-                                                    {order.items.map((item, idx) => {
-                                                        // Attribute Category Added Here
-                                                        const attrCategory = item.attribute?.attributeCategory?.name || item.attribute?.attribute_category?.name || 'Specification';
-                                                        const attrName = item.attribute?.name || 'Custom Add-on';
-                                                        
-                                                        return (
-                                                            <div key={idx} className="flex justify-between items-center p-3 bg-white border border-stone-200 rounded-xl shadow-sm">
-                                                                <div>
-                                                                    <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500 block mb-0.5">{attrCategory}</span>
-                                                                    <span className="text-sm font-bold text-stone-800">{attrName}</span>
-                                                                </div>
-                                                                <span className="text-sm font-black text-indigo-600">+₱{item.price}</span>
-                                                            </div>
-                                                        );
-                                                    })}
+{order.items.map((item, idx) => {
+    // Find the exact shop item to grab custom names and images
+    const exactShopItem = availableShopAttributes.find(a => 
+        parseInt(a.attribute_type_id || a.id) === parseInt(item.attribute_type_id) &&
+        Number(a.pivot?.price) === Number(item.price)
+    );
+
+    const attrCategory = exactShopItem?.attributeCategory?.name || item.attribute?.attribute_category?.name || 'Specification';
+    
+    // Use the custom item_name from the pivot table, fallback to master name
+    const attrName = exactShopItem?.pivot?.item_name || exactShopItem?.name || item.attribute?.name || 'Custom Add-on';
+    
+// Grab the image URL from the pivot table, fallback to the item's loaded attribute data
+    const imageUrl = exactShopItem?.pivot?.image_url || item.attribute?.image_url || item.image_url;
+    
+    const qty = Number(item.quantity || 1);
+    const unitPrice = Number(item.price || 0);
+    const lineTotal = unitPrice * qty;
+
+    return (
+        <div key={idx} className="flex justify-between items-center p-5 bg-white border border-stone-200 rounded-2xl shadow-sm gap-5">
+        <div className="flex items-center gap-4">
+        {imageUrl ? (
+            <div className="w-24 h-24 rounded-3xl overflow-hidden bg-stone-100 flex-shrink-0 border border-stone-200 shadow-lg">
+                <img src={`/storage/${imageUrl}`} alt={attrName} className="w-full h-full object-cover" />
+            </div>
+        ) : (
+            <div className="w-24 h-24 rounded-3xl bg-stone-50 flex items-center justify-center border border-stone-100 flex-shrink-0 text-stone-300 text-base font-black">
+                N/A
+            </div>
+        )}
+        <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 block mb-1">{attrCategory}</span>
+            <span className="text-base font-bold text-stone-800 block mb-1">{attrName}</span>
+            <span className="text-xs text-stone-500 block font-bold">
+                ₱{unitPrice.toFixed(2)} x {qty}
+            </span>
+        </div>
+    </div>
+    <span className="text-lg font-black text-indigo-600 flex-shrink-0">₱{lineTotal.toFixed(2)}</span>
+</div>
+    );
+})}
+
                                                 </div>
                                             ) : (
-                                                <p className="text-sm text-stone-500 italic">No specific attributes requested.</p>
+                                                <p className="text-sm text-stone-500 italic">
+                                                    {order.material_source === 'customer' 
+                                                        ? "Base labor only. Materials provided by customer." 
+                                                        : "Waiting for tailor to add workshop materials."}
+                                                </p>
                                             )}
                                         </div>
 
@@ -212,7 +350,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                             </section>
                         </div>
 
-                        {/* RIGHT COLUMN: Dates & Measurements (Takes up 1/3 of the space) */}
+                        {/* RIGHT COLUMN: Dates & Measurements */}
                         <div className="space-y-8">
                             
                             <section className="p-6 rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 shadow-sm">
@@ -226,11 +364,10 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        {requestedMeasurements.length > 0 ? (
-                                            requestedMeasurements.map((measure, idx) => {
-                                                // Intelligent mapping: attempts to map custom text like "Chest circumference" to "chest_circumference" in the DB.
+                                        {order.measurement_snapshot?.requested?.length > 0 ? (
+                                            order.measurement_snapshot.requested.map((measure, idx) => {
                                                 const profileKey = measure.toLowerCase().replace(/ /g, '_');
-                                                const val = snapshotValues[profileKey];
+                                                const val = order.measurement_snapshot?.values?.[profileKey];
 
                                                 return isAdmin ? (
                                                     <SpecRow 
@@ -264,7 +401,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                 )}
 
                                 {/* Customer Action Buttons */}
-                                {!isAdmin && requestedMeasurements.length > 0 && (
+                                {!isAdmin && order.measurement_snapshot?.requested?.length > 0 && (
                                     <div className="flex flex-col gap-3 mt-6 pt-4 border-t border-stone-100">
                                         <button 
                                             onClick={handleSaveMeasurements}
@@ -277,7 +414,6 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                         <button 
                                             onClick={() => {
                                                 setIsSaving(true);
-                                                // Save to order measurements as FINAL submission
                                                 router.patch(`/my-orders/${order.id}/measurements`, {
                                                     measurements: localMeasurements
                                                 }, {
@@ -286,7 +422,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                                     onSuccess: () => {
                                                         setIsSaving(false);
                                                         alert('✅ Final measurements have been securely sent to the shop!');
-                                                        onClose(); // Close the modal because they are done!
+                                                        onClose();
                                                     },
                                                     onError: () => {
                                                         setIsSaving(false);
@@ -310,11 +446,126 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                 <DateRow label="🏁 Expected Pickup" date={order.expected_completion_date} isAdmin={isAdmin} isHighlight />
                             </section>
 
+                            {/* Edit Invoice Section */}
+                            {canEditInvoice && (
+                                <>
+                                    {isEditingInvoice ? (
+                                        <section className="p-6 rounded-3xl bg-amber-50 border border-amber-200 shadow-sm">
+                                            <h3 className="text-[11px] font-black text-amber-800 uppercase tracking-[0.2em] mb-6">Edit Invoice - Add Materials</h3>
+                                            
+                                            <div className="mb-6">
+                                                <p className="text-[10px] font-bold text-amber-600 uppercase mb-4">Select Materials to Add:</p>
+                                                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                                    {availableShopAttributes.length === 0 ? (
+                                                        <p className="text-xs text-stone-500 italic">No inventory items found in shop record.</p>
+                                                    ) : (
+                                                        Object.entries(groupedAttributes).map(([category, attrs]) => (
+                                                            <div key={category} className="space-y-2">
+                                                                <h4 className="text-[9px] font-black text-stone-400 uppercase tracking-tighter">{category}</h4>
+                                                                <div className="grid grid-cols-1 gap-2">
+                                                                    {attrs.map(attr => {
+                                                                        const pivotId = parseInt(attr.pivot?.id);
+                                                                        const selItem = getSelectedItem(pivotId);
+                                                                        const isSelected = !!selItem;
+                                                                        const unit = attr.pivot?.unit || 'units';
+                                                                        return (
+                                                                            <div key={pivotId} className="flex items-center gap-2 p-3 rounded-xl border-2 transition-all bg-white">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleAttribute(pivotId)}
+                                                                                    className={`flex-1 justify-between items-center p-2 rounded-lg border transition-all text-left ${
+                                                                                        isSelected 
+                                                                                            ? 'border-amber-500 bg-amber-100 text-amber-900 font-bold border-2' 
+                                                                                            : 'border-stone-200 hover:border-amber-300'
+                                                                                    }`}
+                                                                                >
+                                                                                    <span className="font-bold text-xs">{attr.pivot?.item_name || attr.name}</span>
+
+                                                                                    <span className="font-black text-xs">₱{attr.pivot?.price}/{unit}</span>
+                                                                                </button>
+                                                                                {isSelected && (
+<input
+  type="number"
+  min="0"
+  step="0.1"
+  // UX Fix: Allow empty string for easy backspacing
+  value={selItem.qty === 0 ? '' : selItem.qty}
+  placeholder="1.0"
+  onChange={(e) => {
+    const val = e.target.value;
+    if (val === '') {
+      handleQtyChange(pivotId, 0); // Allow empty state
+    } else {
+      const parsed = parseFloat(val);
+      if (!isNaN(parsed)) handleQtyChange(pivotId, parsed);
+    }
+  }}
+  className="w-20 h-10 text-right border border-amber-300 rounded-lg px-2 py-1 text-sm font-bold bg-amber-50 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+/>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Dynamic Total Preview */}
+                                            <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-inner mb-6">
+                                                <div className="flex justify-between text-sm font-bold text-amber-800 mb-2">
+                                                    <span>Preview Total:</span>
+                                                    <span>₱{Number(currentTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            <div className="flex gap-3">
+                                                <button 
+                                                    onClick={handleSaveInvoice}
+                                                    className="flex-1 py-3 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 transition shadow-lg"
+                                                >
+                                                    💾 Save Invoice
+                                                </button>
+                                                <button 
+                                                    onClick={() => setIsEditingInvoice(false)}
+                                                    className="px-6 py-3 bg-stone-200 text-stone-700 font-bold rounded-xl hover:bg-stone-300 transition shadow-sm"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </section>
+                                    ) : (
+                                        <button
+                                            onClick={() => setIsEditingInvoice(true)}
+                                            className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg text-sm uppercase tracking-wide"
+                                        >
+                                            ✏️ Edit Invoice & Add Materials
+                                        </button>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Total Invoice Section */}
                             <section className="p-6 rounded-3xl bg-stone-900 text-white shadow-xl">
-                                <p className="text-[10px] font-bold uppercase tracking-widest opacity-75 mb-2">Total Invoice</p>
-                                <div className="flex justify-between items-baseline">
+        {/* New explicit base labor calculation line */}
+                                <div className="flex justify-between items-baseline opacity-80 mb-3 border-b border-white/10 pb-3">
+                                    <span className="text-xs font-bold uppercase tracking-wider">{order.service?.service_name} (Base Labor)</span>
+                                    <span className="text-xl font-bold">₱{Number(order.service?.price).toFixed(2)}</span>
+                                </div>
+
+                                {/* Materials/Add-ons subtotal line */}
+                                <div className="flex justify-between items-baseline opacity-80 mb-5 pb-3">
+                                    <span className="text-xs font-bold uppercase tracking-wider">Materials & Hardware</span>
+                                    <span className="text-xl font-bold">₱{(Number(currentTotal) - Number(order.service?.price)).toFixed(2)}</span>
+                                </div>
+
+                                {/* Final calculated Grand Total */}
+                                <div className="flex justify-between items-baseline pt-2 border-t-2 border-white/10">
                                     <span className="text-sm font-bold opacity-90">Grand Total</span>
-                                    <span className="text-3xl font-black text-amber-400">₱{Number(order.total_price).toLocaleString()}</span>
+                                    <span className="text-4xl font-black text-amber-400">₱{Number(currentTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                             </section>
 
@@ -335,6 +586,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                     </button>
                 </div>
             </div>
-        </div>
+            </div>
     );
 }
+

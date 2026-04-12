@@ -257,7 +257,7 @@ export default function MapLibrePicker({ data, setData }) {
             {/* 2. Fixed-Size Map */}
             <div 
                 ref={mapContainer} 
-                style={{ height: '275px', minHeight: '275px' }}
+                style={{ height: '200px', minHeight: '200px' }}
                 className="w-full rounded-lg border border-stone-200 shadow-inner" 
             />
 
@@ -285,29 +285,22 @@ export default function MapLibrePicker({ data, setData }) {
                         <span>Detecting location...</span>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                        {/* Purok */}
-                        <div className="bg-white p-1.5 rounded border border-stone-100">
-                            <span className="text-xs text-stone-500 uppercase tracking-wide">Purok</span>
-                            <p className="font-medium text-stone-800">{data.purok || '—'}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-wider block mb-0.5">Purok</span>
+                            <p className="text-xs font-bold text-stone-800 truncate" title={data.purok || '—'}>{data.purok || '—'}</p>
                         </div>
-
-                        {/* Landmark */}
-                        <div className="bg-white p-1.5 rounded border border-stone-100">
-                            <span className="text-xs text-stone-500 uppercase tracking-wide">Landmark</span>
-                            <p className="font-medium text-stone-800">{landmark || '—'}</p>
+                        <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-wider block mb-0.5">Landmark</span>
+                            <p className="text-xs font-bold text-stone-800 truncate" title={landmark || '—'}>{landmark || '—'}</p>
                         </div>
-
-                        {/* Barangay */}
-                        <div className="bg-white p-1.5 rounded border border-stone-100">
-                            <span className="text-xs text-stone-500 uppercase tracking-wide">Barangay</span>
-                            <p className="font-medium text-stone-800">{data.barangay || '—'}</p>
+                        <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-wider block mb-0.5">Barangay</span>
+                            <p className="text-xs font-bold text-stone-800 truncate" title={data.barangay || '—'}>{data.barangay || '—'}</p>
                         </div>
-
-                        {/* Street */}
-                        <div className="bg-white p-1.5 rounded border border-stone-100">
-                            <span className="text-xs text-stone-500 uppercase tracking-wide">Street</span>
-                            <p className="font-medium text-stone-800">{data.street || '—'}</p>
+                        <div className="bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-wider block mb-0.5">Street</span>
+                            <p className="text-xs font-bold text-stone-800 truncate" title={data.street || '—'}>{data.street || '—'}</p>
                         </div>
                     </div>
                 )}

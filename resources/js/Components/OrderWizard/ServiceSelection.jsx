@@ -17,7 +17,7 @@ export default function ServiceSelection({ shop, onServiceSelect, disabled = fal
               </svg>
             </div>
             <h4 className="text-xl font-bold text-stone-800 mb-2 text-center group-hover:text-amber-700 transition-colors">{service.service_name}</h4>
-            <div className="text-2xl font-black text-amber-600 mb-3 text-center">₱{Number(service.price || 0).toLocaleString()}</div>
+<div className="text-2xl font-black text-amber-600 mb-3 text-center">Starts at ₱{Number(service.price || 0).toLocaleString()}*</div>
             <div className="text-sm text-stone-600 mb-4 text-center">{service.service_category?.name}</div>
             <div className="flex items-center justify-center">
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${disabled ? 'bg-stone-200 text-stone-500 cursor-not-allowed' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}>
@@ -27,6 +27,9 @@ export default function ServiceSelection({ shop, onServiceSelect, disabled = fal
           </div>
         ))}
       </div>
+      <p className="text-center text-sm text-stone-500 mt-6 italic">
+         * The prices listed above cover the base labor cost. The final total may vary depending on the materials, fabrics, and customizations you select in the following steps.
+      </p>
       {disabled && (
         <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
           <div className="text-amber-800 font-medium">Loading services...</div>

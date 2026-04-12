@@ -33,7 +33,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // For the Store Admin
 Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
     Route::get('/store/dashboard', [StoreDashboardController::class, 'index'])->name('store.dashboard');
-    Route::get('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'index'])->name('store.inventory');
+Route::get('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'index'])->name('store.inventory');
+    Route::get('/store/services', [App\Http\Controllers\Store\InventoryController::class, 'servicesIndex'])->name('store.services');
     
     // Store Orders - redirect to orders page with shop ID
     Route::get('/store/orders', function () {
@@ -46,7 +47,7 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
     
     // Store Orders page with shop ID - fetch orders directly
     Route::get('/store/orders/{shopId}', function ($shopId) {
-        $shop = TailoringShop::findOrFail($shopId);
+$shop = TailoringShop::with(['attributes.attributeCategory'])->findOrFail($shopId);
         
         // Get orders for this shop with related data
         $orders = Order::where('tailoring_shop_id', $shopId)
@@ -75,6 +76,8 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
         
         return back()->with('message', 'Order status updated successfully!');
     })->name('store.orders.update-status');
+
+    Route::patch('/api/shops/{shop}/orders/{order}', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'update'])->name('api.shops.orders.update');
 
     Route::post('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'addServices'])->name('store.services.add');
     Route::put('/store/inventory/{id}', [App\Http\Controllers\Store\InventoryController::class, 'updateServices'])->name('store.services.update');
@@ -135,7 +138,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-orders', function () {
         // Get orders for the current logged in user
         $orders = Order::where('user_id', Auth::id())
-            ->with(['user.profile', 'service.serviceCategory', 'items.attribute', 'tailoringShop'])
+->with(['user.profile', 'service.serviceCategory', 'items.attribute', 'tailoringShop.attributes'])
             ->latest()
             ->get();
             
@@ -149,7 +152,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::get('/shop/{shop}',  function ($shop){
-    $shop = TailoringShop::with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory'])->findOrFail($shop);
+$shop = TailoringShop::with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory', 'user.profile'])->findOrFail($shop);
 
     return Inertia::render('Shop', [
         'shop' => $shop

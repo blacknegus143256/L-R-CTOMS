@@ -62,9 +62,14 @@ export default function MyOrders({ auth, orders = [] }) {
                                         </div>
 
                                         <div className="flex items-center gap-6">
-                                            <div className="text-right hidden sm:block">
-                                                <p className="text-2xl font-black text-stone-900 leading-none">₱{Number(order.total_price).toLocaleString()}</p>
-                                                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-1">Total</p>
+                                            <div className="text-right hidden sm:block flex flex-col items-end">
+                                                <p className="text-2xl font-black text-stone-900 leading-none mb-1">₱{Number(order.total_price).toLocaleString()}</p>
+                                                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Total</p>
+                                                {order.total_price > (order.service?.price || 0) && (
+                                                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-md font-bold mt-1">
+                                                        Price Updated with Materials
+                                                    </span>
+                                                )}
                                             </div>
                                             
                                             {/* ✨ THE MAGIC BUTTON ✨ */}

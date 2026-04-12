@@ -7,6 +7,8 @@ export default function MaterialSourcing({
   materialAttrs, 
   selectedAttributes,
   toggleAttribute,
+  attributeQuantities,
+  updateAttributeQuantity,
   onNext,
   canNext,
   onBack
@@ -78,7 +80,7 @@ export default function MaterialSourcing({
               </svg>
             </div>
             <h4 className="font-bold text-stone-800">Avail from the Shop</h4>
-            <p className="text-xs text-stone-500 mt-2">Pick from our available fabrics and stock</p>
+<p className="text-xs text-stone-500 mt-2">Purchase from our premium fabrics and stock (Added to total cost)</p>
           </div>
         </label>
       </div>
@@ -117,21 +119,61 @@ export default function MaterialSourcing({
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {items.map(attr => {
-                      const isSelected = selectedAttributes.includes(attr.id);
+                      const uniqueId = attr.pivot?.id;
+                      const isSelected = selectedAttributes.includes(uniqueId);
                       return (
-                        <button
-                          key={attr.id}
-                          type="button"
-                          onClick={() => toggleAttribute(attr.id)}
-                          className={`p-3 text-left rounded-xl border-2 transition-all ${
-                            isSelected 
-                              ? 'border-indigo-500 bg-indigo-50' 
-                              : 'border-stone-100 hover:border-indigo-200'
-                          }`}
-                        >
-                          <span className="block font-bold text-stone-800">{attr.name}</span>
-                          <span className="block text-xs font-bold text-stone-500">+₱{attr.pivot?.price || 0}</span>
-                        </button>
+                        <div key={uniqueId} className="flex flex-col gap-2 p-2">
+<button
+    type="button"
+    onClick={() => toggleAttribute(uniqueId)}
+    className={`p-4 text-left rounded-2xl border-2 transition-all w-full flex items-center gap-4 ${
+        isSelected 
+        ? 'border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100' 
+        : 'border-stone-100 hover:border-indigo-200 bg-white'
+    }`}
+>
+    {attr.pivot?.image_url ? (
+        <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-stone-200 shadow-sm bg-white">
+            <img src={`/storage/${attr.pivot.image_url}`} alt={attr.pivot?.item_name || attr.name} className="w-full h-full object-cover" />
+        </div>
+    ) : (
+        <div className="w-20 h-20 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center flex-shrink-0 text-xs font-black text-stone-400">
+            N/A
+        </div>
+    )}
+    <div className="flex-1">
+        <span className="block font-black text-stone-800 text-lg leading-tight mb-1">
+            {attr.pivot?.item_name || attr.name}
+        </span>
+        <span className="block text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2">
+            {attr.name}
+        </span>
+        <span className="block text-sm font-black text-stone-700 bg-white inline-block px-2 py-1 rounded-lg border border-stone-100">
+            +₱{attr.pivot?.price || 0} <span className="text-stone-400 font-bold text-xs">per {attr.pivot?.unit || 'unit'}</span>
+        </span>
+    </div>
+</button>
+                          {isSelected && (
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0.1"
+                              placeholder="1.0"
+                              value={attributeQuantities[uniqueId] === 0 ? '' : attributeQuantities[uniqueId]}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  updateAttributeQuantity(uniqueId, 0);
+                                } else {
+                                  const parsed = parseFloat(val);
+                                  if (!isNaN(parsed)) updateAttributeQuantity(uniqueId, parsed);
+                                }
+                              }}
+                              className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm font-bold"
+/>
+
+                          )}
+                        </div>
                       );
                     })}
                   </div>

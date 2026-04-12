@@ -13,9 +13,6 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     
     const requireAuth = useRequireAuth(setShowAuthModal, setActionName);
     
-    const services = shop.services || [];
-    const attributes = shop.attributes || [];
-
     const handleProtectedAction = (action) => {
         if (!user) {
             setActionName(action);
@@ -25,118 +22,192 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
         window.location.href = `/shop/${shop.id}`;
     };
 
+    // Safely group attributes
+    const groupedAttributes = shop.attributes?.reduce((acc, attr) => {
+        const catName = attr.attributeCategory?.name || attr.attribute_category?.name || 'Uncategorized';
+        const typeName = attr.name || 'Generic';
+
+        if (!acc[catName]) acc[catName] = {};
+        if (!acc[catName][typeName]) acc[catName][typeName] = [];
+
+        acc[catName][typeName].push(attr);
+        return acc;
+    }, {}) || {};
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-stone-900 via-stone-900 to-orchid-purple/10 backdrop-blur-sm p-4">
-            <div className="bg-white/95 border border-stone-100/50 rounded-3xl shadow-2xl overflow-hidden max-w-4xl w-full backdrop-blur-sm max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col relative">
                 
-                {/* Header */}
-                <div className="p-8 bg-gradient-to-r from-orchid-blue/5 to-orchid-purple/5 border-b border-stone-100/30 flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <div className="relative">
-                            <div className="relative w-24 h-24 rounded-2xl bg-stone-100 ring-4 ring-orchid-blue/20 overflow-hidden flex items-center justify-center">
-                                <span className="text-3xl font-black text-stone-800">
-                                    {shop.shop_name.split(' ')[0]?.[0] || 'T'}
-                                </span>
-                                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-4 border-white shadow-lg"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <h2 className="text-3xl font-bold text-stone-900">{shop.shop_name}</h2>
-                            <p className="text-orchid-blue/80 text-sm font-medium italic mt-1 leading-relaxed max-w-md">
-                                {shop.description || 'Available for custom sewing and repairs.'}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-stone-400 hover:text-stone-600 p-2 -m-2 rounded-xl hover:bg-stone-100 transition-all">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
+                {/* Close Button */}
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-6 right-6 z-20 w-10 h-10 bg-white/50 hover:bg-white backdrop-blur-md rounded-full flex items-center justify-center text-stone-600 transition-all shadow-sm"
+                >
+                    ✕
+                </button>
 
-                {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-12">
-                    
-                    {/* Unified Symmetrical Service Grid */}
-                    <section className="mt-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {services.slice(0, 10).map((s) => {
-                                const isRepair = s.service_category.slug?.includes('repairs') || s.service_category.slug?.includes('alterations');
-                                
-                                return (
-                                    <div key={s.id} className="group relative bg-white border border-stone-100 hover:border-orchid-blue/40 rounded-2xl p-5 transition-all duration-300 hover:shadow-xl flex flex-col h-44">
-                                        
-                                        {/* Top Row: Badge & Price */}
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className={`text-[9px] font-black tracking-widest uppercase px-2 py-1 rounded-md border ${
-                                                isRepair 
-                                                    ? 'bg-orchid-purple/5 text-orchid-purple border-orchid-purple/20' 
-                                                    : 'bg-orchid-blue/5 text-orchid-blue border-orchid-blue/20'
-                                            }`}>
-                                                {isRepair ? 'Repair' : 'Custom'}
-                                            </span>
-                                            <div className="text-right">
-                                                <p className="text-xl font-black text-stone-900 leading-none">₱{Number(s.price).toFixed(0)}</p>
-                                                <p className="text-[10px] text-stone-400 font-bold uppercase mt-1">Starting</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Middle: Service Info */}
-                                        <div className="flex-1">
-                                            <h4 className="text-lg font-bold text-stone-800 leading-tight group-hover:text-orchid-blue transition-colors line-clamp-1">
-                                                {s.service_name}
-                                            </h4>
-                                            <p className="text-xs text-stone-500 mt-2 line-clamp-2 italic leading-relaxed">
-                                                {s.description || "Inquire for specific details and fabric options."}
-                                            </p>
-                                        </div>
-
-                                        {/* Bottom: Action Row */}
-                                        <div className="mt-4 pt-3 border-t border-stone-50 flex justify-end">
-                                            <button 
-                                                onClick={() => handleProtectedAction('order')}
-                                                className="flex items-center gap-2 text-orchid-blue text-xs font-bold hover:text-orchid-purple transition-all"
-                                            >
-                                                Select Service
-                                                <div className="w-6 h-6 rounded-lg bg-stone-900 text-white flex items-center justify-center group-hover:bg-orchid-blue transition-colors">
-                                                    <span className="text-sm">→</span>
-                                                </div>
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
-
-
-                    {/* Craftsmanship Options */}
-                    {attributes.length > 0 && (
-                        <section>
-                            <h3 className="text-stone-400 text-sm font-bold uppercase tracking-wider mb-6">Materials & Hardware</h3>
-                            <div className="flex flex-wrap gap-3">
-                                {attributes.slice(0, 12).map((attr) => (
-                                    <span key={attr.id} className="bg-stone-100 border border-stone-200 px-4 py-2 rounded-xl text-stone-600 text-sm font-medium">
-                                        {attr.name}
-                                    </span>
-                                ))}
-                            </div>
-                        </section>
+                {/* Hero / Cover Section */}
+                <div className="h-40 sm:h-56 bg-gradient-to-br from-orchid-purple/20 via-orchid-blue/20 to-stone-100 relative">
+                    {shop.image_url && (
+                        <img src={shop.image_url} alt="Cover" className="w-full h-full object-cover opacity-40 mix-blend-overlay" />
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="p-8 bg-white border-t border-stone-100 flex justify-end gap-4">
-                    <button
-                        onClick={() => handleProtectedAction('view shop')}
-                        className="px-10 py-4 bg-transparent border border-stone-200 text-stone-600 font-bold rounded-2xl hover:bg-stone-50 transition-all text-sm"
-                    >
-                        Explore Atelier
+                {/* Profile Info (Overlapping Cover) */}
+                <div className="px-8 sm:px-12 -mt-16 sm:-mt-20 relative z-10 flex flex-col sm:flex-row sm:items-end gap-6 mb-8">
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 bg-white p-2 rounded-[2rem] shadow-xl flex-shrink-0">
+                        {shop.image_url ? (
+                            <img src={shop.image_url} alt={shop.shop_name} className="w-full h-full rounded-[1.5rem] object-cover" />
+                        ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-orchid-purple to-orchid-blue rounded-[1.5rem] flex items-center justify-center text-white font-black text-4xl shadow-inner">
+                                {shop.shop_name ? shop.shop_name.substring(0, 2).toUpperCase() : 'TS'}
+                            </div>
+                        )}
+                    </div>
+                    <div className="pb-2">
+                        <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight">{shop.shop_name}</h2>
+                        
+                        <div className="flex items-center gap-1.5 mt-2 mb-2">
+                            <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            {shop.user?.profile?.latitude && shop.user?.profile?.longitude ? (
+                                <a 
+                                    href={`https://maps.google.com/?q=${shop.user.profile.latitude},${shop.user.profile.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-stone-600 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title="View on Google Maps"
+                                >
+                                    {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
+                                </a>
+                            ) : (
+                                <span className="text-sm text-stone-600 font-medium truncate">
+                                    {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : "Location not specified"}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Scrollable Content Area */}
+                <div className="flex-1 overflow-y-auto px-8 sm:px-12 pb-8 custom-scrollbar">
+                    
+                    {/* 1. Services Section */}
+                    <div className="mb-8">
+                        <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest mb-4">Available Services</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+{shop.services && shop.services.length > 0 ? shop.services.map(service => (
+                    <div key={service.id} className="p-5 border-2 border-stone-100 rounded-2xl hover:border-orchid-200 transition-all bg-white group flex flex-col">
+                        <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-orchid-600 bg-orchid-50 px-2 py-1 rounded-lg">
+                                {service.serviceCategory?.name || service.service_category?.name || 'Custom'}
+                            </span>
+                            <span className="font-black text-stone-900">₱{Number(service.price).toFixed(2)}</span>
+                        </div>
+                        <h4 className="font-bold text-stone-800 text-lg mb-1">{service.service_name}</h4>
+                        <p className="text-xs text-stone-500 line-clamp-2 mb-4 flex-1">{service.service_description || 'Inquire for specific details and fabric options.'}</p>
+                        
+                        {/* New Direct Order Button */}
+                        <button
+                            onClick={() => onPlaceOrder(shop, service.id)}
+                            className="w-full mt-auto py-2.5 bg-stone-50 hover:bg-orchid-50 text-stone-600 hover:text-orchid-700 font-bold rounded-xl text-sm transition-colors flex justify-center items-center gap-2 border border-stone-100 hover:border-orchid-200"
+                        >
+                            Create Order
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                    </div>
+                )) : (
+                    <p className="text-sm text-stone-400 italic col-span-full">No services listed yet.</p>
+                )}
+                        </div>
+                    </div>
+
+                    {/* 2. Materials & Inventory Section */}
+                    <div className="mb-8 mt-10">
+                        <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest mb-6">Available Materials & Items</h3>
+                        {shop.attributes && shop.attributes.length > 0 ? (
+                            <div className="space-y-12">
+                                {Object.entries(groupedAttributes).map(([category, types]) => (
+                                    <div key={category} className="space-y-8">
+                                        {/* Category Header */}
+                                        <h4 className="text-2xl font-black text-stone-900 border-b-2 border-stone-100 pb-3 flex items-center gap-3">
+                                            <span className="w-2 h-8 bg-emerald-400 rounded-full"></span>
+                                            {category}
+                                        </h4>
+                                        
+                                        {/* Types Wrapper */}
+                                        <div className="space-y-8 pl-2 sm:pl-4">
+                                            {Object.entries(types).map(([typeName, attrs]) => (
+                                                <div key={typeName} className="space-y-4">
+                                                    {/* Type Sub-Header */}
+                                                    <h5 className="text-md font-bold text-stone-700 flex items-center gap-2">
+                                                        <svg className="w-4 h-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                        {typeName}
+                                                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 ml-1">
+                                                            {attrs.length} ITEM{attrs.length !== 1 ? 'S' : ''}
+                                                        </span>
+                                                    </h5>
+
+                                                    {/* Items Grid for this Specific Type */}
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                                        {attrs.map((attr, idx) => (
+                                                            <div key={attr.pivot?.id || `${attr.id}-${idx}`} className="group bg-stone-50 border border-stone-100 rounded-2xl overflow-hidden hover:shadow-xl hover:border-emerald-200 transition-all duration-300 flex flex-col">
+                                                                {/* Image Container */}
+                                                                <div className="h-32 bg-stone-200 relative overflow-hidden flex-shrink-0">
+                                                                    {attr.pivot?.image_url ? (
+                                                                        <img 
+                                                                            src={`/storage/${attr.pivot.image_url}`} 
+                                                                            alt={attr.pivot?.item_name || attr.name} 
+                                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                                                            onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 bg-stone-100">
+                                                                            <span className="text-2xl mb-1">📷</span>
+                                                                            <span className="text-[9px] font-bold uppercase tracking-wider">No Image</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Out of Stock Overlay */}
+                                                                    {!attr.pivot?.is_available && (
+                                                                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+                                                                            <span className="px-3 py-1 bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full">Out of Stock</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                {/* Details Container */}
+                                                                <div className="p-4 bg-white flex-1 flex flex-col">
+                                                                    <h6 className="font-bold text-stone-900 text-sm mb-2 leading-tight line-clamp-2" title={attr.pivot?.item_name || attr.name}>
+                                                                        {attr.pivot?.item_name || attr.name}
+                                                                    </h6>
+                                                                    <div className="flex items-baseline gap-1 mt-auto pt-2">
+                                                                        <span className="font-black text-emerald-700">₱{Number(attr.pivot?.price || 0).toFixed(2)}</span>
+                                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">/ {attr.pivot?.unit || 'unit'}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-stone-400 italic">No materials or items listed yet.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Sticky Footer */}
+                <div className="p-6 border-t border-stone-100 bg-stone-50/80 backdrop-blur-md flex justify-end gap-4">
+                    <button onClick={onClose} className="px-8 py-3 rounded-xl font-bold text-stone-600 hover:bg-stone-200 transition-colors">
+                        Close
                     </button>
-                    <button
-                        onClick={() => handleProtectedAction('place order')}
-                        className="px-10 py-4 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white font-bold rounded-2xl shadow-lg shadow-orchid-purple/20 hover:from-orchid-purple hover:to-orchid-blue transition-all text-sm"
-                    >
+                    <button onClick={() => onPlaceOrder(shop, null)} className="px-8 py-3 rounded-xl font-black text-white bg-gradient-to-r from-orchid-blue to-orchid-purple hover:from-orchid-blue/90 hover:to-orchid-purple/90 shadow-lg hover:shadow-orchid-500/30 transition-all hover:-translate-y-0.5">
                         Start Order
                     </button>
                 </div>

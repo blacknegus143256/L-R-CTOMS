@@ -17,6 +17,7 @@ class Service extends Model
         'service_name',
         'service_description',
         'price',
+        'checkout_type',
         'duration_days',
         'is_available',
         'rush_service_available',
@@ -28,6 +29,7 @@ class Service extends Model
     {
         return [
             'price' => 'decimal:2',
+            'checkout_type' => 'string',
             'is_available' => 'boolean',
             'rush_service_available' => 'boolean',
             'appointment_required' => 'boolean',

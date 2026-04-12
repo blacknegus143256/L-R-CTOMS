@@ -13,6 +13,7 @@ export default function OrderSummary({
   materialDropoffDate,
   notes, 
   selectedAttributes, 
+  attributeQuantities,
   designImagePreview, 
   totalPrice, 
   onSubmit,
@@ -141,20 +142,44 @@ export default function OrderSummary({
           <div>
             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-3">Requested Add-ons</span>
             <div className="flex flex-col gap-2">
-              {selectedAttributes.map((attrId) => {
-                const attr = shop?.attributes?.find(a => a.id === attrId);
-                if (!attr) return null;
-                const category = attr.attribute_category?.name || 'Add-on';
-                return (
-                  <div key={attrId} className="flex justify-between items-center p-3 bg-white border border-stone-200 rounded-xl shadow-sm">
-                    <div>
-                      <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500 block mb-0.5">{category}</span>
-                      <span className="text-sm font-bold text-stone-800">{attr.name}</span>
-                    </div>
-                    <span className="text-sm font-black text-indigo-600">+₱{attr.pivot?.price?.toLocaleString()}</span>
-                  </div>
-                );
-              })}
+{selectedAttributes.map((attrId) => {
+  const attr = shop?.attributes?.find(a => a.pivot?.id == attrId);
+  if (!attr) return null;
+
+  const category = attr.attribute_category?.name || 'Specification';
+  const qty = attributeQuantities[attrId] || 1;
+  const unit = attr.pivot?.unit || 'unit';
+  const unitPrice = Number(attr.pivot?.price || 0);
+  const lineTotal = unitPrice * qty;
+
+  return (
+<div key={attrId} className="flex justify-between items-center py-4 border-b border-stone-100 last:border-0 gap-4">
+    <div className="flex items-center gap-4">
+        {attr.pivot?.image_url ? (
+            <div className="w-16 h-16 rounded-xl overflow-hidden border border-stone-200 flex-shrink-0 shadow-sm">
+                <img src={`/storage/${attr.pivot.image_url}`} alt={attr.pivot?.item_name || attr.name} className="w-full h-full object-cover" />
+            </div>
+        ) : (
+            <div className="w-16 h-16 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-center flex-shrink-0 text-xs font-black text-stone-300">
+                N/A
+            </div>
+        )}
+        <div>
+            <span className="text-[10px] font-black uppercase text-indigo-500 block leading-none mb-1.5 tracking-wider">
+                {category} • {attr.name}
+            </span>
+            <span className="text-base font-bold text-stone-800 block mb-1">
+                {attr.pivot?.item_name || attr.name}
+            </span>
+            <span className="text-xs text-stone-500 block font-bold">
+                ₱{unitPrice.toFixed(2)} x {qty} {unit}
+            </span>
+        </div>
+    </div>
+    <span className="text-lg font-black text-stone-800 flex-shrink-0">₱{lineTotal.toFixed(2)}</span>
+</div>
+  );
+})}
             </div>
           </div>
         )}

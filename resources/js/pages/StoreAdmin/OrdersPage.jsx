@@ -42,12 +42,13 @@ export default function OrdersPage() {
 
     const handleAcceptClick = (order) => {
         setPendingStatusOrder(order);
-        if (order.measurement_type === 'scheduled') {
-            setShowAppointmentModal(true);
-        } else if (order.measurement_type === 'profile') {
+        if (order.measurement_type === 'profile') {
             // Start with one empty row
             setMeasurementFields(['']); 
             setShowMeasurementRequestModal(true);
+
+        }else if (order.measurement_type === 'scheduled') {
+            handleStatusUpdate(order.id, 'Appointment Scheduled');
         } else {
             handleStatusUpdate(order.id, 'Accepted');
         }
@@ -170,7 +171,7 @@ export default function OrdersPage() {
                                                 )}
                                                 
                                                 {order.status === 'Accepted' && (
-                                                    <button onClick={() => handleStatusUpdate(order.id, 'In Progress')} className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition flex-shrink-0 whitespace-nowrap">
+                                                    <button onClick={() => handleStatusUpdate(order.id, 'Appointment Scheduled')} className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition flex-shrink-0 whitespace-nowrap">
                                                         Start Work
                                                     </button>
                                                 )}
