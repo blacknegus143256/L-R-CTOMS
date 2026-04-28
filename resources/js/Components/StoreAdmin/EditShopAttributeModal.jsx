@@ -1,6 +1,7 @@
 import Modal from '@/Components/Modal';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { getImageUploadError } from '@/utils/imageUpload';
 
 export default function EditShopAttributeModal({ 
     show, 
@@ -11,6 +12,8 @@ export default function EditShopAttributeModal({
     submitEditAttr, 
     processing,
 }) {
+    const [imageError, setImageError] = useState('');
+
     useEffect(() => {
         if (!attribute || !show) return;
 
@@ -20,7 +23,26 @@ export default function EditShopAttributeModal({
         setEditAttrData('notes', attribute.pivot?.notes || '');
         setEditAttrData('image', null);
         setEditAttrData('is_available', attribute.pivot?.is_available ?? false);
+        setImageError('');
     }, [attribute?.id, show]);
+
+    const handleImageChange = (file) => {
+        if (!file) {
+            setImageError('');
+            setEditAttrData('image', null);
+            return;
+        }
+
+        const error = getImageUploadError(file);
+        if (error) {
+            setImageError(error);
+            setEditAttrData('image', null);
+            return;
+        }
+
+        setImageError('');
+        setEditAttrData('image', file);
+    };
 
     if (!attribute) return null;
 
@@ -41,7 +63,7 @@ export default function EditShopAttributeModal({
                             type="file"
                             accept="image/*"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            onChange={e => setEditAttrData('image', e.target.files[0] || null)}
+                            onChange={e => handleImageChange(e.target.files[0] || null)}
                         />
                         {editAttrData.image ? (
                             <div className="flex items-center gap-2 text-emerald-700 text-xs">
@@ -57,6 +79,7 @@ export default function EditShopAttributeModal({
                                 <p className="text-emerald-500">Current: {attribute.pivot?.image_url ? 'Has image' : 'No image'}</p>
                             </div>
                         )}
+                        {imageError && <p className="mt-2 text-xs font-semibold text-rose-600">{imageError}</p>}
                     </div>
                 </div>
 
@@ -154,7 +177,7 @@ export default function EditShopAttributeModal({
                     </button>
                     <button 
                         type="submit" 
-                        disabled={processing}
+                        disabled={processing || Boolean(imageError)}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-2 rounded-xl shadow-lg hover:shadow-emerald-400/50 transition-all text-sm flex items-center gap-2 disabled:opacity-50"
                     >
                         <Plus className="w-4 h-4" />

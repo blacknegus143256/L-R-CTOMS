@@ -1,359 +1,430 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { createComparisonData } from '@/utils/comparisonEngine';
+import { usePage } from '@inertiajs/react';
+import { 
+  SectionHeader, 
+  ContentRow,
+  HeaderCell 
+} from './RowComponents';
+import { MapPin, X } from 'lucide-react';
+
+/**
+ * Dumb ComparisonTable - Pure UI layer over pre-computed engine data
+ * Zero business logic, filtering, or calculations
+ */
 
 export default function ComparisonTable({
-    compareLoading,
-    compareShops,
-    categories,
-    uniqueServiceCategories,
+  compareLoading,
+  compareShops = [],
+  categories = [],
+  uniqueServiceCategories = [],
+  onViewProfile,
+  onSwapShop,
+  onOpenLocationMap,
+  onPlaceOrder,
+  onGhostClick
+}) {
+  const [selectedRow, setSelectedRow] = useState(null);
+  const { auth } = usePage().props;
+  const customerLat = auth?.user?.profile?.latitude;
+  const customerLng = auth?.user?.profile?.longitude;
+
+  // Single memoized engine call - UI boundary only
+  const data = useMemo(() => 
+    createComparisonData({ 
+      compareShops, 
+      categories, 
+      uniqueServiceCategories 
+    }), 
+    [compareShops, categories, uniqueServiceCategories]
+  );
+
+  const handleRowClick = useCallback((row) => {
+    setSelectedRow(row);
+  }, []);
+
+  const callbacks = useMemo(() => ({
     onViewProfile,
     onSwapShop,
     onOpenLocationMap,
     onPlaceOrder,
     onGhostClick,
-}) {
-    const extraGhostCol = compareShops.length === 1 ? 1 : 0;
-    const totalCols = 1 + compareShops.length + extraGhostCol;
-    const filteredServiceCategories = useMemo(() => {
-        if (compareShops.length === 0) return [];
-        return uniqueServiceCategories.filter((category) =>
-            compareShops.some((shop) => (shop.services || []).some((s) => s.service_category?.name === category))
-        );
-    }, [uniqueServiceCategories, compareShops]);
+    onRowClick: handleRowClick
+  }), [onViewProfile, onSwapShop, onOpenLocationMap, onPlaceOrder, onGhostClick, handleRowClick]);
 
-    const visibleAttributeCategories = useMemo(() => {
-        if (compareShops.length === 0) return [];
-        return categories
-            .map((cat) => {
-                const visibleAttrs = (cat.attribute_types || []).filter((attr) =>
-                    compareShops.some((shop) => (shop.attributes || []).some((a) => a.id === attr.id && a.pivot))
-                );
-                return { ...cat, visibleAttrs };
-            })
-            .filter((cat) => cat.visibleAttrs.length > 0);
-    }, [categories, compareShops]);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+
+  const toggleGroup = useCallback((groupId) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setSelectedRow(null);
+  }, []);
+
+  const getShopDistanceKm = useCallback((coordinates) => {
+    if (
+      customerLat === undefined ||
+      customerLat === null ||
+      customerLng === undefined ||
+      customerLng === null ||
+      !coordinates?.lat ||
+      !coordinates?.lng
+    ) {
+      return null;
+    }
+
+    const R = 6371;
+    const dLat = (coordinates.lat - customerLat) * Math.PI / 180;
+    const dLon = (coordinates.lng - customerLng) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(customerLat * Math.PI / 180) * Math.cos(coordinates.lat * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
+  }, [customerLat, customerLng]);
+
+const groupedRows = useMemo(() => {
+  const tree = [];
+  let currentSection = null;
+  let currentCategory = null;
+  let serviceCategoryMap = new Map(); // For Services L2 grouping
+
+  data.rows.forEach(row => {
+    if (row.type === 'section-header') {
+      // L1 Section: Services/Materials/Location  
+      currentSection = {
+        id: row.id,
+        label: row.label,
+        type: 'group',
+        level: 1,
+        children: []
+      };
+      tree.push(currentSection);
+      currentCategory = null;
+      serviceCategoryMap.clear();
+    } else if (row.type === 'subsection-header') {
+      // L2 Materials Category (existing)
+      currentCategory = {
+        id: row.id,
+        label: row.label, 
+        type: 'group',
+        level: 2,
+        children: []
+      };
+      if (currentSection) currentSection.children.push(currentCategory);
+    } else if (row.type === 'data' && row.section === 'services') {
+      // Services: Derive L2 by category name from each cell's meta
+      // Get all unique categories from all shop cells
+      const categories = new Set();
+      row.cells?.forEach(cell => {
+        if (cell?.meta?.raw?.service_category?.name) {
+          categories.add(cell.meta.raw.service_category.name);
+        }
+      });
+      // If all shops have the same category, use it; otherwise use the first available or Uncategorized
+      const serviceCat = categories.size === 1 
+        ? Array.from(categories)[0]
+        : (row.cells?.[0]?.meta?.raw?.service_category?.name || 'Uncategorized');
+      const catId = `services::${serviceCat}`;
+
+      if (!serviceCategoryMap.has(catId)) {
+        const serviceGroup = {
+          id: catId,
+          label: serviceCat,
+          type: 'group',
+          level: 2,
+          children: []
+        };
+        serviceCategoryMap.set(catId, serviceGroup);
+        if (currentSection) currentSection.children.push(serviceGroup);
+      }
+      serviceCategoryMap.get(catId).children.push(row);
+    } else if ((row.type === 'data' || row.type === 'location') && row.section !== 'services') {
+      // Materials data / Location → currentCategory or currentSection
+      if (currentCategory) {
+        currentCategory.children.push(row);
+      } else if (currentSection) {
+        currentSection.children.push(row);
+      }
+    }
+  });
+
+  // RESTORE LOCATION: Ensure Location is always the first L1 group
+  const locationRow = data.rows.find(r => r.type === 'location');
+  if (locationRow) {
+    tree.unshift({
+      id: 'group-location',
+      label: 'Location',
+      type: 'group',
+      level: 1,
+      children: [locationRow]
+    });
+  }
+
+  return tree;
+}, [data.rows]);
+
+  useEffect(() => {
+    // Auto-expand ONLY L1 sections  
+    groupedRows.forEach(group => {
+      if (group.level === 1 && !expandedGroups.has(group.id)) {
+        toggleGroup(group.id);
+      }
+    });
+  }, [groupedRows, toggleGroup, expandedGroups]);
+
+  const renderGroup = useCallback((group, depth = 0) => {
+    const isExpanded = expandedGroups.has(group.id);
+    const paddingClass = depth === 0 ? 'pl-4' : depth === 1 ? 'pl-8 pb-2' : 'pl-12';
+    const headerClass = group.level === 2 ? 'text-sm font-semibold px-2 -ml-2 rounded-lg bg-stone-100/50' : '';
 
     return (
-        <div className="rounded-xl border border-stone-200/80 bg-white/90 shadow-lg shadow-orchid-blue/5 overflow-hidden backdrop-blur-sm">
-            {compareLoading ? (
-                <div className="p-8 space-y-4 min-h-[400px]">
-                    <div className="flex gap-8">
-                        <div className="min-w-[180px] h-12 bg-gradient-to-r from-stone-200 to-stone-300 rounded-lg animate-pulse" />
-                        <div className="flex-1 space-y-4">
-                            {[1, 2, 3, 4, 5, 6].map((i) => (
-                                <div key={i} className="flex gap-8 h-20">
-                                    <div className="min-w-[180px] h-full bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 rounded-lg animate-pulse" />
-                                    <div className="flex-1 h-full bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 rounded-xl animate-pulse" />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            ) : compareShops.length > 0 ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[900px]">
-                        <thead className="sticky top-0 z-20 bg-white/70 backdrop-blur-2xl shadow-md border-b border-white/40">
-                            <tr>
-                                <th className="px-6 py-4 text-left font-bold text-lg text-stone-900 min-w-[180px] sticky left-0 z-30 bg-white/80 backdrop-blur-xl border-r border-stone-100/80">
-                                    Service / Feature
-                                </th>
-                                {compareShops.map((shop, shopIndex) => (
-                                    <th
-                                        key={shop.id}
-                                        className={`px-6 py-4 text-left font-bold text-lg min-w-[280px] ${
-                                            shopIndex === 0 ? 'text-orchid-blue' : 'text-orchid-purple'
-                                        }`}
-                                    >
-                                        <div className="text-xl font-bold mb-1 tracking-tight bg-gradient-to-r from-orchid-blue to-orchid-purple bg-clip-text text-transparent">
-                                            {shop.shop_name}
-                                        </div>
-                                        <div className="text-sm font-normal text-stone-600 mb-2">{shop.contact_number || 'No phone'}</div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => onViewProfile(shop.id)}
-                                                className="px-3 py-1 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white text-xs font-bold rounded-xl shadow-sm hover:opacity-95"
-                                            >
-                                                View Profile
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onPlaceOrder(shop)}
-                                                className="px-3 py-1 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white text-xs font-bold rounded-xl shadow-sm hover:opacity-95"
-                                            >
-                                                Place Order
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onSwapShop(shopIndex)}
-                                                className="text-xs text-stone-500 hover:text-orchid-blue"
-                                            >
-                                                Swap
-                                            </button>
-                                        </div>
-                                    </th>
-                                ))}
-                                {compareShops.length === 1 && (
-                                    <th className="px-6 py-4 text-left font-bold text-lg text-stone-400 min-w-[280px]">Challenger Slot</th>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr className="row-sweep border-b border-stone-100">
-                                <td className="px-4 py-3 font-medium text-stone-600 sticky left-0 bg-white/90 backdrop-blur-sm z-10 border-r border-stone-100">
-                                    Location
-                                </td>
-                                {compareShops.map((shop) => {
-                                    const profile = shop.user?.profile;
-                                    const lat = profile?.latitude;
-                                    const lng = profile?.longitude;
-                                    const hasCoords = lat && lng;
-                                    const addressParts = [
-                                        profile?.purok ? `Purok ${profile.purok}` : null,
-                                        profile?.street,
-                                        profile?.barangay ? `Brgy. ${profile.barangay}` : null,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(', ');
-                                    return (
-                                        <td key={shop.id} className="px-4 py-3 text-stone-700 relative z-0">
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-sm font-medium">{addressParts || 'Address not set'}</span>
-                                                {hasCoords && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            onOpenLocationMap({
-                                                                lat,
-                                                                lng,
-                                                                shopName: shop.shop_name,
-                                                                street: profile?.street,
-                                                                barangay: profile?.barangay,
-                                                            })
-                                                        }
-                                                        className="text-xs bg-stone-100/90 px-2 py-1 rounded text-stone-600 hover:bg-stone-200 transition w-fit"
-                                                    >
-                                                        Pinpoint
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    );
-                                })}
-                                {compareShops.length === 1 && (
-                                    <td className="px-4 py-3">
-                                        <div
-                                            className="h-full min-h-[84px] border-2 border-dashed border-stone-300 rounded-xl flex flex-col items-center justify-center text-stone-400 animate-pulse cursor-pointer hover:border-orchid-blue/60 hover:bg-orchid-blue/5 transition-all"
-                                            onClick={onGhostClick}
-                                            onKeyDown={(e) => e.key === 'Enter' && onGhostClick?.()}
-                                            role="button"
-                                            tabIndex={0}
-                                        >
-                                            <div className="text-2xl font-bold">+</div>
-                                            <div className="text-xs text-center px-2">
-                                                Choose a challenger from the carousel above to compare prices.
-                                            </div>
-                                        </div>
-                                    </td>
-                                )}
-                            </tr>
-
-                            {filteredServiceCategories.length > 0 && (
-                                <>
-                                    <tr className="border-b border-stone-100">
-                                        <td colSpan={totalCols} className="px-4 py-2 font-semibold text-stone-700 bg-stone-50/90">
-                                            Services
-                                        </td>
-                                    </tr>
-                                    {filteredServiceCategories.map((category) => {
-                                        const allServices = compareShops.flatMap((shop) =>
-                                            (shop.services || []).filter((s) => s.service_category?.name === category)
-                                        );
-                                        const minPrice = allServices.length
-                                            ? Math.min(...allServices.map((s) => Number(s.price ?? s.starting_price ?? 0)).filter((p) => p > 0))
-                                            : null;
-
-                                        return (
-                                            <motion.tr
-                                                key={category}
-                                                layout
-                                                className="row-sweep border-b border-stone-100 hover:bg-orchid-blue/5 transition-colors"
-                                                transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                                            >
-                                                <td className="px-6 py-4 pl-8 font-semibold text-stone-800 bg-gradient-to-r from-orchid-blue/5 to-transparent border-r border-stone-200 sticky left-0 z-10 bg-white/95 backdrop-blur-sm">
-                                                    {category}
-                                                </td>
-                                                {compareShops.map((shop, idx) => {
-                                                    const shopServices = (shop.services || []).filter((s) => s.service_category?.name === category);
-                                                    return (
-                                                        <td key={shop.id} className={`px-6 py-4 relative z-0 ${idx === 0 ? 'border-r-2 border-stone-100' : ''}`}>
-                                                            {shopServices.length > 0 ? (
-                                                                <div className="space-y-2">
-                                                                    {shopServices.map((s, i) => {
-                                                                        const price = Number(s.price ?? s.starting_price ?? 0);
-                                                                        const isWinner = minPrice !== null && price === minPrice && minPrice > 0;
-                                                                        const delta = minPrice !== null ? price - minPrice : 0;
-                                                                        return (
-                                                                            <div
-                                                                                key={i}
-                                                                                className="border border-stone-200/80 rounded-xl p-3 bg-slate-50/80 shadow-sm relative z-0"
-                                                                            >
-                                                                                <div className="font-bold text-stone-900">
-                                                                                    {s.service_name || 'Standard Service'}
-                                                                                </div>
-                                                                                <div className="mt-1 flex flex-wrap items-center gap-1">
-{isWinner ? (
-                                                                                        <div className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-orchid-blue to-orchid-purple rounded-lg shadow-[0_0_15px_rgba(176,106,179,0.4)] transform scale-105 border border-white/20">
-                                                                                            <span className="text-white font-black text-sm mr-1">₱</span>
-                                                                                            <span className="text-white font-black text-lg tracking-tight">
-                                                                                                {Number(price).toLocaleString()}
-                                                                                            </span>
-                                                                                            <div className="ml-2 bg-white/20 rounded-full p-0.5">
-                                                                                                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    ) : (
-                                                                                        <div className="inline-flex items-center px-3 py-1.5 bg-slate-950 rounded-lg shadow-lg border border-white/10">
-                                                                                            <span className="text-white font-black text-sm uppercase mr-1 opacity-70">₱</span>
-                                                                                            <span className="text-white font-black text-lg tracking-tight">
-                                                                                                {Number(price).toLocaleString()}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            ) : (
-                                                                <span className="inline-flex px-2 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-xs uppercase font-bold">N/A</span>
-                                                            )}
-                                                        </td>
-                                                    );
-                                                })}
-                                                {compareShops.length === 1 && (
-                                                    <td className="px-6 py-4">
-                                                        <div
-                                                            className="h-full min-h-[84px] border-2 border-dashed border-stone-300 rounded-xl flex flex-col items-center justify-center text-stone-400 animate-pulse cursor-pointer hover:border-orchid-blue/60 hover:bg-orchid-blue/5 transition-all"
-                                                            onClick={onGhostClick}
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            onKeyDown={(e) => e.key === 'Enter' && onGhostClick?.()}
-                                                        >
-                                                            <div className="text-2xl font-bold">+</div>
-                                                        </div>
-                                                    </td>
-                                                )}
-                                            </motion.tr>
-                                        );
-                                    })}
-                                </>
-                            )}
-
-                            {visibleAttributeCategories.length > 0 && (
-                                <tr className="border-b border-stone-100">
-                                    <td colSpan={totalCols} className="px-4 py-2 font-semibold text-stone-700 bg-stone-50/90 uppercase tracking-wide">
-                                        Materials & Specifications
-                                    </td>
-                                </tr>
-                            )}
-                            {visibleAttributeCategories.map((cat) => (
-                                <React.Fragment key={cat.id}>
-<tr className="row-sweep border-b border-stone-100 hover:bg-orchid-blue/5 transition-colors">
-    <td colSpan={totalCols} className="px-4 py-2 font-semibold text-stone-700 bg-stone-50/80">
-        {cat.name}
-    </td>
-</tr>
-                                    {(cat.visibleAttrs || []).map((attr) => {
-                                        const allAttrPrices = compareShops.flatMap((shop) =>
-                                            (shop.attributes || [])
-                                                .filter((a) => a.id === attr.id && a.pivot)
-                                                .map((a) => Number(a.pivot?.price ?? 0))
-                                                .filter((p) => p > 0)
-                                        );
-                                        const globalMin = allAttrPrices.length ? Math.min(...allAttrPrices) : null;
-
-                                        return (
-                                            <motion.tr
-                                                key={attr.id}
-                                                layout
-                                                className="row-sweep border-b border-stone-100"
-                                                transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                                            >
-                                                <td className="px-4 py-2 pl-4 text-stone-600 sticky left-0 bg-white/95 backdrop-blur-sm z-10 border-r border-stone-100">
-                                                    {attr.name}
-                                                </td>
-                                                {compareShops.map((shop) => {
-                                                    const matchedItems = (shop.attributes || []).filter((a) => a.id === attr.id && a.pivot);
-                                                    return (
-                                                        <td key={shop.id} className="px-4 py-3 relative z-0">
-                                                            {matchedItems.length > 0 ? (
-                                                                <ul className="space-y-2">
-                                                                    {matchedItems.map((item, i) => {
-                                                                        const itemPrice = Number(item.pivot?.price ?? 0);
-                                                                        const isLineWinner =
-                                                                            globalMin !== null && itemPrice > 0 && itemPrice === globalMin;
-                                                                        const over =
-                                                                            globalMin !== null && itemPrice > globalMin ? itemPrice - globalMin : 0;
-                                                                        return (
-                                                                            <li key={i} className="border-b border-stone-50 last:border-0 pb-1">
-                                                                                <div className="text-stone-800 font-medium">
-                                                                                    {item.pivot?.item_name || 'Generic'}
-                                                                                </div>
-                                                                                <div className="mt-0.5 flex flex-wrap items-center gap-1">
-{isLineWinner ? (
-                                                                                        <div className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-orchid-blue to-orchid-purple rounded-lg shadow-[0_0_15px_rgba(176,106,179,0.4)] transform scale-105 border border-white/20">
-                                                                                            <span className="text-white font-black text-sm mr-1">₱</span>
-                                                                                            <span className="text-white font-black text-lg tracking-tight">
-                                                                                                {Number(itemPrice).toLocaleString()}
-                                                                                            </span>
-                                                                                            <div className="ml-2 bg-white/20 rounded-full p-0.5">
-                                                                                                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    ) : (
-                                                                                        <div className="inline-flex items-center px-3 py-1.5 bg-slate-950 rounded-lg shadow-lg border border-white/10">
-                                                                                            <span className="text-white font-black text-sm uppercase mr-1 opacity-70">₱</span>
-                                                                                            <span className="text-white font-black text-lg tracking-tight">
-                                                                                                {Number(itemPrice).toLocaleString()}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            </li>
-                                                                        );
-                                                                    })}
-                                                                </ul>
-                                                            ) : (
-                                                                <span className="inline-flex px-2 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-xs uppercase font-bold">N/A</span>
-                                                            )}
-                                                        </td>
-                                                    );
-                                                })}
-                                                {compareShops.length === 1 && (
-                                                    <td className="px-4 py-3">
-                                                        <div
-                                                            className="h-full min-h-[52px] border-2 border-dashed border-stone-300 rounded-xl flex items-center justify-center text-stone-400 animate-pulse cursor-pointer hover:border-orchid-blue/60 hover:bg-orchid-blue/5 transition-all"
-                                                            onClick={onGhostClick}
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            onKeyDown={(e) => e.key === 'Enter' && onGhostClick?.()}
-                                                        >
-                                                            +
-                                                        </div>
-                                                    </td>
-                                                )}
-                                            </motion.tr>
-                                        );
-                                    })}
-                                </React.Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            ) : (
-                <div className="py-12 text-center text-stone-500">Select one or two shops to start comparison.</div>
+      <div key={group.id} className={paddingClass}>
+        <SectionHeader
+          label={group.label}
+          isExpanded={isExpanded}
+          onToggle={() => toggleGroup(group.id)}
+          className={headerClass}
+        />
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          isExpanded ? 'max-h-[2000px] opacity-100 mt-2' : 'max-h-0 opacity-50'
+        }`}>
+          <div className="space-y-3">
+            {group.children.map(child =>
+              child.type === 'group'
+                ? renderGroup(child, depth + 1)
+                : <ContentRow key={child.id} row={child} data={data} callbacks={callbacks} />
             )}
+          </div>
         </div>
+      </div>
     );
+  }, [expandedGroups, toggleGroup, data, callbacks]);
+
+  return (
+    <div className="w-full h-full flex flex-col bg-white">
+      {compareLoading ? (
+        <div className="p-8 space-y-4 min-h-[400px]">
+          <div className="flex gap-8">
+            <div className="min-w-[180px] h-12 bg-gradient-to-r from-stone-200 to-stone-300 rounded-lg animate-pulse" />
+            <div className="flex-1 space-y-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="flex gap-8 h-20">
+                  <div className="min-w-[180px] h-full bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 rounded-lg animate-pulse" />
+                  <div className="flex-1 h-full bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 rounded-xl animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : compareShops.length > 0 ? (
+        <div className="flex-1 overflow-hidden">
+          <div className="flex flex-nowrap gap-4 min-w-max overflow-x-auto custom-scrollbar pb-4 sticky top-0 z-10 bg-white border-b border-stone-200 shadow-sm">
+            <div className="min-w-[200px] flex-none px-6 py-4 font-bold text-lg text-left text-stone-900 bg-white/80 backdrop-blur-xl flex-shrink-0">
+              Shops
+            </div>
+            {compareShops.map((shop, shopIndex) => (
+              <HeaderCell
+                key={shop.id}
+                shop={shop}
+                shopIndex={shopIndex}
+                callbacks={callbacks}
+              />
+            ))}
+            {data.hasGhostColumn && (
+              <div className="min-w-[280px] flex-none px-6 py-4 font-bold text-lg text-left text-stone-400 bg-white/80 flex-shrink-0">
+                Challenger Slot
+              </div>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-4 px-4 pt-4">
+            {groupedRows.map((group) => renderGroup(group))}
+          </div>
+        </div>
+      ) : (
+        <div className="py-12 text-center text-stone-500">
+          Select one or two shops to start comparison.
+        </div>
+      )}
+
+      {selectedRow && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 px-4 py-8 backdrop-blur-sm"
+          onClick={closeModal}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-6xl max-h-[85vh] overflow-hidden rounded-3xl bg-white shadow-2xl border border-stone-200"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Comparison details for ${selectedRow.label}`}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-6 py-5 sticky top-0 bg-white z-10">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-stone-400">Compare Details</p>
+                <h3 className="text-2xl font-black text-stone-900 mt-1">{selectedRow.label}</h3>
+                <p className="text-sm text-stone-500 mt-1">Side-by-side shop comparison based on the selected row.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 hover:bg-stone-100 hover:text-stone-800 transition"
+                aria-label="Close comparison details"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[calc(85vh-92px)] overflow-y-auto px-6 py-6 custom-scrollbar">
+              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${compareShops.length}, minmax(260px, 1fr))` }}>
+                {compareShops.map((shop) => {
+                  const cell = selectedRow.cells.find(c => c.shopId === shop.id);
+                  const isAvailable = cell && cell.isAvailable;
+                  const isService = selectedRow.section === 'services';
+                  const isLocation = selectedRow.section === 'location';
+                  
+                  // NEW: Grab all items if available, otherwise fallback to the single raw item
+                  const itemsToRender = cell?.meta?.allItems || (cell?.meta?.raw ? [cell.meta.raw] : []);
+
+                  return (
+                    <div key={shop.id} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm relative overflow-hidden h-fit">
+                      {/* Shop Identifier */}
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orchid-blue to-orchid-purple opacity-50" />
+                      <h4 className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-4">
+                        {shop.shop_name}
+                      </h4>
+
+                      {!isAvailable || (itemsToRender.length === 0 && !isLocation) ? (
+                        <div className="h-40 flex flex-col items-center justify-center text-stone-400 bg-stone-50 rounded-xl border border-stone-100 border-dashed">
+                          <span className="text-lg font-bold">N/A</span>
+                          <span className="text-xs">Not offered by this shop</span>
+                        </div>
+                      ) : isLocation ? (
+                        <div className="space-y-4">
+                          <div className="bg-stone-50 border border-stone-200 rounded-2xl p-6 text-center flex flex-col items-center justify-center min-h-[200px]">
+                            <MapPin className="w-12 h-12 text-orchid-blue mb-4" />
+                            <h5 className="font-bold text-stone-800 text-lg mb-2">{cell?.displayValue || 'Location not set'}</h5>
+                            <div className="text-sm text-stone-500 font-medium mb-4">
+                              {shop.shop_name}
+                            </div>
+
+                            {getShopDistanceKm(cell?.meta?.coordinates) ? (
+                              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-black border border-emerald-200 text-base">
+                                🚗 {getShopDistanceKm(cell?.meta?.coordinates)} km away
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">Distance Unavailable</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-8">
+                          {/* Loop through all variations of this item */}
+                          {itemsToRender.map((itemData, itemIdx) => {
+                            // Safely extract data for this specific variation
+                            const rawImage = itemData?.image_url || itemData?.pivot?.image_url;
+                            const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
+                            const itemPrice = itemData?.pivot?.price ?? itemData?.price ?? itemData?.starting_price ?? 0;
+                            const itemName = itemData?.pivot?.item_name || itemData?.service_name || itemData?.name || selectedRow.label;
+                            const isOutOfStock = itemData?.is_available === 0 || itemData?.is_available === false || itemData?.status === 'out_of_stock';
+
+                            return (
+                              <div key={itemIdx} className={itemIdx > 0 ? 'pt-6 border-t-2 border-stone-100' : ''}>
+                                {/* Image Display */}
+                                {imageUrl && (
+                                  <div className="w-full h-48 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 mb-4">
+                                    <img src={imageUrl} alt="Item" className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+
+                                {/* Primary Details */}
+                                <div>
+                                  <div className="text-2xl font-black text-emerald-600 mb-1">
+                                    {itemPrice > 0 ? `₱${Number(itemPrice).toLocaleString(undefined, {minimumFractionDigits: 2})}` : 'Requires Quote'}
+                                  </div>
+                                  <div className="text-sm font-bold text-stone-800">
+                                    {itemName}
+                                  </div>
+
+                                  {/* Service Badges */}
+                                  {isService && (itemData?.is_rush || itemData?.requires_appointment || itemData?.is_appointment_required) && (
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                      {itemData?.is_rush && (
+                                        <span className="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-wider rounded-md border border-amber-200/60">
+                                          Rush
+                                        </span>
+                                      )}
+                                      {(itemData?.requires_appointment || itemData?.is_appointment_required) && (
+                                        <span className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wider rounded-md border border-indigo-200/60">
+                                          Appt Required
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Specifics Grid */}
+                                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100 mt-4">
+                                  {isService ? (
+                                    <>
+                                      <div>
+                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Duration</span>
+                                        <span className="text-sm font-semibold text-stone-700">{itemData?.duration || itemData?.duration_days || 'Standard'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Checkout</span>
+                                        <span className="text-sm font-semibold text-stone-700">{itemData?.checkout_type === 'fixed_price' ? 'Fixed Price' : 'Requires Quote'}</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div>
+                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Unit</span>
+                                        <span className="text-sm font-semibold text-stone-700">{itemData?.pivot?.unit || itemData?.unit || 'Item'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Status</span>
+                                        <span className={`text-sm font-bold ${isOutOfStock ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                          {isOutOfStock ? 'Out of Stock' : (itemData?.status || 'In Stock')}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Notes Section */}
+                                {(itemData?.notes || itemData?.pivot?.notes || itemData?.service_description) && (
+                                  <div className="pt-4 border-t border-stone-100 mt-4">
+                                    <span className="block text-[10px] font-bold text-stone-400 uppercase mb-1">Notes / Description</span>
+                                    <p className="text-sm text-stone-600 italic">
+                                      {itemData?.notes || itemData?.pivot?.notes || itemData?.service_description}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

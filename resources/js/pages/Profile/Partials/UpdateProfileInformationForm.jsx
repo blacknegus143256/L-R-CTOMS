@@ -2,32 +2,74 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
+import BarangaySelect from '@/Components/BarangaySelect';
+import MapPickerModal from '@/Components/MapPickerModal';
 import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { useEffect, useRef, useState } from 'react';
-import MapLibrePicker from "@/Components/MapLibrePicker";
-import { FiX } from 'react-icons/fi';
+import { useState } from 'react';
+import { getImageUploadError } from '@/utils/imageUpload';
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
     status,
     className = '',
 }) {
-    const [openMap, setOpenMap] = useState(false);
     const user = usePage().props.auth.user;
+    const [openMap, setOpenMap] = useState(false);
+    const [avatarPreview, setAvatarPreview] = useState(
+        user.profile?.avatar_url ? `/storage/${user.profile.avatar_url}` : null
+    );
+    const [avatarError, setAvatarError] = useState('');
 
-    const { data, setData, patch, errors, processing, recentlySuccessful } =
+const { data, setData, post, errors, processing, recentlySuccessful } =
         useForm({
+            _method: 'patch', // Required for method spoofing
             name: user.name,
             email: user.email,
+            avatar: null,
             phone: user.profile?.phone || '',
             barangay: user.profile?.barangay || '',
             street: user.profile?.street || '',
+            location_details: user.profile?.location_details || '',
+            latitude: user.profile?.latitude || '',
+            longitude: user.profile?.longitude || '',
         });
+
+    const handleAvatarChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const error = getImageUploadError(file);
+            if (error) {
+                setAvatarError(error);
+                setData('avatar', null);
+                return;
+            }
+
+            setAvatarError('');
+            setData('avatar', file);
+            setAvatarPreview(URL.createObjectURL(file));
+            return;
+        }
+
+        setAvatarError('');
+        setData('avatar', null);
+    };
+
+    const handleMapSave = ({ lat, lng, street }) => {
+        setData((formData) => ({
+            ...formData,
+            latitude: lat ?? formData.latitude,
+            longitude: lng ?? formData.longitude,
+            // If the map returns a street, use it. Otherwise, keep what we had.
+            street: street || formData.street,
+        }));
+    };
 
     const submit = (e) => {
         e.preventDefault();
-        patch(route('profile.update'));
+        post(route('profile.update'), { 
+            preserveScroll: true 
+        });
     };
 
     return (
@@ -43,8 +85,36 @@ export default function UpdateProfileInformation({
             </header>
 
             <form onSubmit={submit} className="mt-10 space-y-10">
-                <div>
-                    <InputLabel htmlFor="name" value="Name" />
+                <div className="flex items-center gap-6 mb-8">
+                    <div className="relative w-24 h-24 rounded-full overflow-hidden bg-stone-100 border-2 border-stone-200 shadow-sm shrink-0">
+                        {avatarPreview ? (
+                            <img src={avatarPreview} alt="Avatar Preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-stone-400 text-3xl font-black uppercase">
+                                {user.name.charAt(0)}
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <label 
+                            htmlFor="avatar-upload" 
+                            className="px-4 py-2 bg-white border border-stone-300 rounded-xl text-sm font-bold text-stone-700 hover:bg-stone-50 cursor-pointer shadow-sm transition-colors"
+                        >
+                            Change Picture
+                        </label>
+                        <input 
+                            id="avatar-upload" 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={handleAvatarChange} 
+                        />
+                        <p className="text-xs text-stone-500 mt-2 font-medium">JPG, PNG, GIF or WebP. Max size of 2MB.</p>
+                        {avatarError && <p className="mt-2 text-xs font-semibold text-rose-600">{avatarError}</p>}
+                    </div>
+                </div>
+                 <div>
+                     <InputLabel htmlFor="name" value="Name" />
 
                     <TextInput
                         id="name"
@@ -91,21 +161,23 @@ export default function UpdateProfileInformation({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <InputLabel htmlFor="barangay" value="Barangay" />
-                    <TextInput
+                    <BarangaySelect
                         id="barangay"
-                        className="mt-1 block w-full bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.barangay}
-                        onChange={(e) => setData('barangay', e.target.value)}
+                        onChange={(val) => setData('barangay', val)}
+                        error={errors.barangay}
+                        className="mt-1 bg-stone-50 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                     />
                 </div>
     
                 <div className="relative">
-                    <InputLabel htmlFor="street" value="Street" />
+                    <InputLabel htmlFor="street" value="Street / House No." />
                     <TextInput
                         id="street"
                         className="mt-1 block w-full bg-stone-50 pr-24 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
                         value={data.street}
                         onChange={(e) => setData('street', e.target.value)}
+                        placeholder="House / unit / street"
                     />
                     <button
                         type="button"
@@ -114,6 +186,19 @@ export default function UpdateProfileInformation({
                     >
                         Pin Map
                     </button>
+                </div>
+
+                <div className="md:col-span-2 mt-1">
+                    <InputLabel htmlFor="location_details" value="Landmark / Location Details (Optional)" />
+                    <textarea
+                        id="location_details"
+                        className="mt-1 block w-full rounded-2xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-700 focus:border-orchid-blue focus:ring-2 focus:ring-orchid-blue/20"
+                        value={data.location_details}
+                        onChange={(e) => setData('location_details', e.target.value)}
+                        placeholder="e.g., Near the blue gate, behind the bakery..."
+                        rows={2}
+                    />
+                    <InputError className="mt-2" message={errors.location_details} />
                 </div>
             </div>
 
@@ -141,7 +226,7 @@ export default function UpdateProfileInformation({
                 )}
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
+                    <PrimaryButton disabled={processing || Boolean(avatarError)}>Save</PrimaryButton>
 
                     <Transition
                         show={recentlySuccessful}
@@ -156,43 +241,17 @@ export default function UpdateProfileInformation({
                     </Transition>
                 </div>
             </form>
-            {openMap && (
-            <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
-                <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden relative">
-                    <div className="flex items-center justify-between p-3 px-5 border-b border-stone-200 shrink-0">
-                            <h3 className="text-xl font-black text-stone-800">
-                             Select Your Location
-                            </h3>
-                            <button
-                                type="button"
-                                onClick={() => setOpenMap(false)}
-                                className="p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-900 rounded-xl transition-colors"
-                            >
-                                <FiX className="w-4 h-4" />
-                            </button>
-                        </div>
-        <div className="flex-1 overflow-y-auto p-4 bg-stone-50/50">
-                    <MapLibrePicker data={data} setData={setData} />
-        </div>
-                    <div className="p-3 px-5 border-t border-stone-200 bg-white shrink-0 flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setOpenMap(false)}
-                                className="px-5 py-2 font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setOpenMap(false)}
-                                className="px-6 py-2 font-black text-white bg-gradient-to-r from-orchid-blue to-orchid-purple hover:shadow-lg hover:shadow-orchid-blue/30 rounded-xl transition-all"
-                            >
-                                Confirm Location
-                            </button>
-                        </div>
-                </div>
-            </div>
-        )}
+            <MapPickerModal
+                show={openMap}
+                data={data}
+                currentStreet={data.street}
+                currentBarangay={data.barangay}
+                initialLat={data.latitude}
+                initialLng={data.longitude}
+                searchQuery={data.street ? `${data.street}, ${data.barangay}` : data.barangay}
+                onClose={() => setOpenMap(false)}
+                onSave={handleMapSave}
+            />
         </section>
     );
 }

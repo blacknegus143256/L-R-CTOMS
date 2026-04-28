@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { buildMapUrl } from '@/utils/map';
 import { router, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import ViewProfile from '@/Components/ViewProfile';
@@ -6,13 +7,13 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
 import HeroSearch from '@/Components/Home/HeroSearch';
 
-import ShopCarousel from '@/Components/Home/ShopCarousel';
-import ServiceCategoryPills from '@/Components/Home/ServiceCategoryPills';
+import ServiceCarousel from '@/Components/Home/ServiceCarousel';
+
 import MaterialFilters from '@/Components/Home/MaterialFilters';
 import ShopActionCard from '@/Components/Home/ShopActionCard';
 import { FiMapPin, FiArrowRight } from 'react-icons/fi';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import ComparisonTable from '@/Components/Home/ComparisonTable'; // Preserved for future
+
+import ComparisonTable from '@/Components/Home/ComparisonTable';
 import ShopCoverCarousel from '@/Components/Home/ShopCoverCarousel';
 
 import Footer from '@/Components/Home/Footer';
@@ -27,21 +28,20 @@ export default function Home({ auth, categories: initialCategories, services: in
     const categories = initialCategories || [];
     const services = initialServices || [];
     const shops = initialShops || [];
-    const [compareShops, setCompareShops] = useState([]);
-    const [shop1Id, setShop1Id] = useState('');
-    const [shop2Id, setShop2Id] = useState('');
+
+    const [selectedForCompare, setSelectedForCompare] = useState([]);
+    const [showCompareModal, setShowCompareModal] = useState(false);
+
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [selectedServiceCategories, setSelectedServiceCategories] = useState([]);
     const [search, setSearch] = useState('');
-const [compareLoading, setCompareLoading] = useState(false);
     const [locationModalOpen, setLocationModalOpen] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState(null);
 
     const [showModal, setShowModal] = useState(false);
     const [selectedShop, setSelectedShop] = useState(null);
-    const [modalLoading] = useState(false);
-    const [isCarouselPaused, setIsCarouselPaused] = useState(false);
-    const [highlightCarousel, setHighlightCarousel] = useState(false);
+
+    // Removed carousel pause and highlight states as ServiceCarousel handles its own auto-scroll
     
 
     const [openDropdowns, setOpenDropdowns] = useState({});
@@ -78,23 +78,28 @@ const [compareLoading, setCompareLoading] = useState(false);
         return filtered;
     }, [shops, search, selectedServiceCategories, selectedAttributes]);
 
-    const loadCompare = useCallback(() => {
-        setCompareLoading(true);
-        if (shop1Id && !shop2Id) {
-            const shop1 = filteredShops.find(s => s.id == shop1Id);
-            setCompareShops([shop1].filter(Boolean));
-        } else if (!shop1Id && shop2Id) {
-            const shop2 = filteredShops.find(s => s.id == shop2Id);
-            setCompareShops([shop2].filter(Boolean));
-        } else if (shop1Id && shop2Id && shop1Id !== shop2Id) {
-            const shop1 = filteredShops.find(s => s.id == shop1Id);
-            const shop2 = filteredShops.find(s => s.id == shop2Id);
-            setCompareShops([shop1, shop2].filter(Boolean));
-        } else {
-            setCompareShops([]);
-        }
-        setCompareLoading(false);
-    }, [shop1Id, shop2Id, filteredShops]);
+    // Prevent background scrolling when any modal is active
+    useEffect(() => {
+        const isAnyModalOpen = showModal || showCompareModal || locationModalOpen;
+        document.body.style.overflow = isAnyModalOpen ? 'hidden' : 'auto';
+        
+        // Cleanup on unmount
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [showModal, showCompareModal, locationModalOpen]);
+
+    const toggleCompare = (shop) => {
+        setSelectedForCompare(prev => {
+            if (prev.find(s => s.id === shop.id)) {
+                return prev.filter(s => s.id !== shop.id);
+            }
+            if (prev.length >= 2) {
+                return [prev[0], shop];
+            }
+            return [...prev, shop];
+        });
+    };
 
     const uniqueServiceCategories = useMemo(() => {
         const cats = new Set();
@@ -115,9 +120,7 @@ const [compareLoading, setCompareLoading] = useState(false);
             .toUpperCase();
     }, []);
 
-    useEffect(() => {
-        loadCompare();
-    }, [shop1Id, shop2Id, filteredShops]);
+
 
     const toggleAttribute = (id) => {
         setSelectedAttributes((prev) =>
@@ -151,11 +154,12 @@ const [compareLoading, setCompareLoading] = useState(false);
     };
 
     
-    const onGhostClick = useCallback(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setHighlightCarousel(true);
-        setTimeout(() => setHighlightCarousel(false), 2000);
-    }, []);
+
+
+    const handleSwapShop = (index) => {
+        setShowCompareModal(false);
+        setSelectedForCompare(prev => prev.filter((_, i) => i !== index));
+    };
 
     const handlePlaceOrder = (shop, serviceId = null) => {
         if (!auth.user) {
@@ -185,20 +189,7 @@ const [compareLoading, setCompareLoading] = useState(false);
         return names;
     }, [categories, selectedAttributes]);
 
-    const handleCarouselSelectShop = useCallback((shopId) => {
-        const idStr = String(shopId);
-        if (!shop1Id) {
-            setShop1Id(idStr);
-            return;
-        }
-        if (!shop2Id && idStr !== String(shop1Id)) {
-            setShop2Id(idStr);
-            return;
-        }
-        if (idStr !== String(shop1Id)) {
-            setShop2Id(idStr);
-        }
-    }, [shop1Id, shop2Id]);
+    // Removed handleCarouselSelectShop as ServiceCarousel uses service category toggle
 
     const pageStagger = {
         hidden: { opacity: 0 },
@@ -253,37 +244,21 @@ const [compareLoading, setCompareLoading] = useState(false);
             </motion.div>
 
             {/* 2. DISCOVERY CAROUSEL */}
-            <motion.div variants={slideFromRight}
-onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
-    onMouseLeave={() => setIsCarouselPaused(false)}  // Resume from current spot
-    >
-                <ShopCarousel
-                    shops={filteredShops}
-                    isPaused={isCarouselPaused}
-                    setIsPaused={setIsCarouselPaused}
-                    getShopInitials={getShopInitials}
-                    selectedIds={[String(shop1Id), String(shop2Id)].filter(Boolean)}
-                    onSelectShop={handleCarouselSelectShop}
-                    highlightCarousel={highlightCarousel}
-                    activeCategory={selectedServiceCategories[0] || null}
-                />
-            </motion.div>
+                <motion.div variants={slideFromRight}>
+                    <ServiceCarousel
+                        categories={initialUniqueCategories?.length ? initialUniqueCategories : uniqueServiceCategories}
+                        toggle={toggleServiceCategory}
+                        selected={selectedServiceCategories}
+                    />
+                </motion.div>
 
-            {/* 3. SERVICE PILLS - Prominent Primary Filter */}
-            <motion.div variants={fadeUp} className="px-4 max-w-7xl mx-auto mb-8">
-                <h2 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-orchid-purple via-orchid-blue to-orchid-pink bg-clip-text text-transparent mb-8 px-2 border-l-8 border-orchid-blue pl-6 tracking-tight">
-                    Services:
-                
-                <ServiceCategoryPills
-                    categories={initialUniqueCategories?.length ? initialUniqueCategories : uniqueServiceCategories}
-                    selected={selectedServiceCategories}
-                    toggle={toggleServiceCategory}
-                />
-                </h2>
-            </motion.div>
+
 
             {/* 4. MAIN INTERACTION AREA (SIDEBAR + TABLE) */}
-            <motion.div variants={riseSpring} className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow">
+            <motion.div 
+    variants={riseSpring}
+className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
+
                 <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
                     {/* SIDEBAR */}
                     <motion.div 
@@ -304,13 +279,14 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
                     {/* COMPARISON ENGINE */}
 <main className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredShops.map((shop) => {
-              const activeCategory = selectedServiceCategories[0];
-              const matchingService = activeCategory 
-                ? shop.services.find(s => s.service_category?.name === activeCategory) 
-                : null;
-              const priceDisplay = matchingService 
-                ? `${activeCategory}: ₱${matchingService.price}` 
-                : 'View Services';
+              // Find ALL services the shop offers that match ANY of the selected categories
+              const matchingServices = selectedServiceCategories.length > 0 
+                ? shop.services.filter(s => selectedServiceCategories.includes(s.service_category?.name))
+                : [];
+              // Hide services from the pill list if they are already being showcased in the carousel
+              const servicesWithoutImages = matchingServices.filter(s => !s.image);
+              
+              const mapUrl = shop.google_maps_link || buildMapUrl(shop.user?.profile?.latitude, shop.user?.profile?.longitude);
               
               return (
                 <motion.div
@@ -319,16 +295,30 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
                   className="group bg-white rounded-2xl shadow-md hover:shadow-xl overflow-hidden transition-all duration-300 border border-stone-100 hover:border-orchid-200 hover:-translate-y-1"
                 >
                   {/* Integrated Flowbite-Style Image Carousel */}
-                  <ShopCoverCarousel 
+<ShopCoverCarousel 
                       shop={shop} 
                       selectedAttributes={selectedAttributes} 
-                      getShopInitials={getShopInitials} 
+                      selectedServiceCategories={selectedServiceCategories}
+                      getShopInitials={getShopInitials}
+                      categories={categories}
                   />
                   <div className="p-6 pt-5">
-                    <h3 className="text-xl font-bold text-stone-900 truncate mb-2 group-hover:text-orchid-600 transition-colors">
-
-                      {shop.shop_name}
-                    </h3>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200 bg-stone-100 text-xs font-bold text-stone-600 shadow-sm">
+                            {shop.user?.profile?.avatar_url ? (
+                                <img
+                                    src={`/storage/${shop.user.profile.avatar_url}`}
+                                    alt={shop.user?.name || shop.shop_name}
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <span>{getShopInitials(shop.user?.name || shop.shop_name)}</span>
+                            )}
+                        </div>
+                        <h3 className="text-xl font-bold text-stone-900 truncate group-hover:text-orchid-600 transition-colors">
+                            {shop.shop_name}
+                        </h3>
+                    </div>
                     
     <div className="mb-4">
     <div className="flex items-center gap-1.5 mt-1 mb-2">
@@ -336,43 +326,65 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
         </svg>
-        {shop.user?.profile?.latitude && shop.user?.profile?.longitude ? (
-            <a 
-                href={`https://www.google.com/maps?q=${shop.user?.profile?.latitude},${shop.user?.profile?.longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-stone-600 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
-                onClick={(e) => e.stopPropagation()}
-                title="View on Google Maps"
-            >
-                {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
-            </a>
-        ) : (
-            <span className="text-sm text-stone-600 font-medium truncate">
-                {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : "Location not specified"}
-            </span>
-        )}
+{mapUrl ? (
+    <a 
+        href={mapUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-stone-600 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
+        onClick={(e) => e.stopPropagation()}
+        title={shop.google_maps_link ? "Open in Google Street View" : "View on Google Maps"}
+    >
+        {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
+    </a>
+) : (
+    <span className="text-sm text-stone-400 font-medium truncate">
+        Location not available
+    </span>
+)}
     </div>
 </div>
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      matchingService 
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                        : 'bg-stone-100 text-stone-700'
-                    }`}>
-                      {priceDisplay}
+                    <div className="flex flex-wrap gap-2">
+                        {servicesWithoutImages.length > 0 ? (
+                            servicesWithoutImages.map(ms => (
+                                <div key={ms.id} className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    {ms.service_category?.name} - {ms.service_name}: ₱{ms.price}
+                                </div>
+                            ))
+                        ) : (
+                            matchingServices.length === 0 && (
+                                <div className="px-3 py-1 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700">
+                                    View Services
+                                </div>
+                            )
+                        )}
                     </div>
                   </div>
                   
                   {/* Footer */}
-                  <div className="border-t border-stone-100 p-6">
+                  <div className="border-t border-stone-100 p-4 sm:p-6 flex items-center gap-3">
                     <button
-                      onClick={() => handleViewProfile(shop.id)}
-                      className="w-full bg-gradient-to-r from-orchid-blue to-orchid-purple hover:from-orchid-blue/90 hover:to-orchid-purple/90 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02]"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCompare(shop);
+                        }}
+                        className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${
+                            selectedForCompare.find(s => s.id === shop.id)
+                                ? 'bg-orchid-50 border-orchid-200 text-orchid-700 shadow-inner'
+                                : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50 hover:border-stone-300'
+                        }`}
                     >
-                      View Profile
-                      <FiArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        ⚖️ {selectedForCompare.find(s => s.id === shop.id) ? 'Added' : 'Compare'}
                     </button>
-                  </div>
+
+                    <button
+                        onClick={() => handleViewProfile(shop.id)}
+                        className="flex-1 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2"
+                    >
+                        Profile
+                        <FiArrowRight className="w-4 h-4" />
+                    </button>
+                </div>
                 </motion.div>
               );
             })}
@@ -382,15 +394,63 @@ onMouseEnter={() => setIsCarouselPaused(true)}   // Freeze the sweep/move
 
             {/* 5. MODALS AND FOOTER */}
             {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm">
                     <ViewProfile shop={selectedShop} onClose={() => setShowModal(false)} onPlaceOrder={handlePlaceOrder} />
                 </div>
             )}
             
             {locationModalOpen && selectedLocation && (
-                <LocationMapModal location={selectedLocation} onClose={() => setLocationModalOpen(false)} />
+                <LocationMapModal locations={selectedLocation} onClose={() => setLocationModalOpen(false)} />
             )}
+            {selectedForCompare.length > 0 && (
+                <motion.div 
+                    initial={{ y: 100, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="fixed bottom-0 left-0 right-0 z-[60] bg-white/95 border-t p-4"
+                >
+                    <div className="max-w-7xl mx-auto flex justify-between items-center">
+                        <span>{selectedForCompare.length} selected</span>
 
+                        <button
+                            disabled={selectedForCompare.length < 2}
+                            onClick={() => setShowCompareModal(true)}
+                            className="px-6 py-2 bg-black text-white rounded"
+                        >
+                            Compare
+                        </button>
+                    </div>
+                </motion.div>
+            )}
+{showCompareModal && (
+    <div className="fixed inset-0 z-[70] isolate flex items-start justify-center bg-stone-900/60 backdrop-blur-sm p-4 sm:p-6 sm:pt-12">
+        <div className="bg-white w-[95vw] max-w-7xl min-w-[320px] mx-auto max-h-[90vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden relative">
+            <div className="flex items-center justify-between p-6 border-b border-stone-200 shrink-0">
+                <div>
+                    <h2 className="text-2xl font-black text-stone-900">Shop Comparison</h2>
+                    <p className="text-sm text-stone-500 mt-1">Comparing services, prices, and materials.</p>
+                </div>
+                <button onClick={() => setShowCompareModal(false)} className="w-10 h-10 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold transition-colors">
+                    ✕
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-stone-50/50">
+                <ComparisonTable
+                    compareLoading={false}
+                    compareShops={selectedForCompare}
+                    categories={categories}
+                    uniqueServiceCategories={uniqueServiceCategories}
+                    onViewProfile={handleViewProfile}
+                    onPlaceOrder={handlePlaceOrder}
+                    onOpenLocationMap={(loc) => {
+                        setSelectedLocation(loc);
+                        setLocationModalOpen(true);
+                    }}
+                    onSwapShop={handleSwapShop}
+                />
+            </div>
+        </div>
+    </div>
+)}
             <Footer />
         </motion.div>
     );

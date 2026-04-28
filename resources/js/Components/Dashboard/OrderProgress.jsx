@@ -3,16 +3,29 @@ import React from 'react';
 const ORDER_STEPS = ['Ordered', 'Accepted', 'Measuring', 'Tailoring', 'Ready'];
 
 const getStepIndex = (status) => {
+    // Normalize status to lowercase to prevent case-sensitivity bugs
+    const rawStatus = (status || 'pending')
+        .toString()
+        .trim()
+        .toLowerCase();
+
     const statusMap = {
-        'Pending': 0,
-        'Accepted': 1,
-        'Appointment Scheduled': 2, 
-        'In Progress': 3,
-        'Ready': 4,
-        'Completed': 4,
-        'Cancelled': 0
+        'requested': 0,
+        'pending': 0,
+        'quoted': 1,
+        'confirmed': 2,
+        'appointment scheduled': 2,
+        'ready for production': 2,
+        'in progress': 3,
+        'in production': 3,
+        'ready': 4,
+        'ready for pickup': 4,
+        'completed': 4,
+        'rejected': 0,
+        'declined': 0,
+        'cancelled': 0
     };
-    return statusMap[status] || 0;
+    return statusMap[rawStatus] || 0;
 };
 
 export default function OrderProgress({ status, className = '' }) {

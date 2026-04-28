@@ -4,9 +4,11 @@ import { useForm } from '@inertiajs/react';
 import AddNewAttributeModal from './AddNewAttributeModal';
 import EditShopAttributeModal from './EditShopAttributeModal';
 import AddCategoryModal from '@/Components/StoreAdmin/AddCategoryModal';
+import { showAlert } from '@/utils/alert';
+import { confirmDialog } from '@/utils/dialog';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 
-export default function InventoryAssetsManager({ categories, shopAttributes, attributeTypes }) {
+export default function InventoryAssetsManager({ categories, shopAttributes, attributeTypes, onSaved }) {
     const [newAttributeModal, setNewAttributeModal] = useState(false);
     const [targetCategoryId, setTargetCategoryId] = useState(null);
     const [categoryModal, setCategoryModal] = useState(false);
@@ -40,6 +42,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
             forceFormData: true,
             onSuccess: () => {
                 closeNewAttributeModal();
+                onSaved?.();
             }
         });
     };
@@ -54,6 +57,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
             onSuccess: () => {
                 setCategoryModal(false);
                 resetCategoryForm();
+                onSaved?.();
             }
         });
     };
@@ -95,18 +99,35 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () =>{ closeEditAttrModal();
-                alert("Inventory item updated successfully!");
+                onSaved?.();
+                showAlert({
+                    title: 'Success',
+                    message: 'Inventory item updated successfully!',
+                    type: 'success',
+                });
             }, 
             onError: (errors) => {
                 // If Laravel rejects the image or data, this will catch it!
                 console.error("Validation Errors:", errors);
-                alert("Update failed! Please check your browser console. The image might be too large or the wrong format.");
+                showAlert({
+                    title: 'Update Error',
+                    message: 'Update failed! Please check your browser console. The image might be too large or the wrong format.',
+                    type: 'error',
+                });
             }
         });
     };
 
-    const deleteAttribute = (id) => {
-        if (confirm('Are you sure you want to remove this attribute from your inventory?')) {
+    const deleteAttribute = async (id) => {
+        const confirmed = await confirmDialog({
+            title: 'Remove Attribute',
+            message: 'Are you sure you want to remove this attribute from your inventory?',
+            confirmText: 'Remove',
+            cancelText: 'Cancel',
+            type: 'error',
+        });
+
+        if (confirmed) {
             router.delete(route('store.attributes.delete', id));
         }
     };
@@ -252,7 +273,7 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
                                 <button
                                     key={cat.id}
                                     onClick={() => openNewAttributeModal(cat.id)}
-                                    className="group relative bg-white/80 backdrop-blur-xl hover:bg-white hover:shadow-2xl hover:shadow-emerald-500/25 hover:border-emerald-400/80 hover:scale-[1.05] transition-all duration-500 rounded-3xl border-2 border-emerald-200/50 p-10 text-center shadow-xl hover:shadow-emerald-300/20"
+                                    className="group relative bg-white/80 backdrop-blur-xl hover:bg-white hover:shadow-2xl hover:shadow-emerald-500/25 hover:border-emerald-400/80 hover:scale-[1.05] transition-all duration-500 rounded-3xl border-2 border-emerald-200/50 p-10 text-center shadow-xl"
                                 >
                                     <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400/20 to-emerald-500/20 rounded-3xl blur opacity-0 group-hover:opacity-100 transition duration-1000 group-hover:animate-tilt"></div>
                                     <div className="relative flex flex-col items-center gap-4">

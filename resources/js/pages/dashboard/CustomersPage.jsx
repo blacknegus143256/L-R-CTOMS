@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { confirmDialog } from '@/utils/dialog';
 
 export default function CustomersPage() {
     const { shopId } = useParams();
@@ -57,7 +58,15 @@ export default function CustomersPage() {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Delete this customer?')) return;
+        const confirmed = await confirmDialog({
+            title: 'Delete Customer',
+            message: 'Delete this customer?',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'error',
+        });
+
+        if (!confirmed) return;
         try {
             await axios.delete(`/api/dashboard/shops/${shopId}/customers/${id}`);
             fetchList();

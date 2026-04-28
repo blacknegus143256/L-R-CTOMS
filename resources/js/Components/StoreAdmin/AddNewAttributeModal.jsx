@@ -1,5 +1,7 @@
 import Modal from '@/Components/Modal';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { getImageUploadError } from '@/utils/imageUpload';
 
 export default function AddNewAttributeModal({
     isOpen,
@@ -17,6 +19,25 @@ export default function AddNewAttributeModal({
     const filteredTypes = attributeTypes.filter(
         type => Number(type.attribute_category_id) === Number(targetCategoryId || 0)
     );
+    const [imageError, setImageError] = useState('');
+
+    const handleImageChange = (file) => {
+        if (!file) {
+            setImageError('');
+            setData('image', null);
+            return;
+        }
+
+        const error = getImageUploadError(file);
+        if (error) {
+            setImageError(error);
+            setData('image', null);
+            return;
+        }
+
+        setImageError('');
+        setData('image', file);
+    };
 
     return (
         <Modal show={isOpen} onClose={onClose}>
@@ -35,7 +56,7 @@ export default function AddNewAttributeModal({
                             type="file"
                             accept="image/*"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            onChange={e => setData('image', e.target.files[0] || null)}
+                            onChange={e => handleImageChange(e.target.files[0] || null)}
                         />
                         {data.image ? (
                             <div className="flex items-center gap-3 text-emerald-700">
@@ -51,6 +72,7 @@ export default function AddNewAttributeModal({
                                 <p className="text-xs text-emerald-500 mt-1">JPEG, PNG up to 2MB</p>
                             </div>
                         )}
+                        {imageError && <p className="mt-2 text-xs font-semibold text-rose-600">{imageError}</p>}
                     </div>
                 </div>
 
@@ -166,7 +188,7 @@ export default function AddNewAttributeModal({
                     </button>
                     <button
                         type="submit"
-                        disabled={processing}
+                        disabled={processing || Boolean(imageError)}
                         className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold px-8 py-2.5 rounded-xl shadow-lg hover:shadow-emerald-400/50 hover:scale-[1.02] transition-all disabled:opacity-50 text-sm flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />

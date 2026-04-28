@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { confirmDialog } from '@/utils/dialog';
 
 const SERVICE_CATEGORIES = [
     'Custom Sewing',
@@ -100,7 +101,15 @@ export default function ServicesPage() {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Delete this service?')) return;
+        const confirmed = await confirmDialog({
+            title: 'Delete Service',
+            message: 'Delete this service?',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'error',
+        });
+
+        if (!confirmed) return;
         try {
             await axios.delete(`/api/dashboard/shops/${shopId}/services/${id}`);
             fetchList();

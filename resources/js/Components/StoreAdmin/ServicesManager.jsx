@@ -1,8 +1,13 @@
 import { useForm, router } from '@inertiajs/react';
 import { useState } from 'react';
-import { Pencil, Trash2, Plus, X, Clock, DollarSign, CheckCircle, AlertCircle, Calendar, FileText } from 'lucide-react';
+import { Image, Pencil, Trash2, Plus, X, Clock, DollarSign, CheckCircle, AlertCircle, Calendar, FileText } from 'lucide-react';
 import { TbCurrencyPeso } from 'react-icons/tb';
-export default function ServicesManager({ services, serviceCategories, getServiceCategoryName }) {
+import { confirmDialog } from '@/utils/dialog';
+import { getImageUploadError } from '@/utils/imageUpload';
+import { getImageUploadError } from '@/utils/imageUpload';
+export default function ServicesManager({ services, serviceCategories, getServiceCategoryName, onSaved }) {
+    const [addImagePreview, setAddImagePreview] = useState(null);
+    const [addImageError, setAddImageError] = useState('');
     const { data: serviceData, setData: setServiceData, post: postService, reset: resetService, processing: serviceProcessing } = useForm({
         service_category_id: '',
         service_name: '',
@@ -14,14 +19,28 @@ export default function ServicesManager({ services, serviceCategories, getServic
         appointment_required: false,
         notes: '',
         checkout_type: 'requires_quote',
+        image: null,
     });
 
     const submitService = (e) => {
         e.preventDefault();
-        postService(route('store.services.add'), { onSuccess: () => resetService() });
+        if (addImageError) {
+            return;
+        }
+        postService(route('store.services.add'), { 
+            forceFormData: true,
+            onSuccess: () => {
+                resetService();
+                setAddImagePreview(null);
+                setAddImageError('');
+                onSaved?.();
+            } 
+        });
     };
 
     const [editingService, setEditingService] = useState(null);
+    const [editImagePreview, setEditImagePreview] = useState(null);
+    const [editImageError, setEditImageError] = useState('');
     const { data: editServiceData, setData: setEditServiceData, put: putService, reset: resetEditService, processing: editProcessing } = useForm({
         service_category_id: '',
         service_name: '',
@@ -33,9 +52,12 @@ export default function ServicesManager({ services, serviceCategories, getServic
         appointment_required: false,
         notes: '',
         checkout_type: 'requires_quote',
-        });
+        image: null,
+    });
 
     const openEditModal = (service) => {
+        setEditImagePreview(service.image ? `/storage/${service.image}` : null);
+        setEditImageError('');
         setEditServiceData({
         service_category_id: service.service_category_id || '',
         service_name: service.service_name || '',
@@ -47,36 +69,95 @@ export default function ServicesManager({ services, serviceCategories, getServic
         appointment_required: service.appointment_required ?? false,
         notes: service.notes || '',
         checkout_type: service.checkout_type || 'requires_quote',
+        image: null,
         });
         setEditingService(service);
-        setEditServiceData({
-        service_category_id: service.service_category_id || '',
-        service_name: service.service_name || '',
-        service_description: service.service_description || '',
-        price: service.price || '',
-        duration_days: service.duration_days || '',
-        is_available: service.is_available ?? true,
-        rush_service_available: service.rush_service_available ?? false,
-        appointment_required: service.appointment_required ?? false,
-        notes: service.notes || '',
-        checkout_type: service.checkout_type || 'requires_quote',
-        });
     };
 
     const closeEditModal = () => {
         setEditingService(null);
+        setEditImagePreview(null);
+        setEditImageError('');
         resetEditService();
     };
 
     const submitEditService = (e) => {
         e.preventDefault();
-        putService(route('store.services.update', editingService.id), {
-            onSuccess: () => closeEditModal()
+        if (editImageError) {
+            return;
+        }
+        
+        // For file uploads on update, Laravel requires POST with _method spoofing
+        router.post(route('store.services.update', editingService.id), {
+            _method: 'put',
+            service_category_id: editServiceData.service_category_id,
+            service_name: editServiceData.service_name,
+            service_description: editServiceData.service_description,
+            price: editServiceData.price,
+            duration_days: editServiceData.duration_days,
+            is_available: editServiceData.is_available,
+            rush_service_available: editServiceData.rush_service_available,
+            appointment_required: editServiceData.appointment_required,
+            notes: editServiceData.notes,
+            checkout_type: editServiceData.checkout_type,
+            image: editServiceData.image
+        }, {
+            forceFormData: true,
+            onSuccess: () => {
+                closeEditModal();
+                onSaved?.();
+            }
         });
     };
 
-    const deleteService = (id) => {
-        if (confirm('Are you sure you want to delete this service? This action cannot be undone.')) {
+    const handleServiceImageChange = (file) => {
+        if (!file) {
+            setAddImageError('');
+            setServiceData('image', null);
+            return;
+        }
+
+        const error = getImageUploadError(file);
+        if (error) {
+            setAddImageError(error);
+            setServiceData('image', null);
+            return;
+        }
+
+        setAddImageError('');
+        setServiceData('image', file);
+        setAddImagePreview(URL.createObjectURL(file));
+    };
+
+    const handleEditServiceImageChange = (file) => {
+        if (!file) {
+            setEditImageError('');
+            setEditServiceData('image', null);
+            return;
+        }
+
+        const error = getImageUploadError(file);
+        if (error) {
+            setEditImageError(error);
+            setEditServiceData('image', null);
+            return;
+        }
+
+        setEditImageError('');
+        setEditServiceData('image', file);
+        setEditImagePreview(URL.createObjectURL(file));
+    };
+
+    const deleteService = async (id) => {
+        const confirmed = await confirmDialog({
+            title: 'Delete Service',
+            message: 'Are you sure you want to delete this service? This action cannot be undone.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'error',
+        });
+
+        if (confirmed) {
             router.delete(route('store.services.delete', id));
         }
     };
@@ -141,7 +222,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
 
                         {/* Price */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                 <TbCurrencyPeso className="w-4 h-4 text-emerald-600" />
                                 Price (₱) *
                             </label>
@@ -158,7 +239,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
 
                         {/* Duration */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                 <Clock className="w-4 h-4 text-emerald-600" />
                                 Estimated Duration (days)
                             </label>
@@ -237,7 +318,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 className="w-5 h-5 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2 mr-4"
                             />
                             <label htmlFor="rush_service_available" className="text-lg font-semibold text-slate-800 cursor-pointer select-none flex-1">
-                                Rush service available (+50% premium)
+                                Rush service available
                             </label>
                         </div>
 
@@ -257,7 +338,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
 
                         {/* Notes */}
                         <div className="lg:col-span-2">
-                            <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                 <AlertCircle className="w-4 h-4 text-amber-600" />
                                 Internal Notes
                             </label>
@@ -268,6 +349,43 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 className="w-full border border-stone-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 rounded-2xl transition-all duration-300 shadow-sm py-4 px-5 text-lg bg-white/50 resize-vertical"
                                 placeholder="Internal notes for staff (not visible to customers)..."
                             />
+                        </div>
+
+                        {/* Portfolio Image */}
+                        <div className="lg:col-span-2">
+                            <h4 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                <Image className="w-6 h-6 text-emerald-600" />
+                                Portfolio Image
+                            </h4>
+                            <div className="space-y-4">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleServiceImageChange(e.target.files[0] || null)}
+                                    className="w-full border border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-4 px-5 text-lg bg-white/50 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-lg file:font-semibold file:bg-gradient-to-r file:from-emerald-600 file:to-emerald-700 file:text-white hover:file:from-emerald-700 hover:file:to-emerald-800"
+                                />
+                                {addImageError && <p className="text-sm font-semibold text-rose-600">{addImageError}</p>}
+                                {addImagePreview && (
+                                    <div className="flex items-center gap-4">
+                                        <img 
+                                            src={addImagePreview} 
+                                            alt="Preview" 
+                                            className="w-24 h-24 object-cover rounded-2xl shadow-lg border-4 border-emerald-200/50"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setServiceData('image', null);
+                                                setAddImagePreview(null);
+                                                setAddImageError('');
+                                            }}
+                                            className="px-4 py-2 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 font-semibold transition-all"
+                                        >
+                                            Remove Image
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -304,6 +422,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                             <table className="min-w-full divide-y divide-emerald-100">
                                 <thead className="bg-gradient-to-r from-emerald-500/10 to-emerald-600/10">
                                     <tr>
+                                        <th className="px-6 py-6 text-left text-xl font-black text-slate-800 tracking-tight">Image</th>
                                         <th className="px-8 py-6 text-left text-xl font-black text-slate-800 tracking-tight">Service</th>
                                         <th className="px-6 py-6 text-left text-xl font-black text-slate-800 tracking-tight">Price</th>
                                         <th className="px-6 py-6 text-left text-xl font-black text-slate-800 tracking-tight">Duration</th>
@@ -315,6 +434,22 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 <tbody className="divide-y divide-emerald-100 [&>*:hover]:bg-emerald-50/50 transition-all duration-200">
                                     {services.map((service) => (
                                         <tr key={service.id} className="group">
+                                            <td className="px-6 py-6">
+                                                {service.image ? (
+                                                    <img 
+                                                        src={`/storage/${service.image}`} 
+                                                        alt={service.service_name} 
+                                                        className="w-16 h-16 object-cover rounded-xl shadow-md hover:scale-110 transition-transform cursor-pointer"
+                                                        onError={(e) => {
+                                                            e.target.src = '/images/no-image.png';
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="w-16 h-16 bg-gradient-to-br from-slate-200 to-slate-300 rounded-xl flex items-center justify-center">
+                                                        <FileText className="w-6 h-6 text-slate-500" />
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="px-8 py-6">
                                                 <div>
                                                     <div className="text-xl font-bold text-slate-900 group-hover:text-emerald-700">{service.service_name}</div>
@@ -450,7 +585,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                             <TbCurrencyPeso className="w-4 h-4 text-emerald-600" />
                                             Price (₱) *
                                         </label>
@@ -466,7 +601,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                             <Clock className="w-4 h-4 text-emerald-600" />
                                             Duration (days)
                                         </label>
@@ -562,7 +697,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                     </div>
 
                                     <div className="lg:col-span-2">
-                                        <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                             <AlertCircle className="w-4 h-4 text-amber-600" />
                                             Internal Notes
                                         </label>
@@ -573,6 +708,43 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                             className="w-full border border-stone-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 rounded-2xl transition-all duration-300 shadow-sm py-4 px-5 text-lg bg-white/50 resize-vertical"
                                             disabled={editProcessing}
                                         />
+                                    </div>
+
+                                    {/* Portfolio Image (Edit Modal) */}
+                                    <div className="lg:col-span-2 mt-4">
+                                        <h4 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                            <Image className="w-6 h-6 text-emerald-600" />
+                                            Update Portfolio Image
+                                        </h4>
+                                        <div className="space-y-4">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => handleEditServiceImageChange(e.target.files[0] || null)}
+                                                className="w-full border border-stone-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl transition-all duration-300 shadow-sm py-4 px-5 text-lg bg-white/50 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-lg file:font-semibold file:bg-gradient-to-r file:from-emerald-600 file:to-emerald-700 file:text-white hover:file:from-emerald-700 hover:file:to-emerald-800"
+                                            />
+                                        {editImageError && <p className="text-sm font-semibold text-rose-600">{editImageError}</p>}
+                                            {editImagePreview && (
+                                                <div className="flex items-center gap-4">
+                                                    <img
+                                                        src={editImagePreview}
+                                                        alt="Preview"
+                                                        className="w-24 h-24 object-cover rounded-2xl shadow-lg border-4 border-emerald-200/50"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditServiceData('image', null);
+                                                            setEditImagePreview(null);
+                                                            setEditImageError('');
+                                                        }}
+                                                        className="px-4 py-2 bg-rose-100 text-rose-700 rounded-xl hover:bg-rose-200 font-semibold transition-all"
+                                                    >
+                                                        Remove Image
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

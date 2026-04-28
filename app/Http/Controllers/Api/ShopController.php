@@ -16,7 +16,8 @@ class ShopController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = TailoringShop::query()
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->where('status', 'approved');
 
         if ($request->filled('search')) {
             $query->where('shop_name', 'like', '%' . $request->input('search') . '%');
@@ -84,7 +85,7 @@ class ShopController extends Controller
      */
     public function show(TailoringShop $shop): JsonResponse
     {
-        if (! $shop->is_active) {
+        if (! $shop->is_active || $shop->status !== 'approved') {
             return response()->json(['message' => 'Shop not found.'], 404);
         }
 
@@ -120,6 +121,7 @@ class ShopController extends Controller
 
         $shops = TailoringShop::query()
             ->where('is_active', true)
+            ->where('status', 'approved')
             ->whereIn('id', [$id1, $id2])
             ->orderByRaw("FIELD(id, $id1, $id2)")
             ->with(['user.profile'])

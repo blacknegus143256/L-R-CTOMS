@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
             UserRoleSeeder::class,
             ServiceCategorySeeder::class,
             TailoringShopSeeder::class,
+            SchedulingDatabaseSeeder::class,
             AttributeCategorySeeder::class,
             AttributeTypeSeeder::class,
         ]);

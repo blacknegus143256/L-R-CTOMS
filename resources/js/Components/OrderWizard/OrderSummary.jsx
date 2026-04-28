@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { router } from '@inertiajs/react';
 import MapLibrePicker from '../MapLibrePicker.jsx';
+import { format } from 'date-fns';
 
 export default function OrderSummary({ 
   service, 
@@ -10,8 +11,11 @@ export default function OrderSummary({
   materialSource, 
   measurementPreference, 
   measurementDate, 
+  measurementTime,
   materialDropoffDate,
+  materialDropoffTime,
   notes, 
+  rushOrder,
   selectedAttributes, 
   attributeQuantities,
   designImagePreview, 
@@ -25,6 +29,7 @@ export default function OrderSummary({
 
   const categorySlug = service.service_category?.slug || '';
   const isRepair = categorySlug.includes('repairs') || categorySlug.includes('alterations');
+  const isCustomQuote = service.checkout_type === 'requires_quote';
 
   // No attributes display needed in summary - handled by totalPrice
 
@@ -102,13 +107,42 @@ export default function OrderSummary({
     });
   };
 
+  const formatDateTime = (dateValue, timeValue) => {
+    if (!dateValue) return 'TBD';
+
+    const dateOnly = String(dateValue).split('T')[0];
+    const formattedDate = format(new Date(`${dateOnly}T00:00:00`), 'MMMM d, yyyy');
+
+    if (!timeValue) {
+      return formattedDate;
+    }
+
+    const formattedTime = format(new Date(`1970-01-01T${timeValue}`), 'hh:mm a');
+    return `${formattedDate} at ${formattedTime}`;
+  };
+
   const summaryItems = [
     { label: 'Notes', value: notes },
     { label: 'Service', value: service.service_name + ' - ' + (service.price ? `₱${service.price.toLocaleString()}` : 'Price TBD') },
     { label: 'Material', value: materialSource?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) },
-    ...(materialSource === 'dropoff' ? [{ label: 'Drop-off Date', value: materialDropoffDate ? new Date(materialDropoffDate).toLocaleDateString() : 'TBD' }] : []),
-    { label: 'Fit Method', value: measurementPreference === 'self_measured' ? 'I will provide measurements' : 'In-Shop Fitting' },
-    ...(measurementPreference === 'workshop_fitting' ? [{ label: 'Fitting Date', value: measurementDate ? new Date(measurementDate).toLocaleDateString() : (materialDropoffDate ? new Date(materialDropoffDate).toLocaleDateString() : 'TBD') }] : []),
+    ...(service?.rush_service_available
+      ? [{ label: 'Rush Order', value: rushOrder ? 'Yes (subject to additional fee)' : 'No' }]
+      : []),
+    ...(materialSource === 'customer'
+      ? [{ label: 'Drop-off Schedule', value: formatDateTime(materialDropoffDate, materialDropoffTime) }]
+      : []),
+{ 
+    label: 'Fit Method', 
+    value: (measurementPreference === 'none' || !measurementPreference)
+        ? 'No Measurements Required' 
+        : (measurementPreference === 'self_measured' || measurementPreference === 'profile' ? 'I will provide measurements' : 'In-Shop Fitting') 
+},
+    ...(measurementPreference === 'workshop_fitting'
+      ? [{
+          label: 'Fitting Schedule',
+          value: formatDateTime(measurementDate || materialDropoffDate, measurementTime || materialDropoffTime),
+        }]
+      : []),
   ];
 
   return (
@@ -186,9 +220,29 @@ export default function OrderSummary({
       </div>
 
       <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl mb-8">
-        <div className="flex items-baseline justify-between">
-          <span className="text-3xl font-black text-amber-800">Total</span>
-          <span className="text-4xl font-black text-amber-600 tracking-tight">₱{totalPrice?.toLocaleString() || '0.00'}</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between">
+            <span className="text-3xl font-black text-amber-800">Total</span>
+            <span className="text-3xl sm:text-4xl font-black text-amber-600 tracking-tight">
+              {isCustomQuote ? 'TBD by Tailor' : `₱${totalPrice?.toLocaleString() || '0.00'}`}
+            </span>
+          </div>
+          {isCustomQuote && (
+            <div className="mt-2 flex gap-2 items-start bg-amber-100/50 p-3 rounded-lg border border-amber-200/50">
+              <span className="text-amber-600 mt-0.5">ℹ️</span>
+              <p className="text-sm text-amber-800 font-medium">
+                This is a custom request. Your design and materials will be reviewed by the tailor, who will provide an exact labor and materials quote for your approval before starting.
+              </p>
+            </div>
+          )}
+          {rushOrder && (
+            <div className="mt-2 flex gap-2 items-start bg-rose-100/60 p-3 rounded-lg border border-rose-200/70">
+              <span className="text-rose-600 mt-0.5">⚠️</span>
+              <p className="text-sm text-rose-800 font-medium">
+                Rush requested: final quote may include a rush surcharge based on shop policy.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -262,7 +316,7 @@ export default function OrderSummary({
           disabled={!isProfileComplete || loading} 
           className="flex-1 rounded-lg bg-emerald-600 px-8 py-4 font-bold text-xl text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {loading ? 'Creating Job Card...' : '✅ Confirm & Submit Order'}
+          {loading ? 'Processing...' : (isCustomQuote ? '📝 Request a Quote' : '✅ Confirm & Submit Order')}
         </button>
       </div>
 

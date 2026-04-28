@@ -4,6 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { showAlert } from '@/utils/alert';
 import React, { useEffect } from 'react';
 
 export default function Register() {
@@ -30,7 +31,11 @@ if (data.role !== 'store_admin') {
         onError: (errors) => {
             console.error("Validation/Server Errors:", errors);
             // This will alert you if the server sends an error
-            alert("Registration failed! Check console.");
+            showAlert({
+                title: 'Registration Error',
+                message: 'Registration failed! Check console.',
+                type: 'error',
+            });
         },
         data: payload,
         onFinish: () => {

@@ -2,9 +2,10 @@ import { FiHome } from 'react-icons/fi';
 
 export default function ApplicationLogo(props) {
     return (
-        <FiHome 
+        <img 
             {...props} 
-            className={`fill-current ${props.className || ''}`}
+            src="/images/logostitch.png" 
+            alt="CTOMS Logo" 
         />
     );
 }

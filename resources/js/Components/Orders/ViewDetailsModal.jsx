@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { router, usePage } from '@inertiajs/react';
+import { router, usePage, useForm } from '@inertiajs/react';
+import { Camera } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import TimelineNode from './TimelineNode';
 import DateRow from './DateRow';
 import SpecRow from './SpecRow';
+import { showAlert } from '@/utils/alert';
 
 export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     if (!order) return null;
@@ -23,13 +25,64 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
             
     const availableShopAttributes = useMemo(() => shop.attributes || [], [shop.attributes]);
 
+    // Calculate actual labor by subtracting item totals from the total price
+    const initialLabor = useMemo(() => {
+        const itemsTotal = order.items?.reduce((sum, i) => sum + (Number(i.price) * Number(i.quantity)), 0) || 0;
+        return Math.max(0, Number(order.total_price) - itemsTotal);
+    }, [order]);
+
     const profile = order?.user?.profile || order?.customer || {};
+    const notesText = (order.notes || '').toString();
+    const cancellationMeta = (() => {
+        const customerMatch = notesText.match(/DECLINED BY CUSTOMER:\s*([\s\S]*?)(?:\n\n|$)/i);
+        if (customerMatch) {
+            return {
+                label: 'Declined by Customer',
+                actor: 'Customer',
+                reason: customerMatch[1].trim() || 'No reason provided.'
+            };
+        }
+
+        const shopMatch = notesText.match(/REJECTED BY SHOP:\s*([\s\S]*?)(?:\n\n|$)/i);
+        if (shopMatch) {
+            return {
+                label: 'Rejected by Shop',
+                actor: 'Shop',
+                reason: shopMatch[1].trim() || 'No reason provided.'
+            };
+        }
+
+        return null;
+    })();
 
     const [localMeasurements, setLocalMeasurements] = useState({});
     const [isSaving, setIsSaving] = useState(false);
 
 // New editing states
     const [isEditingInvoice, setIsEditingInvoice] = useState(false);
+    const [customLaborPrice, setCustomLaborPrice] = useState(initialLabor);
+
+    const { data: photoData, setData: setPhotoData, post: postPhoto, processing: photoProcessing, reset: resetPhoto, errors: photoErrors } = useForm({
+        image: null,
+        caption: ''
+    });
+    const [photoPreview, setPhotoPreview] = useState(null);
+
+    const handlePhotoSubmit = (e) => {
+        e.preventDefault();
+        postPhoto(route('store.orders.upload-photo', order.id), {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => {
+                resetPhoto();
+                setPhotoPreview(null);
+            }
+        });
+    };
+
+    useEffect(() => {
+        setCustomLaborPrice(initialLabor);
+    }, [initialLabor]);
 
     // New derived state function to map order items precisely to shop pivot IDs
     const mapOrderItemsToSelectedState = useMemo(() => () => {
@@ -57,29 +110,56 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     }, [order, mapOrderItemsToSelectedState]);
 
     const calculateNewTotal = useMemo(() => {
-        const basePrice = Number(order.service?.price || 0);
-        
+        const baseLabor = Number(customLaborPrice) || 0;
         const addonsTotal = selectedItems.reduce((sum, item) => {
             const attr = availableShopAttributes.find(a => a.pivot?.id === item.pivot_id);
-            const attrPrice = Number(attr?.pivot?.price || 0);
-            return sum + (attrPrice * item.qty);
+            return sum + (Number(attr?.pivot?.price || 0) * item.qty);
         }, 0);
-
-        return basePrice + addonsTotal;
-    }, [order.service?.price, selectedItems, availableShopAttributes]);
+        return baseLabor + addonsTotal;
+    }, [customLaborPrice, selectedItems, availableShopAttributes]);
 
     const handleSaveInvoice = () => {
         const validItems = selectedItems.filter(item => item.qty > 0);
+        const newStatus = order.status === 'Requested' || order.status === 'Pending' ? 'Quoted' : order.status;
+
         router.patch(`/api/shops/${shop.id}/orders/${order.id}`, {
             total_price: calculateNewTotal,
-            attributes: validItems
+            attributes: validItems,
+            status: newStatus
         }, {
             onSuccess: () => { 
                 setIsEditingInvoice(false); 
                 
                 router.reload({ preserveScroll: true });
-                alert("Invoice Updated!");
-                // The pure Inertia SPA way to refresh data smoothly
+                showAlert({
+                    title: 'Success',
+                    message: 'Invoice updated!',
+                    type: 'success',
+                });
+            },
+            preserveScroll: true
+        });
+    };
+
+    const handleAcceptQuote = () => {
+        setIsSaving(true);
+        router.patch(`/my-orders/${order.id}/accept`, {}, {
+            onSuccess: () => {
+                setIsSaving(false);
+                router.reload({ preserveScroll: true });
+                showAlert({
+                    title: 'Success',
+                    message: 'Quote accepted! Your order is now confirmed.',
+                    type: 'success',
+                });
+            },
+            onError: () => {
+                setIsSaving(false);
+                showAlert({
+                    title: 'Quote Error',
+                    message: 'Failed to accept quote. Please try again.',
+                    type: 'error',
+                });
             },
             preserveScroll: true
         });
@@ -117,24 +197,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
         return groups;
     }, [availableShopAttributes]);
 
-    const handleSaveMeasurements = () => {
-        setIsSaving(true);
-        router.patch('/profile', {
-            ...order.user,
-            ...localMeasurements
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                setIsSaving(false);
-                alert('Draft measurements saved to your profile!');
-            },
-            onError: () => {
-                setIsSaving(false);
-                alert('Failed to save draft. Please try again.');
-            }
-        });
-    };
+// Legacy handleSaveMeasurements removed
 
     const getMaterialSourceText = (source) => {
         if (source === 'customer') {
@@ -148,16 +211,27 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     };
 
     const getMeasurementText = (type) => {
-        if (type === 'scheduled') return 'In-Shop Fitting';
-        if (type === 'profile') return 'Self-Measured (Profile)';
+        const normalizedType = (type || '').toString().trim().toLowerCase();
+
+        if (normalizedType === 'scheduled') return 'In-Shop Fitting';
+        if (normalizedType === 'profile') return 'Self-Measured (Profile)';
+        if (normalizedType === 'none') return 'No Measurements Needed';
         return 'Not Specified';
     };
 
-    const canEditInvoice = isAdmin && ['Pending', 'Accepted', 'Appointment Scheduled'].includes(order.status);
+    const canEditInvoice = isAdmin && ['Pending', 'Requested', 'Quoted', 'Confirmed', 'Accepted', 'Appointment Scheduled'].includes(order.status);
+    const isQuoting = order.status === 'Requested' || order.status === 'Pending';
 
     const currentTotal = isEditingInvoice ? calculateNewTotal : Number(order.total_price);
 
     const getSelectedItem = (pivotId) => selectedItems.find(item => item.pivot_id === parseInt(pivotId));
+
+    {/* Materials/Add-ons subtotal */}
+    const displayItemsTotal = isEditingInvoice 
+        ? (calculateNewTotal - Number(customLaborPrice)) 
+        : (order.items?.reduce((sum, i) => sum + (Number(i.price) * Number(i.quantity)), 0) || 0);
+
+    const displayLabor = isEditingInvoice ? Number(customLaborPrice) : initialLabor;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
@@ -173,6 +247,11 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                             <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest px-2 py-1 bg-indigo-50 rounded-md">
                                 {order.service?.serviceCategory?.name || order.service?.service_category?.name || 'Custom Service'}
                             </span>
+                            {order.rush_order && (
+                                <span className="text-xs font-black text-rose-700 uppercase tracking-widest px-2 py-1 bg-rose-50 border border-rose-200 rounded-md">
+                                    Rush Order
+                                </span>
+                            )}
                         </div>
                         <p className="text-stone-400 text-xs font-bold uppercase tracking-widest mt-3">
                             Placed: {new Date(order.created_at).toLocaleDateString()}
@@ -186,7 +265,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                     <div className="absolute top-[35px] left-[15%] right-[15%] h-[2px] bg-stone-100 z-0" />
                     <div className="flex justify-between items-center relative z-10">
                         <TimelineNode label="Confirmed" date={order.created_at} active={true} />
-                        <TimelineNode label="Measured" date={order.measurement_date} active={!!order.measurement_date || !['Pending', 'Cancelled'].includes(order.status)} />
+                        <TimelineNode label="Measured" date={order.measurement_date} active={!!order.measurement_date || !['Pending', 'Rejected', 'Declined', 'Cancelled'].includes(order.status)} />
                         <TimelineNode label="In Work" active={['Accepted', 'Appointment Scheduled', 'In Progress'].includes(order.status)} />
                         <TimelineNode label="Pickup" date={order.expected_completion_date} active={order.status === 'Ready' || order.status === 'Completed'} />
                     </div>
@@ -326,6 +405,13 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                         </div>
 
                                         <div>
+                                            {cancellationMeta && (
+                                                <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                                                    <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider block mb-1">{cancellationMeta.label}</span>
+                                                    <p className="text-sm font-semibold text-rose-800">Cancelled by {cancellationMeta.actor}</p>
+                                                    <p className="text-sm text-rose-700 mt-1">Reason: {cancellationMeta.reason}</p>
+                                                </div>
+                                            )}
                                             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-2">Customer Notes</span>
                                             <p className="text-sm text-stone-700 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
                                                 {order.notes || 'No additional notes provided.'}
@@ -356,7 +442,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                             <section className="p-6 rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 shadow-sm">
                                 <h3 className="text-[11px] font-black text-indigo-800 uppercase tracking-[0.2em] mb-6">Measurements</h3>
                                 
-                                {order.measurement_type === 'scheduled' ? (
+                                {(order.measurement_type || '').toString().trim().toLowerCase() === 'scheduled' ? (
                                     <div className="text-center p-6 bg-white rounded-2xl shadow-sm border border-indigo-100">
                                         <div className="text-3xl mb-3">📍</div>
                                         <h4 className="font-bold text-indigo-900 mb-1">In-Shop Fitting</h4>
@@ -404,14 +490,6 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                 {!isAdmin && order.measurement_snapshot?.requested?.length > 0 && (
                                     <div className="flex flex-col gap-3 mt-6 pt-4 border-t border-stone-100">
                                         <button 
-                                            onClick={handleSaveMeasurements}
-                                            disabled={isSaving}
-                                            className="w-full py-3 bg-stone-100 text-stone-700 text-sm font-bold rounded-xl hover:bg-stone-200 transition shadow-sm disabled:opacity-50"
-                                        >
-                                            {isSaving ? 'Saving...' : '💾 Save to Profile (Draft)'}
-                                        </button>
-                                        
-                                        <button 
                                             onClick={() => {
                                                 setIsSaving(true);
                                                 router.patch(`/my-orders/${order.id}/measurements`, {
@@ -421,12 +499,20 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                                     preserveState: true,
                                                     onSuccess: () => {
                                                         setIsSaving(false);
-                                                        alert('✅ Final measurements have been securely sent to the shop!');
+                                                        showAlert({
+                                                            title: 'Success',
+                                                            message: 'Final measurements have been securely sent to the shop!',
+                                                            type: 'success',
+                                                        });
                                                         onClose();
                                                     },
                                                     onError: () => {
                                                         setIsSaving(false);
-                                                        alert('Failed to send measurements. Please check your inputs.');
+                                                        showAlert({
+                                                            title: 'Submission Error',
+                                                            message: 'Failed to send measurements. Please check your inputs.',
+                                                            type: 'error',
+                                                        });
                                                     }
                                                 });
                                             }}
@@ -438,6 +524,21 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                     </div>
                                 )}
                             </section>
+
+                            {/* Customer Quote Acceptance */}
+                            {!isAdmin && order.status === 'Quoted' && (
+                                <section className="p-6 rounded-3xl bg-emerald-50 border border-emerald-200 shadow-sm animate-pulse-slow">
+                                    <h3 className="text-[11px] font-black text-emerald-800 uppercase tracking-[0.2em] mb-3">Tailor Quote Ready</h3>
+                                    <p className="text-sm text-emerald-900 mb-5 font-medium">The tailor has reviewed your design and provided a final price. Please review the total below and accept to confirm your order.</p>
+                                    <button 
+                                        onClick={handleAcceptQuote}
+                                        disabled={isSaving}
+                                        className="w-full py-4 bg-emerald-600 text-white text-lg font-black rounded-xl hover:bg-emerald-700 transition shadow-lg disabled:opacity-50"
+                                    >
+                                        {isSaving ? 'Confirming...' : '✅ Accept Quote & Confirm Order'}
+                                    </button>
+                                </section>
+                            )}
 
                             <section className="space-y-3">
                                 <h3 className="text-[11px] font-black text-stone-900 uppercase tracking-[0.2em] mb-4">Schedule</h3>
@@ -451,9 +552,17 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                 <>
                                     {isEditingInvoice ? (
                                         <section className="p-6 rounded-3xl bg-amber-50 border border-amber-200 shadow-sm">
-                                            <h3 className="text-[11px] font-black text-amber-800 uppercase tracking-[0.2em] mb-6">Edit Invoice - Add Materials</h3>
+                                            <h3 className="text-[11px] font-black text-amber-800 uppercase tracking-[0.2em] mb-6">{isQuoting ? 'Build Custom Quote' : 'Edit Invoice - Add Materials'}</h3>
                                             
                                             <div className="mb-6">
+                                                <label className="text-[10px] font-bold text-amber-600 uppercase mb-2 block">Base Labor Cost (₱)</label>
+                                                <input 
+                                                    type="number" min="0" step="0.01" 
+                                                    value={customLaborPrice} 
+                                                    onChange={(e) => setCustomLaborPrice(e.target.value)} 
+                                                    className="w-full mb-6 px-4 py-3 rounded-xl border border-amber-300 bg-white font-bold text-lg focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                                                    placeholder="Enter base labor price..."
+                                                />
                                                 <p className="text-[10px] font-bold text-amber-600 uppercase mb-4">Select Materials to Add:</p>
                                                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                                     {availableShopAttributes.length === 0 ? (
@@ -527,7 +636,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                                     onClick={handleSaveInvoice}
                                                     className="flex-1 py-3 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 transition shadow-lg"
                                                 >
-                                                    💾 Save Invoice
+                                                    {isQuoting ? '📨 Send Quote to Customer' : '💾 Save Invoice'}
                                                 </button>
                                                 <button 
                                                     onClick={() => setIsEditingInvoice(false)}
@@ -548,26 +657,85 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                 </>
                             )}
 
-                            {/* Total Invoice Section */}
                             <section className="p-6 rounded-3xl bg-stone-900 text-white shadow-xl">
-        {/* New explicit base labor calculation line */}
                                 <div className="flex justify-between items-baseline opacity-80 mb-3 border-b border-white/10 pb-3">
-                                    <span className="text-xs font-bold uppercase tracking-wider">{order.service?.service_name} (Base Labor)</span>
-                                    <span className="text-xl font-bold">₱{Number(order.service?.price).toFixed(2)}</span>
+                                    <span className="text-xs font-bold uppercase tracking-wider">Base Labor</span>
+                                    <span className="text-xl font-bold">₱{displayLabor.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
-
-                                {/* Materials/Add-ons subtotal line */}
+                                {order.rush_order && (
+                                    <div className="flex justify-between items-baseline mb-3 pb-3 text-rose-300 border-b border-white/10">
+                                        <span className="text-xs font-bold uppercase tracking-wider">Rush Surcharge</span>
+                                        <span className="text-xl font-bold">+ ₱{Number(order.rush_fee || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between items-baseline opacity-80 mb-5 pb-3">
                                     <span className="text-xs font-bold uppercase tracking-wider">Materials & Hardware</span>
-                                    <span className="text-xl font-bold">₱{(Number(currentTotal) - Number(order.service?.price)).toFixed(2)}</span>
+                                    <span className="text-xl font-bold">₱{displayItemsTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
-
-                                {/* Final calculated Grand Total */}
                                 <div className="flex justify-between items-baseline pt-2 border-t-2 border-white/10">
                                     <span className="text-sm font-bold opacity-90">Grand Total</span>
-                                    <span className="text-4xl font-black text-amber-400">₱{Number(currentTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="text-4xl font-black text-amber-400">₱{currentTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                                 </div>
                             </section>
+
+                            {/* Admin Only: Upload Progress Photo */}
+                            {isAdmin && (
+                                <div className="mt-8 pt-6 border-t border-stone-200">
+                                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                        <Camera className="w-5 h-5 text-orchid-600" />
+                                        Upload Progress Photo
+                                    </h4>
+                                    <form onSubmit={handlePhotoSubmit} className="bg-stone-50 p-5 rounded-2xl border border-stone-200">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-1">Photo</label>
+                                                <input 
+                                                    type="file" 
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            setPhotoData('image', file);
+                                                            setPhotoPreview(URL.createObjectURL(file));
+                                                        }
+                                                    }}
+                                                    className="w-full text-sm text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-orchid-50 file:text-orchid-700 hover:file:bg-orchid-100 transition-all"
+                                                />
+                                                {photoErrors.image && <p className="text-red-500 text-xs mt-1">{photoErrors.image}</p>}
+                                            </div>
+                                            
+                                            {photoPreview && (
+                                                <div className="relative w-32 h-32 rounded-xl overflow-hidden border-2 border-orchid-200">
+                                                    <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-1">Caption (Optional)</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={photoData.caption}
+                                                    onChange={(e) => setPhotoData('caption', e.target.value)}
+                                                    placeholder="e.g., Front panels stitched together"
+                                                    className="w-full rounded-xl border-stone-200 focus:border-orchid-500 focus:ring focus:ring-orchid-200 transition-all text-sm"
+                                                />
+                                            </div>
+
+                                        <button 
+                                            type="submit" 
+                                            disabled={photoProcessing || !photoData.image}
+                                            className={`w-full py-3 rounded-xl font-bold text-sm transition-all shadow-sm flex justify-center items-center gap-2 ${
+                                                photoProcessing || !photoData.image 
+                                                ? 'bg-stone-200 text-stone-400 cursor-not-allowed border border-stone-300' 
+                                                : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md'
+                                            }`}
+                                        >
+                                            {photoProcessing ? 'Uploading...' : 'Upload Photo'}
+                                        </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
 
                         </div>
                     </div>
@@ -582,7 +750,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                         onClick={onClose}
                         className="px-8 py-3 rounded-xl font-black text-sm uppercase tracking-wider bg-white border-2 border-stone-200 text-stone-700 hover:bg-stone-900 hover:text-white transition-all shadow-sm"
                     >
-                        Close Panel
+                        Close Panel <span className="ml-2">✖️</span>
                     </button>
                 </div>
             </div>

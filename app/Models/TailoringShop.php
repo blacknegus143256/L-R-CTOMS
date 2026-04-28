@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Models\Appointment;
+use App\Models\ShopException;
+use App\Models\ShopSchedule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -13,19 +16,34 @@ class TailoringShop extends Model
 
     protected $fillable = [
         'user_id',
+        'logo_url',
         'shop_name',
+        'payout_method',
+        'payout_account',
+        'document_qr_code',
         'slug',
         'description',
-        'contact_person',
+        'google_maps_link',
         'contact_role',
         'is_active',
         'status',
+        'rejection_reason',
+        'document_gov_id',
+        'document_bir',
+        'document_dti',
+        'terms_accepted_at',
+        'slot_duration_minutes',
+        'max_bookings_per_slot',
+        'max_user_bookings_per_slot',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean'
+            'is_active' => 'boolean',
+            'slot_duration_minutes' => 'integer',
+            'max_bookings_per_slot' => 'integer',
+            'max_user_bookings_per_slot' => 'integer',
         ];
     }
 
@@ -42,6 +60,31 @@ class TailoringShop extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function shopSchedules(): HasMany
+    {
+        return $this->hasMany(ShopSchedule::class, 'shop_id');
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(ShopSchedule::class, 'shop_id');
+    }
+
+    public function shopExceptions(): HasMany
+    {
+        return $this->hasMany(ShopException::class, 'shop_id');
+    }
+
+    public function exceptions(): HasMany
+    {
+        return $this->hasMany(ShopException::class, 'shop_id');
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class, 'shop_id');
     }
 
     public function attributes(): BelongsToMany

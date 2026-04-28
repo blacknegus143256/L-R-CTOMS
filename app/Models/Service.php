@@ -23,6 +23,7 @@ class Service extends Model
         'rush_service_available',
         'appointment_required',
         'notes',
+        'image',
     ];
 
     protected function casts(): array
@@ -32,7 +33,8 @@ class Service extends Model
             'checkout_type' => 'string',
             'is_available' => 'boolean',
             'rush_service_available' => 'boolean',
-            'appointment_required' => 'boolean',
+        'appointment_required' => 'boolean',
+            'image' => 'string',
         ];
     }
 

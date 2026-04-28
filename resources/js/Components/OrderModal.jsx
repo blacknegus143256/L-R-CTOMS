@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { router, useForm, usePage } from '@inertiajs/react';
+import { toast } from 'react-hot-toast';
 
 import ServiceSelection from './OrderWizard/ServiceSelection.jsx';
 import DesignContext from './OrderWizard/DesignContext.jsx';
@@ -16,7 +17,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     style_tag: '',
     material_source: 'tailor_choice',
     design_image: null,
-    measurement_preference: 'self_measured',
+    measurement_preference: 'none',
     measurement_date: '', // for workshop_fitting date
     attributes: [],
     notes: '',
@@ -24,6 +25,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   
   const [step, setStep] = useState(0); // 0:Service, 1:Design, 2:Material, 3:Logistics, 4:Fit, 5:Summary
   const [materialDropoffDate, setMaterialDropoffDate] = useState('');
+  const [materialDropoffTime, setMaterialDropoffTime] = useState('');
   const [profileMeasurementsLocal, setProfileMeasurementsLocal] = useState({}); // Will sync with auth.user.profile in useEffect
 
   const [selectedAttributes, setSelectedAttributes] = useState([]);
@@ -31,8 +33,10 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   const [notes, setNotes] = useState('');
   const [styleTag, setStyleTag] = useState('');
   const [materialSource, setMaterialSource] = useState('tailor_choice');
-  const [measurementPreference, setMeasurementPreference] = useState('self_measured');
+  const [measurementPreference, setMeasurementPreference] = useState('none');
   const [measurementDate, setMeasurementDate] = useState('');
+  const [measurementTime, setMeasurementTime] = useState('');
+  const [rushOrder, setRushOrder] = useState(false);
   const [designImagePreview, setDesignImagePreview] = useState(null);
   const [designImageFile, setDesignImageFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -184,9 +188,12 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       setSelectedServiceId('');
       setStyleTag('');
       setMaterialSource(null);
-      setMeasurementPreference('self_measured');
+      setMeasurementPreference('none');
       setMeasurementDate('');
+      setMeasurementTime('');
+      setRushOrder(false);
       setMaterialDropoffDate('');
+      setMaterialDropoffTime('');
       setSelectedAttributes([]);
       setNotes('');
       setDesignImageFile(null);
@@ -195,17 +202,21 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     }
   }, [isOpen]);
 
-  const toggleAttribute = (attrId) => {
+const toggleAttribute = (attrId) => {
     setSelectedAttributes(prev => {
       const newSelected = prev.includes(attrId) 
         ? prev.filter(id => id !== attrId)
         : [...prev, attrId];
       
       if (newSelected.includes(attrId)) {
-        setAttributeQuantities(qty => ({ ...qty, [attrId]: 1 }));
+        // Adding the item: Set its quantity to 1
+        setAttributeQuantities(prevQty => ({ ...prevQty, [attrId]: 1 }));
       } else {
-        const { [attrId]: _, ...rest } = qty;
-        setAttributeQuantities(rest);
+        // Removing the item: Delete it from the quantities state safely
+        setAttributeQuantities(prevQty => {
+            const { [attrId]: _, ...rest } = prevQty;
+            return rest;
+        });
       }
       
       return newSelected;
@@ -234,20 +245,35 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     }
   };
 
+  const hasDesignNotes = notes.trim().length > 0;
+  const hasReferencePhoto = !!designImageFile;
+
+  useEffect(() => {
+    if (step === 1 && hasDesignNotes && hasReferencePhoto && error === 'Please add design notes and attach a reference photo before continuing.') {
+      setError(null);
+    }
+  }, [step, hasDesignNotes, hasReferencePhoto, error]);
+
   const validateCurrentStep = () => {
     if (step === 0) return !!selectedServiceId;
-    if (step === 1) return service ? true : false;
+    if (step === 1) return !!service && hasDesignNotes && hasReferencePhoto;
     if (step === 2) return !!materialSource;
-    if (step === 3) return materialSource !== 'customer' || !!materialDropoffDate;
+    if (step === 3) return materialSource !== 'customer' || (!!materialDropoffDate && !!materialDropoffTime);
     if (step === 4) return !!measurementPreference;
     if (step === 5) return true;
     return false;
   };
 
   const handleNext = () => {
-    if (validateCurrentStep()) {
-      setStep(step + 1);
+    if (!validateCurrentStep()) {
+      if (step === 1) {
+        setError('Please add design notes and attach a reference photo before continuing.');
+      }
+      return;
     }
+
+    setError(null);
+    setStep(step + 1);
   };
 
   const handleBack = () => {
@@ -265,11 +291,30 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     setError(null);
     setLoading(true);
 
-    // Hydrate the date for Laravel validation
-    let formattedDate = measurementDate;
-    if (measurementDate && measurementDate.length === 10) {
-      formattedDate = `${measurementDate} 00:00:00`;
-    }
+    const scheduledDate = measurementPreference === 'workshop_fitting'
+      ? (measurementDate || materialDropoffDate)
+      : '';
+
+    const scheduledTime = measurementPreference === 'workshop_fitting'
+      ? (measurementTime || materialDropoffTime)
+      : '';
+
+    const formattedMeasurementDate =
+      scheduledDate && scheduledTime
+        ? `${scheduledDate} ${scheduledTime}:00`
+        : null;
+
+    const payloadDate = measurementPreference === 'workshop_fitting'
+      ? scheduledDate
+      : materialSource === 'customer'
+        ? materialDropoffDate
+        : null;
+
+    const payloadTimeStart = measurementPreference === 'workshop_fitting'
+      ? scheduledTime
+      : materialSource === 'customer'
+        ? materialDropoffTime
+        : null;
 
     // --- 2. PREPARE MULTIPART DATA ---
     const submissionData = {
@@ -280,14 +325,19 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       measurement_preference: measurementPreference,
       
       // PERFECTLY MATCH THE LARAVEL DATABASE ENUM:
-      measurement_type: measurementPreference === 'workshop_fitting' ? 'scheduled' : 'profile',
+      measurement_type: measurementPreference === 'workshop_fitting' ? 'scheduled' : (measurementPreference === 'none' ? 'none' : 'profile'),
       
-      measurement_date: formattedDate,
+      measurement_date: formattedMeasurementDate,
       
       // EXPLICITLY ADD THIS LINE:
-      material_dropoff_date: materialDropoffDate, 
+      material_dropoff_date: materialDropoffDate,
+      material_dropoff_time: materialDropoffTime,
+      measurement_time: measurementTime,
+      date: payloadDate,
+      time_start: payloadTimeStart,
       
       notes: notes,
+      rush_order: rushOrder,
       attributes: selectedAttributes,
       attribute_quantities: attributeQuantities,
       design_image: designImageFile,
@@ -306,11 +356,26 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       },
       onError: (err) => {
         setLoading(false);
-        console.log("Submission Error Details:", err);
-        if (err.measurement_date) {
+        if (err?.booking) {
+          toast.error(err.booking, { duration: 5000, position: 'top-center' });
+          setError(err.booking);
+          return;
+        }
+
+        if (err?.measurement_date) {
+          toast.error(err.measurement_date, { duration: 5000, position: 'top-center' });
           setError(err.measurement_date);
+          return;
+        }
+
+        const firstError = err && typeof err === 'object' ? Object.values(err).find(Boolean) : null;
+        if (firstError) {
+          toast.error(String(firstError), { duration: 5000, position: 'top-center' });
+          setError(String(firstError));
         } else {
-          setError("Failed to save order. Please check the Job Card details.");
+          const fallbackMessage = 'Could not schedule appointment. Please check your selected time.';
+          toast.error(fallbackMessage, { duration: 5000, position: 'top-center' });
+          setError(fallbackMessage);
         }
       },
       onFinish: () => setLoading(false),
@@ -382,6 +447,8 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                       service={service}
                       styleTag={styleTag} 
                       setStyleTag={setStyleTag}
+                      rushOrder={rushOrder}
+                      setRushOrder={setRushOrder}
                       designImagePreview={designImagePreview}
                       setDesignImageFile={setDesignImageFile}
                       handleDesignImage={handleDesignImage}
@@ -408,23 +475,36 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                     />,
                 3: <Logistics 
                       service={service}
+                      shop={shop}
                       materialDropoffDate={materialDropoffDate}
                       setMaterialDropoffDate={setMaterialDropoffDate}
+                      materialDropoffTime={materialDropoffTime}
+                      setMaterialDropoffTime={setMaterialDropoffTime}
                       materialSource={materialSource}
                       setMaterialSource={setMaterialSource}
                       setProfileMeasurements={setProfileMeasurementsLocal}
-                      onNext={handleNext}
+                      onNext={(schedule) => {
+                        if (schedule) {
+                          setMaterialDropoffDate(schedule.date || '');
+                          setMaterialDropoffTime(schedule.time || '');
+                        }
+                        handleNext();
+                      }}
                       canNext={validateCurrentStep()}
                       onBack={handleBack}
                     />,
 
                 4: <FitLogistics 
                       service={service}
+                      shop={shop}
                       measurementPreference={measurementPreference}
                       setMeasurementPreference={setMeasurementPreference}
                       materialDropoffDate={materialDropoffDate}
+                      materialDropoffTime={materialDropoffTime}
                       measurementDate={measurementDate}
                       setMeasurementDate={setMeasurementDate}
+                      measurementTime={measurementTime}
+                      setMeasurementTime={setMeasurementTime}
                       onNext={handleNext}
                       onBack={handleBack}
                     />,
@@ -436,8 +516,11 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
                       materialSource={materialSource}
                       measurementPreference={measurementPreference}
                       measurementDate={measurementDate}
+                      measurementTime={measurementTime}
                       materialDropoffDate={materialDropoffDate}
+                      materialDropoffTime={materialDropoffTime}
                       notes={notes}
+                      rushOrder={rushOrder}
                       selectedAttributes={selectedAttributes}
                       attributeQuantities={attributeQuantities}
                       designImagePreview={designImagePreview}

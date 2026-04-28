@@ -53,6 +53,11 @@ export default function GuestLayout({ children }) {
 
                 {/* Grounding the Auth flow with your consistent Footer */}
                 <div className="mt-auto border-t border-stone-100 bg-stone-50/50">
+                    <div className="flex flex-wrap items-center justify-center px-4 py-3">
+                        <a href="/documents/terms-and-condition.pdf" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline mx-2">Terms of Service</a>
+                        <a href="/documents/privacy-policy.pdf" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline mx-2">Privacy Policy</a>
+                        <a href="/documents/mutual-nda.pdf" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline mx-2">Mutual NDA</a>
+                    </div>
                     <Footer />
                 </div>
             </div>

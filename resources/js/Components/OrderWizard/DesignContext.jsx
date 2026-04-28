@@ -4,6 +4,8 @@ export default function DesignContext({
   service, 
   styleTag, 
   setStyleTag, 
+  rushOrder,
+  setRushOrder,
   designImagePreview, 
   setDesignImageFile, 
   handleDesignImage, 
@@ -53,6 +55,25 @@ export default function DesignContext({
         </div>
       )}
 
+      {service?.rush_service_available && (
+        <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/70">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={Boolean(rushOrder)}
+              onChange={(e) => setRushOrder(e.target.checked)}
+              className="mt-1 w-4 h-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+            />
+            <div>
+              <span className="text-sm font-bold text-stone-800">Make this order rush?</span>
+              <p className="text-xs text-amber-800 mt-1">
+                Rush orders may include additional payment or a price increase depending on the shop's policy and quote.
+              </p>
+            </div>
+          </label>
+        </div>
+      )}
+
       <div className="space-y-6">
         <div className="mb-2">
           <label className="block text-sm font-medium text-stone-700 mb-2">
@@ -76,14 +97,14 @@ export default function DesignContext({
 
         <div>
           <label className="mb-2 block text-sm font-medium text-stone-700">
-            Reference Photo (recommended)
+            Reference Photo <span className="text-amber-600">*</span>
           </label>
           <div className="space-y-2">
             <input
               type="file"
               accept="image/*"
               onChange={handleDesignImage}
-              className="w-full rounded-lg border border-stone-300 px-4 py-3 text-stone-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 block w-full text-sm text-stone-500 hover:file:cursor-pointer"
+              className="w-full rounded-lg border border-stone-300 px-4 py-3 text-sm text-stone-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 hover:file:cursor-pointer"
             />
             {designImagePreview && (
               <div className="flex gap-3 items-center">

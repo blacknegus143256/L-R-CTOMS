@@ -11,20 +11,15 @@ class DashboardController extends Controller
 {
    public function index()
     {
-
-    return Inertia::render('SuperAdmin/Dashboard', [
-        'stats' => [
-            'total_shops' => \App\Models\TailoringShop::count(),
-            'pending_shops' => \App\Models\TailoringShop::where('status', 'pending')->count(),
-            'total_users' => \App\Models\User::count(),
-        ]
-    ]);
-
-        // Fetch all shops from your tailoring_shops table
-        $shops = TailoringShop::all();
+        $shops = TailoringShop::latest()->get();
 
         return Inertia::render('SuperAdmin/Dashboard', [
-            'shops' => $shops
+            'stats' => [
+                'total_shops' => TailoringShop::count(),
+                'pending_shops' => TailoringShop::where('status', 'pending')->count(),
+                'total_users' => \App\Models\User::count(),
+            ],
+            'shops' => $shops,
         ]);
     }
     public function approve($id)

@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -10,10 +10,11 @@ use Laravel\Sanctum\HasApiTokens;
 use App\Models\TailoringShop;
 use App\Models\UserProfile;
 use App\Models\Order;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany  ;
 use Termwind\Components\Hr;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
@@ -56,9 +57,10 @@ class User extends Authenticatable
     protected static function booted()
     {
         static::created(function ($user) {
-            $user->profile()->create([
-                'user_id' => $user->id
-            ]);
+            $user->profile()->updateOrCreate(
+                ['user_id' => $user->id],
+                []
+            );
         });
     }
 
@@ -68,13 +70,23 @@ class User extends Authenticatable
         return $this->hasMany(\App\Models\TailoringShop::class, 'user_id');
     }
 
-    public function profile()
+    public function tailoringShop(): HasOne
+    {
+        return $this->hasOne(TailoringShop::class, 'user_id');
+    }
+
+    public function profile(): HasOne
     {
         return $this->hasOne(UserProfile::class, 'user_id');
     }
     public function orders():HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class);
     }
 
 }

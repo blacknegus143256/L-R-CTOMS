@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\Dashboard\CustomerController;
 use App\Http\Controllers\Api\Dashboard\CustomerOrderController;
 use App\Http\Controllers\Api\Dashboard\DashboardShopController;
 use App\Http\Controllers\Api\Dashboard\OrderController;
 use App\Http\Controllers\Api\Dashboard\ServiceController as DashboardServiceController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ShopController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +20,10 @@ Route::get('/services', [ServiceController::class, 'index']);
 Route::get('/shops', [ShopController::class, 'index']);
 Route::get('/shops/compare', [ShopController::class, 'compare'])->name('shops.compare');
 Route::get('/shops/{shop}', [ShopController::class, 'show']);
+Route::get('/shops/{shop}/availability', [AvailabilityController::class, 'getMonthlyAvailability'])->name('api.shops.availability');
+
+// PayMongo webhook (public, no auth required)
+Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->name('payments.webhook');
 
 // Customer orders (public - for placing orders)
 
@@ -50,10 +57,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/{notificationId}/read', [NotificationController::class, 'markAsRead']);
+    
+    // Payment endpoints
+    Route::post('/payments/generate', [PaymentController::class, 'generatePaymentLink'])->name('payments.generate');
     
     // Dashboard: my shops
     Route::get('/dashboard/shops', [DashboardShopController::class, 'index']);
     Route::get('/dashboard/shops/{shop}', [DashboardShopController::class, 'show']);
+    Route::patch('/dashboard/shops/{shop}/logo', [DashboardShopController::class, 'updateLogo']);
 
     // Dashboard: CRUD scoped by shop
     Route::apiResource('dashboard/shops/{shop}/services', DashboardServiceController::class)->except(['show']);
@@ -61,3 +74,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('dashboard/shops/{shop}/orders', OrderController::class)->except(['show']);
     Route::get('dashboard/shops/{shop}/orders/{order}', [OrderController::class, 'show']);
 });
+

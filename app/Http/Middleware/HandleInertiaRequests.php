@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\SuperAdmin\ImpersonationController;
+use App\Models\TailoringShop;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -29,11 +31,27 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $impersonationStatus = [];
+        $pendingShopsCount = $user && $user->role === 'super_admin'
+            ? TailoringShop::where('status', 'pending')->count()
+            : 0;
+
+        // Get impersonation status
+        if ($user) {
+            $impersonationStatus = ImpersonationController::getImpersonationStatus();
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user()? $request->user()->load('profile') : null,
+                'user' => $user ? $user->load('profile') : null,
             ],
+            'unread_notifications' => $user
+                ? $user->unreadNotifications()->take(5)->get()
+                : [],
+            'pending_shops_count' => $pendingShopsCount,
+            'impersonation' => $impersonationStatus,
         ];
     }
 }

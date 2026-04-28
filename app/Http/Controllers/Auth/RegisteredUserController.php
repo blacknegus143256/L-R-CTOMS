@@ -46,9 +46,9 @@ class RegisteredUserController extends Controller
             'role' => $validated['role'],
         ]);
 
-        \App\Models\UserProfile::create([
+        $user->profile()->updateOrCreate([
             'user_id' => $user->id,
-        ]);
+        ], []);
 
         if ($validated['role'] === 'store_admin') {
             $user->tailoringShops()->create([

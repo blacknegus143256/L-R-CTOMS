@@ -12,9 +12,11 @@ class UserProfile extends Model
 
     protected $fillable = [
         'user_id',
+        'avatar_url',
         'phone',
         'barangay',
         'street',
+        'location_details',
         'latitude',
         'longitude',
     ];

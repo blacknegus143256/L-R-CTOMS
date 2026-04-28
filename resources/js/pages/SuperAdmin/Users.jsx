@@ -1,9 +1,19 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
+import ImpersonateButton from '@/Components/ImpersonateButton';
+import { confirmDialog } from '@/utils/dialog';
 
 export default function Users({ auth, users }) {
-    const handleDelete = (id) => {
-        if(confirm("Are you sure you want to delete this user?")) {
+    const handleDelete = async (id) => {
+        const confirmed = await confirmDialog({
+            title: 'Delete User',
+            message: 'Are you sure you want to delete this user?',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'error',
+        });
+
+        if (confirmed) {
             router.delete(`/super-admin/users/${id}`);
         }
     };
@@ -46,12 +56,18 @@ export default function Users({ auth, users }) {
                                                 {user.role.replace('_', ' ').toUpperCase()}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-y-2">
+                                            {auth.user.id !== user.id && user.role !== 'super_admin' && (
+                                                <div>
+                                                    <ImpersonateButton targetUserId={user.id} targetUserRole={user.role} />
+                                                </div>
+                                            )}
+                                            
                                             {/* Only show delete if it's not the current logged-in user */}
                                             {auth.user.id !== user.id ? (
                                                 <button 
                                                     onClick={() => handleDelete(user.id)} 
-                                                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-2 py-4 rounded"
+                                                    className="w-full bg-red-600 hover:bg-red-700 text-white font-bold px-2 py-2 rounded"
                                                 >
                                                     Delete
                                                 </button>

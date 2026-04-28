@@ -5,8 +5,10 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import AuthProvider from './contexts/AuthContext';
+import GlobalAlertHost from './Components/GlobalAlertHost';
+import GlobalDialogHost from './Components/GlobalDialogHost';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'Stitch Central';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
@@ -20,6 +22,8 @@ createInertiaApp({
         root.render(
         <AuthProvider>
             <App {...props} />
+            <GlobalAlertHost />
+            <GlobalDialogHost />
             </AuthProvider>);
     },
     progress: {

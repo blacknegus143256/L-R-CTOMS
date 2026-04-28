@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\UserProfile;
+use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller
 {
@@ -34,28 +35,51 @@ class ProfileController extends Controller
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
-        $user->fill($request->validated());
-        
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
-        }
-        $user->save();
-         // Update or create the user profile
-         $profileData  = $request->validate([
-            'phone' => ['nullable', 'string', 'max:255'],
-            'address' => ['nullable', 'string'],
-            'barangay' => ['nullable', 'string', 'max:255'],
-            'street' => ['nullable', 'string', 'max:255'],
-            'latitude' => ['nullable', 'numeric'],
-            'longitude' => ['nullable', 'numeric'],
+
+        $request->validate([
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:2048'],
         ]);
 
-        $user->profile()->updateOrCreate(
-        ['user_id' => $user->id],
-        $profileData
-        );
-        
-        return Redirect::back();
+        // Update basic user info
+        $user->fill($request->validated());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        // Enforce one profile record per user
+        $profile = $user->profile()->updateOrCreate(['user_id' => $user->id]);
+
+        // Avatar Upload
+        if ($request->hasFile('avatar')) {
+            // Delete old avatar
+            if ($profile->avatar_url) {
+                Storage::disk('public')->delete($profile->avatar_url);
+            }
+
+            // Store new avatar
+            $path = $request->file('avatar')->store('avatars', 'public');
+
+            $profile->avatar_url = $path;
+        }
+
+        // Update other profile fields
+        $profile->update([
+            'phone' => $request->phone,
+            'street' => $request->street,
+            'location_details' => $request->location_details,
+            'barangay' => $request->barangay,
+            // 'city' => $request->city, // adjust based on actual fields
+            // 'province' => $request->province,
+            'latitude' => $request->latitude ?? $profile->latitude,
+            'longitude' => $request->longitude ?? $profile->longitude,
+        ]);
+
+        $profile->save();
+
+        return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
 
     /**

@@ -11,15 +11,18 @@ const STATUS_COLORS = {
     'Pending': 'bg-orchid-purple/20 text-orchid-purple border-orchid-purple/30',
     'Accepted': 'bg-emerald-100/50 text-emerald-800',
     'Appointment Scheduled': 'bg-indigo-100/50 text-indigo-800',
+    'Ready for Production': 'bg-cyan-100/60 text-cyan-800',
     'In Progress': 'bg-purple-100/50 text-purple-800',
     'Ready': 'bg-emerald-100 text-emerald-800 border-emerald-200',
     'Completed': 'bg-stone-100 text-stone-800',
+    'Rejected': 'bg-red-100/50 text-red-800',
+    'Declined': 'bg-red-100/50 text-red-800',
     'Cancelled': 'bg-red-100/50 text-red-800',
 };
 
 export default function Dashboard() {
     const { props } = usePage();
-    const { auth, stats, recentOrders, measurements, recommendedShops } = props;
+    const { auth, stats, recentOrders, measurements, recommendedShops, urgentReminders = [] } = props;
     
     const latestOrder = recentOrders?.[0];
 
@@ -51,6 +54,43 @@ export default function Dashboard() {
                 }}
                 className="py-6 space-y-8"
             >
+                {urgentReminders.length > 0 && (
+                    <motion.div
+                        variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                        className="space-y-3"
+                    >
+                        {urgentReminders.map((reminder, index) => {
+                            const isPayment = reminder.type === 'payment';
+
+                            return (
+                                <div
+                                    key={`${reminder.type}-${index}-${reminder.action_link}`}
+                                    className={`rounded-2xl border p-4 sm:p-5 shadow-sm backdrop-blur-sm ${
+                                        isPayment
+                                            ? 'bg-amber-50/90 border-amber-200 text-amber-900'
+                                            : 'bg-blue-50/90 border-blue-200 text-blue-900'
+                                    }`}
+                                >
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                        <p className="text-sm sm:text-base font-bold">{reminder.message}</p>
+                                        <Link
+                                            href={reminder.action_link}
+                                            className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-black transition-colors ${
+                                                isPayment
+                                                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                            }`}
+                                        >
+                                            {isPayment ? 'Pay Now' : 'View Details'}
+                                            <FiArrowRight className="w-4 h-4" />
+                                        </Link>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </motion.div>
+                )}
+
                 {/* Style Stats */}
                 <motion.div 
                     variants={{ hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0 } }}
@@ -83,7 +123,7 @@ export default function Dashboard() {
                 </motion.div>
 
                 {/* Current Order Progress */}
-                {latestOrder && !['Completed', 'Cancelled'].includes(latestOrder.status) && (
+                {latestOrder && !['Completed', 'Cancelled', 'Rejected', 'Declined'].includes(latestOrder.status) && (
                     <motion.div 
                         variants={{ hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1 } }}
                         className="bg-white/40 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-8"

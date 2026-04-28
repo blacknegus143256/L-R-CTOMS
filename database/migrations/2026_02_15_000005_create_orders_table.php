@@ -14,7 +14,10 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('service_id')->constrained()->cascadeOnDelete();
             $table->string('status')->default('Pending');
-            $table->date('expected_completion_date')->nullable();
+            $table->enum('payment_status', ['Pending', 'Partial', 'Paid'])->default('Pending');
+            $table->boolean('materials_received')->default(false);
+            $table->boolean('measurements_taken')->default(false);
+            $table->date('expected_completion_date')->nullable()->index();
             $table->decimal('total_price', 10, 2);
             $table->text('notes')->nullable();
             $table->timestamps();

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class InventoryController extends Controller
 {
@@ -53,14 +54,21 @@ class InventoryController extends Controller
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
             'checkout_type' => 'required|string|in:fixed_price,requires_quote',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
             
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('services', 'public');
+        }
+
         // Store the service_category_id as service_category value
         Service::create([
             'tailoring_shop_id' => $shop->id,
             'service_category_id' => (int) $request->service_category_id,
             'service_name' => $request->service_name,
             'price' => (float) $request->price,
+            'image' => $imagePath,
             'duration_days' => $request->duration_days !== null ? (int) $request->duration_days : 0,
             'service_description' => $request->service_description ?? '',
             'is_available' => $request->boolean('is_available', true),
@@ -77,7 +85,7 @@ class InventoryController extends Controller
     {
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
-        $request->validate([
+$request->validate([
             'service_category_id' => 'required|exists:service_categories,id',
             'service_name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
@@ -88,11 +96,21 @@ class InventoryController extends Controller
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
             'checkout_type' => 'sometimes|string|in:fixed_price,requires_quote',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
 
         $service = Service::where('id', $id)
             ->where('tailoring_shop_id', $shop->id)
             ->firstOrFail();
+
+        if ($request->hasFile('image')) {
+            if ($service->image) {
+                Storage::disk('public')->delete($service->image);
+            }
+            $imagePath = $request->file('image')->store('services', 'public');
+            $service->image = $imagePath;
+            $service->save();
+        }
 
         // Store the service_category_id as service_category value
         $service->update([
@@ -131,7 +149,7 @@ class InventoryController extends Controller
             'item_name' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
@@ -176,7 +194,7 @@ class InventoryController extends Controller
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
             'item_name' => 'nullable|string|max:255',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
 
         $image_url = null;
