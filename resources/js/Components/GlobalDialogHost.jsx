@@ -121,8 +121,11 @@ export default function GlobalDialogHost() {
     }
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl p-6">
+        <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) handleCancel(); }}
+        >
+            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
                 <h2 className={`text-xl font-bold ${titleClass}`}>{activeDialog.title}</h2>
                 <p className="mt-3 text-sm text-stone-700">{activeDialog.message}</p>
 

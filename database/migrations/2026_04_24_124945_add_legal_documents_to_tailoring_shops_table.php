@@ -15,6 +15,9 @@ return new class extends Migration
             $table->string('document_gov_id')->nullable();
             $table->string('document_bir')->nullable();
             $table->string('document_dti')->nullable();
+            $table->enum('gov_id_status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->enum('bir_2303_status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->enum('dti_permit_status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->timestamp('terms_accepted_at')->nullable();
         });
     }
@@ -29,6 +32,9 @@ return new class extends Migration
                 'document_gov_id',
                 'document_bir',
                 'document_dti',
+                'gov_id_status',
+                'bir_2303_status',
+                'dti_permit_status',
                 'terms_accepted_at',
             ]);
         });

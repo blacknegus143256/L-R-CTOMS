@@ -5,8 +5,11 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
+
+const START_STEP_QUERY_KEY = 'startStep';
+
 import { getImageUploadError } from '@/utils/imageUpload';
 import { FiCheckCircle, FiClock, FiMapPin } from 'react-icons/fi';
 
@@ -19,15 +22,28 @@ const STEP_TITLES = [
     'Review',
 ];
 
-function StepPill({ number, title, active, done, locked }) {
+const MANDATORY_STEP_NUMBERS = [3, 4, 5];
+
+function StepPill({ number, title, active, done, locked, mandatory }) {
+    const showRequiredMarker = mandatory && active && !done;
+
     return (
         <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${active ? 'border-emerald-300 bg-emerald-50' : done ? 'border-stone-200 bg-stone-50' : locked ? 'border-stone-200 bg-stone-50 opacity-60' : 'border-stone-200 bg-white'}`}>
             <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${active ? 'bg-emerald-600 text-white' : done ? 'bg-stone-900 text-white' : 'bg-stone-200 text-stone-600'}`}>
                 {number}
             </div>
             <div className="min-w-0">
-                <p className={`text-sm font-black ${active ? 'text-emerald-900' : 'text-stone-900'}`}>{title}</p>
-                <p className="text-xs font-medium text-stone-500">{active ? 'Current step' : done ? 'Completed' : locked ? 'Locked' : 'Ready'}</p>
+                <div className="flex items-center gap-2">
+                    <p className={`text-sm font-black ${active ? 'text-emerald-900' : 'text-stone-900'}`}>{title}</p>
+                    {showRequiredMarker ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-700">
+                            !
+                        </span>
+                    ) : null}
+                </div>
+                <p className="text-xs font-medium text-stone-500">
+                    {showRequiredMarker ? '!' : active ? 'Current step' : done ? 'Completed' : locked ? 'Locked' : 'Ready'}
+                </p>
             </div>
         </div>
     );
@@ -36,11 +52,19 @@ function StepPill({ number, title, active, done, locked }) {
 export default function OnboardingWizard({ auth, shop }) {
     const { props } = usePage();
     const flashSuccess = props?.flash?.success;
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const startStep = params.get('startStep');
+        if (startStep) return parseInt(startStep, 10);
+    }
+    return 1;
+});
     const [mapOpen, setMapOpen] = useState(false);
     const [activeDoc, setActiveDoc] = useState(null);
     const [basicProfileLogoError, setBasicProfileLogoError] = useState('');
     const [documentQrError, setDocumentQrError] = useState('');
+    const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
 
     const shopProfile = useMemo(() => ({
         contact_person: auth?.user?.name || '',
@@ -68,7 +92,6 @@ export default function OnboardingWizard({ auth, shop }) {
         payout_account: shop?.payout_account || '',
         document_qr_code: null,
         terms_accepted: false,
-        dpa_accepted: false,
         nda_accepted: false,
     });
 
@@ -133,6 +156,8 @@ export default function OnboardingWizard({ auth, shop }) {
     const submitBasicProfile = (e) => {
         e.preventDefault();
 
+        // CRITICAL: Must use .post() so PHP reads the multipart form data! 
+        // Laravel will interpret it as a PATCH because of `_method: 'patch'` in the form state.
         basicProfileForm.post(route('store.onboarding.profile.update'), {
             forceFormData: true,
             preserveScroll: true,
@@ -155,32 +180,112 @@ export default function OnboardingWizard({ auth, shop }) {
             onSuccess: () => {
                 setCurrentStep(3);
                 setDocumentQrError('');
+                // Clear file buffers to prevent form from retaining stale file references
+                documentForm.reset('document_gov_id', 'document_bir', 'document_dti', 'document_qr_code');
             },
         });
     };
 
-    const hasSubmittedDocuments = !!(shop?.document_gov_id || shop?.document_bir || shop?.document_dti);
-    const isApproved = shop?.status === 'approved';
-    const isRejected = shop?.status === 'rejected';
-    const isUnderReview = hasSubmittedDocuments && shop?.status === 'pending';
+    const documentEntries = useMemo(() => ([
+        {
+            key: 'gov-id',
+            label: 'Government ID',
+            field: 'document_gov_id',
+            status: shop?.gov_id_status || 'pending',
+            filePath: shop?.document_gov_id,
+            reason: shop?.rejection_reason,
+        },
+        {
+            key: 'bir',
+            label: 'BIR 2303 (Certificate of Registration)',
+            field: 'document_bir',
+            status: shop?.bir_2303_status || 'pending',
+            filePath: shop?.document_bir,
+            reason: shop?.rejection_reason,
+        },
+        {
+            key: 'dti',
+            label: "DTI / Mayor's Permit",
+            field: 'document_dti',
+            status: shop?.dti_permit_status || 'pending',
+            filePath: shop?.document_dti,
+            reason: shop?.rejection_reason,
+        },
+    ]), [shop]);
+
+    const rejectedDocuments = documentEntries.filter((document) => document.status === 'rejected');
+    const approvedDocuments = documentEntries.filter((document) => document.status === 'approved');
+    const underReviewDocuments = documentEntries.filter((document) => document.status === 'pending' && document.filePath);
+    const missingDocuments = documentEntries.filter((document) => !document.filePath);
+
+    const isApproved = approvedDocuments.length === documentEntries.length && documentEntries.length > 0;
+    const isRejected = rejectedDocuments.length > 0;
+    const isUnderReview = underReviewDocuments.length > 0 && !isRejected && !isApproved;
+    const hasRejectedUpload = rejectedDocuments.some((document) => documentForm.data[document.field]);
+    const allMissingDocumentsSelected = missingDocuments.length > 0
+        ? missingDocuments.every((document) => documentForm.data[document.field])
+        : false;
+    // Simplified: allow submission if at least one file is uploaded
+    const hasAnyFileUpload = (
+        (documentForm.data.document_gov_id instanceof File) ||
+        (documentForm.data.document_bir instanceof File) ||
+        (documentForm.data.document_dti instanceof File)
+    );
+    const hasRequiredNonFileFields = Boolean(
+        documentForm.data.payout_method &&
+        documentForm.data.payout_account?.trim() &&
+        documentForm.data.nda_accepted
+    );
+    const canSubmitDocuments = rejectedDocuments.length > 0
+        ? hasRejectedUpload  // If rejected, need at least one re-upload
+        : hasAnyFileUpload && hasRequiredNonFileFields;   // Otherwise, need required form fields plus at least one file
 
     // Dynamic step completion logic based on actual database relationships
     const step1Completed = !!auth?.user?.profile?.barangay;
-    const step2Completed = !!shop?.document_bir;
-    const step3Completed = (shop?.services && shop.services.length > 0) || shop?.services_count > 0;
-    const step4Completed = (shop?.inventory && shop.inventory.length > 0) || shop?.inventory_count > 0;
-    const step5Completed = (shop?.schedules && shop.schedules.length > 0) || shop?.schedules_count > 0;
+    const step2Completed = isUnderReview || isApproved; // Allow progression while docs are pending
+    const step3Completed = (shop?.services_count || 0) > 0; // Require at least one service
+    const step4Completed = (shop?.inventory_count || 0) > 0 && (shop?.active_inventory_categories_count || 0) > 0; // Require at least one active category and one inventory item
+    const step5Completed = shop?.schedules?.some((day) =>
+        day.is_open === true || day.is_open === 1 || day.is_open === '1'
+    );
     const step6Completed = false; // Review step is never truly "completed"
 
     const stepCompletionMap = [step1Completed, step2Completed, step3Completed, step4Completed, step5Completed, step6Completed];
 
     useEffect(() => {
-        const firstIncompleteStep = stepCompletionMap.findIndex((isDone) => !isDone) + 1;
+        if (hasInitialLoaded) return;
 
+        const params = new URLSearchParams(window.location.search);
+        const startStepRaw = params.get(START_STEP_QUERY_KEY);
+        const startStep = startStepRaw ? Number(startStepRaw) : null;
+
+        const bothPriorStepsComplete = step1Completed && step2Completed;
+        const isStepLockedLocal = (stepIndex) => {
+            if (stepIndex < 2) return false;
+            return !bothPriorStepsComplete;
+        };
+
+        if (startStep && startStep >= 1 && startStep <= 6 && !isStepLockedLocal(startStep)) {
+            setCurrentStep(startStep);
+            setHasInitialLoaded(true);
+            return;
+        }
+
+        const firstIncompleteStep = stepCompletionMap.findIndex((isDone) => !isDone) + 1;
         if (firstIncompleteStep > 1 && firstIncompleteStep <= 6) {
             setCurrentStep(firstIncompleteStep);
         }
-    }, []);
+
+        setHasInitialLoaded(true);
+    }, [
+        step1Completed,
+        step2Completed,
+        step3Completed,
+        step4Completed,
+        step5Completed,
+        hasInitialLoaded,
+        stepCompletionMap,
+    ]);
 
     // Step locking logic: only lock if Step 1 AND Step 2 are not both completed
     const bothPriorStepsComplete = step1Completed && step2Completed;
@@ -304,10 +409,10 @@ export default function OnboardingWizard({ auth, shop }) {
                                 Pin Location on Map
                             </button>
                         </div>
-                        <div className="space-y-1">
+                        {/* <div className="space-y-1">
                             <InputError className="text-xs" message={basicProfileForm.errors.latitude} />
                             <InputError className="text-xs" message={basicProfileForm.errors.longitude} />
-                        </div>
+                        </div> */}
 
                         <div>
                             <InputLabel htmlFor="google_maps_link" value="Google Maps Link (Optional)" />
@@ -360,215 +465,184 @@ export default function OnboardingWizard({ auth, shop }) {
                         </p>
                     </div>
 
-                    {isRejected && (
+                    {/* {isRejected && (
                         <div className="rounded-2xl border border-rose-300 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">
                             Your application was rejected. Reason: {shop?.rejection_reason || 'No reason was provided.'} Please update your documents and resubmit.
                         </div>
-                    )}
+                    )} */}
 
-                    {(isUnderReview || isApproved) ? (
-                        <div className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-stone-500">Government ID</p>
-                                    <p className="mt-2 text-sm font-semibold text-stone-800">Received</p>
-                                </div>
-                                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-stone-500">BIR / DTI</p>
-                                    <p className="mt-2 text-sm font-semibold text-stone-800">Received</p>
-                                </div>
-                                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                                    <p className="text-xs font-black uppercase tracking-[0.2em] text-stone-500">Review Status</p>
-                                    <p className="mt-2 text-sm font-semibold text-stone-800">
-                                        {isApproved ? 'Approved' : 'Under Review'}
-                                    </p>
-                                </div>
+                    <form onSubmit={submitDocuments} encType="multipart/form-data" className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
+                        <div className="grid gap-5 md:grid-cols-3">
+                            {documentEntries.map((docItem) => {
+                                const isApprovedDocument = docItem.status === 'approved';
+                                const isRejectedDocument = docItem.status === 'rejected';
+                                const isUnderReviewDocument = docItem.status === 'pending' && !!docItem.filePath;
+                                const showInput = isRejectedDocument || (!docItem.filePath && !isApprovedDocument);
+
+                                return (
+                                    <div key={docItem.key} className="rounded-3xl border border-stone-200 bg-stone-50 p-5">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs font-black uppercase tracking-[0.2em] text-stone-500">{docItem.label}</p>
+                                                <p className="mt-1 text-sm font-semibold text-stone-700">
+                                                    {isApprovedDocument ? 'Verified' : isRejectedDocument ? 'Needs Update' : isUnderReviewDocument ? 'Under Review' : 'Ready for upload'}
+                                                </p>
+                                            </div>
+
+                                            <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${isApprovedDocument ? 'bg-emerald-100 text-emerald-800' : isRejectedDocument ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                {docItem.status}
+                                            </span>
+                                        </div>
+
+                                        {isRejectedDocument && (
+                                            <p className="mt-3 text-xs font-semibold text-rose-700">
+                                                {docItem.reason || 'Please upload a clearer or corrected copy of this document.'}
+                                            </p>
+                                        )}
+
+                                        {showInput && (
+                                            <div className="mt-4">
+                                                <input
+                                                    id={docItem.field}
+                                                    type="file"
+                                                    accept=".jpg,.png,.pdf"
+                                                    onChange={(e) => documentForm.setData(docItem.field, e.target.files[0] || null)}
+                                                    className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                                                />
+                                                {documentForm.errors[docItem.field] && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors[docItem.field]}</p>}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex flex-col gap-4 md:flex-row">
+                            <div className="w-full md:w-1/3">
+                                <label htmlFor="payout_method" className="mb-2 block text-sm font-black text-stone-700">Payment Method</label>
+                                <select
+                                    id="payout_method"
+                                    required
+                                    value={documentForm.data.payout_method}
+                                    onChange={(e) => documentForm.setData('payout_method', e.target.value)}
+                                    className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                                >
+                                    <option value="">Select payment method</option>
+                                    <option value="GCash">GCash</option>
+                                    <option value="Maya">Maya</option>
+                                    <option value="BPI">BPI</option>
+                                    <option value="BDO">BDO</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                {documentForm.errors.payout_method && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.payout_method}</p>}
                             </div>
 
-                            <p className="text-sm leading-7 text-stone-600">
-                                While you wait for approval, you can still prepare your shop structure from the dashboard after you return.
-                            </p>
-
-                            <div className="flex flex-wrap gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setCurrentStep(3)}
-                                    className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/20 transition-colors hover:bg-slate-800"
-                                >
-                                    Continue to Services Setup ➔
-                                </button>
-                                <Link href="/store/dashboard" className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-700 transition-colors hover:bg-stone-50">
-                                    Go to Dashboard
-                                </Link>
+                            <div className="w-full md:w-2/3">
+                                <label htmlFor="payout_account" className="mb-2 block text-sm font-black text-stone-700">Account Number & Name</label>
+                                <input
+                                    id="payout_account"
+                                    type="text"
+                                    maxLength={30}
+                                    required
+                                    value={documentForm.data.payout_account}
+                                    onChange={(e) => documentForm.setData('payout_account', e.target.value)}
+                                    className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                                    placeholder="09123456789 - Juan Dela Cruz"
+                                />
+                                {documentForm.errors.payout_account && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.payout_account}</p>}
                             </div>
                         </div>
-                    ) : (
-                        <form onSubmit={submitDocuments} encType="multipart/form-data" className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
-                            <div className="grid gap-5 md:grid-cols-2">
-                                <div>
-                                    <label htmlFor="document_gov_id" className="mb-2 block text-sm font-black text-stone-700">Government ID</label>
-                                    <input
-                                        id="document_gov_id"
-                                        type="file"
-                                        accept=".jpg,.png,.pdf"
-                                        onChange={(e) => documentForm.setData('document_gov_id', e.target.files[0] || null)}
-                                        className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                    />
-                                    {documentForm.errors.document_gov_id && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.document_gov_id}</p>}
-                                </div>
 
-                                <div>
-                                    <label htmlFor="document_bir" className="mb-2 block text-sm font-black text-stone-700">BIR 2303 (Certificate of Registration)</label>
-                                    <input
-                                        id="document_bir"
-                                        type="file"
-                                        accept=".jpg,.png,.pdf"
-                                        onChange={(e) => documentForm.setData('document_bir', e.target.files[0] || null)}
-                                        className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                    />
-                                    {documentForm.errors.document_bir && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.document_bir}</p>}
-                                </div>
+                        <div className="md:col-span-2">
+                            <label htmlFor="document_qr_code" className="mb-2 block text-sm font-black text-stone-700">Payment QR Code / Proof (optional)</label>
+                            <input
+                                id="document_qr_code"
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleDocumentQrChange(e.target.files[0] || null)}
+                                className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
+                            />
+                            {documentForm.errors.document_qr_code && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.document_qr_code}</p>}
+                            {documentQrError && <p className="mt-2 text-xs font-semibold text-rose-600">{documentQrError}</p>}
+                        </div>
 
-                                <div>
-                                    <label htmlFor="document_dti" className="mb-2 block text-sm font-black text-stone-700">DTI / Mayor's Permit</label>
-                                    <input
-                                        id="document_dti"
-                                        type="file"
-                                        accept=".jpg,.png,.pdf"
-                                        onChange={(e) => documentForm.setData('document_dti', e.target.files[0] || null)}
-                                        className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                    />
-                                    {documentForm.errors.document_dti && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.document_dti}</p>}
-                                </div>
-
-                                <div className="md:col-span-2 flex flex-col gap-4 md:flex-row">
-                                    <div className="w-full md:w-1/3">
-                                        <label htmlFor="payout_method" className="mb-2 block text-sm font-black text-stone-700">Payment Method</label>
-                                        <select
-                                            id="payout_method"
-                                            required
-                                            value={documentForm.data.payout_method}
-                                            onChange={(e) => documentForm.setData('payout_method', e.target.value)}
-                                            className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                        >
-                                            <option value="">Select payment method</option>
-                                            <option value="GCash">GCash</option>
-                                            <option value="Maya">Maya</option>
-                                            <option value="BPI">BPI</option>
-                                            <option value="BDO">BDO</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                        {documentForm.errors.payout_method && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.payout_method}</p>}
-                                    </div>
-
-                                    <div className="w-full md:w-2/3">
-                                        <label htmlFor="payout_account" className="mb-2 block text-sm font-black text-stone-700">Account Number & Name</label>
-                                        <input
-                                            id="payout_account"
-                                            type="text"
-                                            maxLength={30}
-                                            required
-                                            value={documentForm.data.payout_account}
-                                            onChange={(e) => documentForm.setData('payout_account', e.target.value)}
-                                            className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                            placeholder="09123456789 - Juan Dela Cruz"
-                                        />
-                                        {documentForm.errors.payout_account && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.payout_account}</p>}
-                                    </div>
-                                </div>
-
-                                <div className="md:col-span-2">
-                                    <label htmlFor="document_qr_code" className="mb-2 block text-sm font-black text-stone-700">Payment QR Code / Proof (optional)</label>
-                                    <input
-                                        id="document_qr_code"
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => handleDocumentQrChange(e.target.files[0] || null)}
-                                        className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none"
-                                    />
-                                    {documentForm.errors.document_qr_code && <p className="mt-2 text-xs font-semibold text-rose-600">{documentForm.errors.document_qr_code}</p>}
-                                    {documentQrError && <p className="mt-2 text-xs font-semibold text-rose-600">{documentQrError}</p>}
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                                <p className="text-sm font-black text-stone-900">Legal Agreements</p>
-
-                                <label className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={documentForm.data.terms_accepted}
-                                        onChange={(e) => documentForm.setData('terms_accepted', e.target.checked)}
-                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <span className="text-sm font-medium text-stone-700">
-                                        I agree to the{' '}
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveDoc({ key: 'terms_accepted', title: 'Terms of Service', url: '/documents/terms-and-condition.pdf' })}
-                                            className="font-bold text-blue-600 hover:underline"
-                                        >
-                                            Terms of Service
-                                        </button>
-                                    </span>
-                                </label>
-
-                                <label className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={documentForm.data.dpa_accepted}
-                                        onChange={(e) => documentForm.setData('dpa_accepted', e.target.checked)}
-                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <span className="text-sm font-medium text-stone-700">
-                                        I agree to the{' '}
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveDoc({ key: 'dpa_accepted', title: 'Data Processing Agreement', url: '/documents/privacy-policy.pdf' })}
-                                            className="font-bold text-blue-600 hover:underline"
-                                        >
-                                            Data Processing Agreement
-                                        </button>
-                                    </span>
-                                </label>
-
-                                <label className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={documentForm.data.nda_accepted}
-                                        onChange={(e) => documentForm.setData('nda_accepted', e.target.checked)}
-                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <span className="text-sm font-medium text-stone-700">
-                                        I agree to the{' '}
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveDoc({ key: 'nda_accepted', title: 'Mutual NDA', url: '/documents/mutual-nda.pdf' })}
-                                            className="font-bold text-blue-600 hover:underline"
-                                        >
-                                            Mutual NDA
-                                        </button>
-                                    </span>
-                                </label>
-                            </div>
+                        <div className="space-y-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
+                            <p className="text-sm font-black text-stone-900">Legal Agreements</p>
+{/* 
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={documentForm.data.terms_accepted}
+                                    onChange={(e) => documentForm.setData('terms_accepted', e.target.checked)}
+                                    className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-medium text-stone-700">
+                                    I agree to the{' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveDoc({ key: 'terms_accepted', title: 'Terms of Service', url: '/documents/terms-and-condition.pdf' })}
+                                        className="font-bold text-blue-600 hover:underline"
+                                    >
+                                        Terms of Service
+                                    </button>
+                                </span>
+                            </label>
                             {documentForm.errors.terms_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.terms_accepted}</p>}
-                            {documentForm.errors.dpa_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.dpa_accepted}</p>}
-                            {documentForm.errors.nda_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.nda_accepted}</p>}
 
-                            <div className="flex flex-wrap gap-3">
-                                <PrimaryButton disabled={documentForm.processing || Boolean(documentQrError)}>
-                                    {documentForm.processing ? 'Submitting...' : 'Submit Legal Documents'}
-                                </PrimaryButton>
-                                <button
-                                    type="button"
-                                    onClick={() => setCurrentStep(1)}
-                                    className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-700 transition-colors hover:bg-stone-50"
-                                >
-                                    Back
-                                </button>
-                            </div>
-                        </form>
-                    )}
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={documentForm.data.dpa_accepted}
+                                    onChange={(e) => documentForm.setData('dpa_accepted', e.target.checked)}
+                                    className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-medium text-stone-700">
+                                    I agree to the{' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveDoc({ key: 'dpa_accepted', title: 'Data Processing Agreement', url: '/documents/privacy-policy.pdf' })}
+                                        className="font-bold text-blue-600 hover:underline"
+                                    >
+                                        Data Processing Agreement
+                                    </button>
+                                </span>
+                            </label>
+                            {documentForm.errors.dpa_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.dpa_accepted}</p>} */}
+
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={documentForm.data.nda_accepted}
+                                    onChange={(e) => documentForm.setData('nda_accepted', e.target.checked)}
+                                    className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-medium text-stone-700">
+                                    I agree to the{' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveDoc({ key: 'nda_accepted', title: 'Mutual NDA', url: '/documents/mutual-nda.pdf' })}
+                                        className="font-bold text-blue-600 hover:underline"
+                                    >
+                                        Mutual NDA
+                                    </button>
+                                </span>
+                            </label>
+                            {documentForm.errors.nda_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.nda_accepted}</p>}
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                            <PrimaryButton disabled={documentForm.processing || Boolean(documentQrError) || !canSubmitDocuments}>
+                                {documentForm.processing ? 'Submitting...' : 'Submit Legal Documents'}
+                            </PrimaryButton>
+                            <button
+                                type="button"
+                                onClick={() => setCurrentStep(1)}
+                                className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-700 transition-colors hover:bg-stone-50"
+                            >
+                                Back
+                            </button>
+                        </div>
+                    </form>
                 </div>
             );
         }
@@ -579,18 +653,21 @@ export default function OnboardingWizard({ auth, shop }) {
                 primaryLabel: step3Completed ? 'Manage Services' : 'Go to Services Setup ➔',
                 primaryHref: route('store.services.index') + '?from_onboarding=true',
                 isDone: step3Completed,
+                    isMandatory: true,
             },
             4: {
                 description: 'Stock your virtual shelves with the fabrics and materials you provide.',
                 primaryLabel: step4Completed ? 'Manage Inventory' : 'Go to Inventory Setup ➔',
                 primaryHref: route('store.inventory.index') + '?from_onboarding=true',
                 isDone: step4Completed,
+                    isMandatory: true,
             },
             5: {
-                description: "Set your shop's operating hours and booking slots.",
+                description: "Set your shop's operating hours. At least one day must be marked as 'Open' to proceed.",
                 primaryLabel: step5Completed ? 'Manage Schedule' : 'Go to Schedule Setup ➔',
                 primaryHref: route('store.schedule.index') + '?from_onboarding=true#weekly-schedule',
                 isDone: step5Completed,
+                    isMandatory: true,
             },
             6: {
                 description: 'Review your setup progress and continue from the dashboard when ready.',
@@ -606,7 +683,14 @@ export default function OnboardingWizard({ auth, shop }) {
             <div className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
                 <div>
                     <p className="text-xs font-black uppercase tracking-[0.3em] text-emerald-700">Step {currentStep}</p>
-                    <h2 className="mt-2 text-3xl font-black tracking-tight text-stone-950">{STEP_TITLES[currentStep - 1] || 'Setup step'}</h2>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <h2 className="text-3xl font-black tracking-tight text-stone-950">{STEP_TITLES[currentStep - 1] || 'Setup step'}</h2>
+                        {activeSetup.isMandatory && !activeSetup.isDone && (
+                            <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-rose-600">
+                                REQUIRED
+                            </span>
+                        )}
+                    </div>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-stone-600 md:text-base">
                         {activeSetup.description}
                     </p>
@@ -624,28 +708,61 @@ export default function OnboardingWizard({ auth, shop }) {
                                 <FiCheckCircle className="h-4 w-4" /> Step Completed
                             </div>
                         )}
-                        <Link
-                            href={activeSetup.primaryHref}
-                            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/20 transition-colors hover:bg-slate-800"
-                        >
-                            {activeSetup.primaryLabel}
-                        </Link>
+                        {currentStep < 6 && (
+                            <Link
+                                href={activeSetup.primaryHref}
+                                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/20 transition-colors hover:bg-slate-800"
+                            >
+                                {activeSetup.primaryLabel}
+                            </Link>
+                        )}
+
+                        {activeSetup.isMandatory && !activeSetup.isDone && (
+                            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 animate-pulse">
+                                ⚠️ This step is required. Please add at least one item to proceed.
+                            </div>
+                        )}
 
                         {currentStep < 6 ? (
-                            <button
-                                type="button"
-                                onClick={() => setCurrentStep(currentStep + 1)}
-                                className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-600 transition-colors hover:bg-stone-100"
-                            >
-                                {activeSetup.isDone ? 'Proceed to Next Step ➔' : 'Skip for now ➔'}
-                            </button>
+                            activeSetup.isMandatory && !activeSetup.isDone ? (
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-stone-100 px-6 py-3 text-sm font-black text-stone-400 cursor-not-allowed"
+                                >
+                                    {currentStep === 5 ? 'At Least 1 Day Required' : 'Setup Required to Proceed'}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrentStep(currentStep + 1)}
+                                    className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-600 transition-colors hover:bg-stone-100"
+                                >
+                                    {activeSetup.isDone ? 'Proceed to Next Step ➔' : 'Skip for now ➔'}
+                                </button>
+                            )
                         ) : (
-                            <Link
-                                href={route('store.dashboard')}
-                                className="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-black text-stone-600 transition-colors hover:bg-stone-100"
-                            >
-                                Finish & Go to Dashboard
-                            </Link>
+                            (() => {
+                                const isProfileReady = step3Completed && step4Completed && step5Completed;
+
+                                return (
+                                    <div className="space-y-4">
+                                        {!isProfileReady && (
+                                            <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">
+                                                ⚠️ Shop Incomplete. Your profile cannot be submitted for review until you have at least one service, one inventory material, and an active weekly schedule.
+                                            </div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            disabled={!isProfileReady}
+                                            onClick={() => router.get(route('store.dashboard'))}
+                                            className={`px-6 py-3 rounded-xl font-black transition-all ${isProfileReady ? 'bg-slate-900 text-white shadow-lg' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}
+                                        >
+                                            Finish & Go to Dashboard
+                                        </button>
+                                    </div>
+                                );
+                            })()
                         )}
                     </div>
                 </div>
@@ -655,14 +772,14 @@ export default function OnboardingWizard({ auth, shop }) {
 
     return (
         <div className="min-h-screen overflow-hidden bg-gradient-to-br from-stone-50 via-white to-emerald-50">
-            <Head title="Onboarding Wizard" />
+            <Head title="Onboarding" />
 
             <div className="flex min-h-screen flex-col lg:flex-row">
                 <aside className="w-full border-b border-stone-200 bg-slate-950 px-6 py-8 text-white lg:sticky lg:top-0 lg:h-screen lg:w-1/4 lg:border-b-0 lg:border-r lg:px-8 lg:py-10">
                     <div className="flex h-full flex-col">
                         <div>
                             <p className="text-xs font-black uppercase tracking-[0.35em] text-emerald-300">Shop Setup</p>
-                            <h1 className="mt-3 text-3xl font-black tracking-tight">Onboarding Wizard</h1>
+                            <h1 className="mt-3 text-3xl font-black tracking-tight">Onboarding </h1>
                             <p className="mt-3 text-sm leading-7 text-slate-300">
                                 Follow the checklist from profile setup through review without leaving the onboarding flow.
                             </p>
@@ -687,6 +804,7 @@ export default function OnboardingWizard({ auth, shop }) {
                                         active={currentStep === index + 1}
                                         done={stepCompletionMap[index]}
                                         locked={isStepLocked(index)}
+                                                mandatory={MANDATORY_STEP_NUMBERS.includes(index + 1)}
                                     />
                                 </button>
                             ))}

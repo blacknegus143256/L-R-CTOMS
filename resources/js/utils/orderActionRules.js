@@ -1,6 +1,6 @@
 export const getTailorActionFlags = (order) => {
-    const rawStatus = String(order?.status || 'Pending').trim().toLowerCase();
-    const paymentStatus = String(order?.payment_status || 'Pending').trim();
+    const rawStatus = String(order?.status?.name || order?.status || 'Pending').trim().toLowerCase();
+    const paymentStatus = String(order?.payment?.status?.name || order?.payment_status || order?.payment?.payment_status || 'Pending').trim();
     const paymentStatusLower = paymentStatus.toLowerCase();
 
     return {
@@ -15,7 +15,7 @@ export const getTailorActionFlags = (order) => {
 };
 
 export const getNormalizedStatusLabel = (status) => {
-    const rawStatus = String(status || 'Pending').trim().toLowerCase();
+    const rawStatus = String(status?.name || status || 'Pending').trim().toLowerCase();
 
     if (!rawStatus) {
         return 'Pending';
@@ -47,7 +47,7 @@ export const getPaymentStatusClass = (paymentStatus) => {
 };
 
 export const getPaymentDisplayData = (order) => {
-    const paymentStatus = String(order?.payment_status || 'Pending').trim();
+    const paymentStatus = String(order?.payment?.status?.name || order?.payment_status || order?.payment?.payment_status || 'Pending').trim();
     const normalizedPaymentStatus = paymentStatus.toLowerCase();
     const amountPaid = Number(order?.amount_paid || 0);
     const totalPrice = Number(order?.total_price || 0);

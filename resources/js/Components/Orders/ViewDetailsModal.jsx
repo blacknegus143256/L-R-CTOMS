@@ -25,10 +25,9 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
             
     const availableShopAttributes = useMemo(() => shop.attributes || [], [shop.attributes]);
 
-    // Calculate actual labor by subtracting item totals from the total price
+    // Get base labor from normalized service price
     const initialLabor = useMemo(() => {
-        const itemsTotal = order.items?.reduce((sum, i) => sum + (Number(i.price) * Number(i.quantity)), 0) || 0;
-        return Math.max(0, Number(order.total_price) - itemsTotal);
+        return order.orderServices?.[0]?.price || 0;
     }, [order]);
 
     const profile = order?.user?.profile || order?.customer || {};
@@ -57,6 +56,20 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
 
     const [localMeasurements, setLocalMeasurements] = useState({});
     const [isSaving, setIsSaving] = useState(false);
+    const orderAppointments = Array.isArray(order.appointments) ? order.appointments : [];
+
+    const formatAppointment = (appointment) => {
+        if (!appointment?.date) return 'TBD';
+
+        const date = new Date(appointment.date);
+        if (Number.isNaN(date.getTime())) return 'TBD';
+
+        const time = appointment.time_start
+            ? new Date(`1970-01-01T${appointment.time_start}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            : '';
+
+        return time ? `${date.toLocaleDateString()} • ${time}` : date.toLocaleDateString();
+    };
 
 // New editing states
     const [isEditingInvoice, setIsEditingInvoice] = useState(false);
@@ -87,18 +100,17 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     // New derived state function to map order items precisely to shop pivot IDs
     const mapOrderItemsToSelectedState = useMemo(() => () => {
         return order.items?.map(item => {
-            // Cross-check master attribute ID and exact price to find the correct shop inventory item
-            const matchingShopAttr = availableShopAttributes.find(a => 
-                parseInt(a.attribute_type_id || a.id) === parseInt(item.attribute_type_id) &&
-                Number(a.pivot?.price) === Number(item.price)
+            const shopAttribute = item.shopAttribute;
+            const matchingShopAttr = shopAttribute || availableShopAttributes.find(a => 
+                parseInt(a.attribute_type_id || a.id) === parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id) &&
+                Number(a.price || a.pivot?.price || 0) === Number(item.price)
             );
-            
-            // Return precisely calculated pivot IDs
+
             return {
-                pivot_id: matchingShopAttr ? parseInt(matchingShopAttr.pivot.id) : null,
+                pivot_id: matchingShopAttr ? parseInt(matchingShopAttr.id || matchingShopAttr.pivot?.id) : null,
                 qty: Number(item.quantity) || 1
             };
-        }).filter(item => item.pivot_id !== null) || []; // Filter any generic fallbacks
+        }).filter(item => item.pivot_id !== null) || [];
     }, [order.items, availableShopAttributes]);
 
     // Initialize state with precision mapper
@@ -222,7 +234,8 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     const canEditInvoice = isAdmin && ['Pending', 'Requested', 'Quoted', 'Confirmed', 'Accepted', 'Appointment Scheduled'].includes(order.status);
     const isQuoting = order.status === 'Requested' || order.status === 'Pending';
 
-    const currentTotal = isEditingInvoice ? calculateNewTotal : Number(order.total_price);
+    const servicesTotalForCurrent = order.orderServices?.reduce((sum, s) => sum + ((Number(s.price) || 0) * (Number(s.quantity) || 1)), 0) || 0;
+    const currentTotal = isEditingInvoice ? calculateNewTotal : Number(servicesTotalForCurrent || order.total_price || 0);
 
     const getSelectedItem = (pivotId) => selectedItems.find(item => item.pivot_id === parseInt(pivotId));
 
@@ -234,8 +247,11 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
     const displayLabor = isEditingInvoice ? Number(customLaborPrice) : initialLabor;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[90rem] overflow-hidden flex flex-col max-h-[95vh]">
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[90rem] overflow-hidden flex flex-col max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
                 <div className="p-8 border-b border-stone-100 flex justify-between items-start bg-stone-50/30">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
@@ -243,11 +259,11 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                             <StatusBadge status={order.status} />
                         </div>
                         <div className="flex items-baseline gap-3">
-                            <h3 className="text-xl font-bold text-stone-700">{order.service?.service_name}</h3>
+                            <h3 className="text-xl font-bold text-stone-700">{order.orderServices?.[0]?.service?.service_name || 'Service'}</h3>
                             <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest px-2 py-1 bg-indigo-50 rounded-md">
-                                {order.service?.serviceCategory?.name || order.service?.service_category?.name || 'Custom Service'}
+                                {order.orderServices?.[0]?.service?.serviceCategory?.name || order.orderServices?.[0]?.service?.service_category?.name || 'Custom Service'}
                             </span>
-                            {order.rush_order && (
+                            {order.is_rush && (
                                 <span className="text-xs font-black text-rose-700 uppercase tracking-widest px-2 py-1 bg-rose-50 border border-rose-200 rounded-md">
                                     Rush Order
                                 </span>
@@ -265,7 +281,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                     <div className="absolute top-[35px] left-[15%] right-[15%] h-[2px] bg-stone-100 z-0" />
                     <div className="flex justify-between items-center relative z-10">
                         <TimelineNode label="Confirmed" date={order.created_at} active={true} />
-                        <TimelineNode label="Measured" date={order.measurement_date} active={!!order.measurement_date || !['Pending', 'Rejected', 'Declined', 'Cancelled'].includes(order.status)} />
+                        <TimelineNode label="Measured" date={orderAppointments[0]?.date} active={orderAppointments.length > 0 || !['Pending', 'Rejected', 'Declined', 'Cancelled'].includes(order.status)} />
                         <TimelineNode label="In Work" active={['Accepted', 'Appointment Scheduled', 'In Progress'].includes(order.status)} />
                         <TimelineNode label="Pickup" date={order.expected_completion_date} active={order.status === 'Ready' || order.status === 'Completed'} />
                     </div>
@@ -351,22 +367,18 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
                                             {order.items && order.items.length > 0 ? (
                                                 <div className="flex flex-col gap-2">
 {order.items.map((item, idx) => {
-    // Find the exact shop item to grab custom names and images
-    const exactShopItem = availableShopAttributes.find(a => 
-        parseInt(a.attribute_type_id || a.id) === parseInt(item.attribute_type_id) &&
-        Number(a.pivot?.price) === Number(item.price)
+    const shopAttribute = item.shopAttribute;
+    const exactShopItem = shopAttribute || availableShopAttributes.find(a => 
+        parseInt(a.attribute_type_id || a.id) === parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id) &&
+        Number(a.price || a.pivot?.price || 0) === Number(item.price)
     );
 
-    const attrCategory = exactShopItem?.attributeCategory?.name || item.attribute?.attribute_category?.name || 'Specification';
-    
-    // Use the custom item_name from the pivot table, fallback to master name
-    const attrName = exactShopItem?.pivot?.item_name || exactShopItem?.name || item.attribute?.name || 'Custom Add-on';
-    
-// Grab the image URL from the pivot table, fallback to the item's loaded attribute data
-    const imageUrl = exactShopItem?.pivot?.image_url || item.attribute?.image_url || item.image_url;
+    const attrCategory = exactShopItem?.attributeType?.attributeCategory?.name || 'Specification';
+    const attrName = exactShopItem?.item_name || exactShopItem?.name || item.attribute_name || 'Custom Add-on';
+    const imageUrl = exactShopItem?.image_url || item.image_url;
     
     const qty = Number(item.quantity || 1);
-    const unitPrice = Number(item.price || 0);
+    const unitPrice = Number(item.price || exactShopItem?.price || 0);
     const lineTotal = unitPrice * qty;
 
     return (
@@ -383,7 +395,7 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
         )}
         <div>
             <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 block mb-1">{attrCategory}</span>
-            <span className="text-base font-bold text-stone-800 block mb-1">{attrName}</span>
+            <span className="text-base font-bold text-stone-800 block mb-1">{shopAttribute?.item_name || item.attribute_name || shopAttribute?.attributeType?.name || 'Custom Add-on'} - {attrName}</span>
             <span className="text-xs text-stone-500 block font-bold">
                 ₱{unitPrice.toFixed(2)} x {qty}
             </span>
@@ -542,8 +554,22 @@ export default function ViewDetailsModal({ order, onClose, isAdmin = false }) {
 
                             <section className="space-y-3">
                                 <h3 className="text-[11px] font-black text-stone-900 uppercase tracking-[0.2em] mb-4">Schedule</h3>
-                                <DateRow label="📅 Fitting Appointment" date={order.measurement_date} isAdmin={isAdmin} />
-                                <DateRow label="📦 Material Drop-Off" date={order.material_dropoff_date} isAdmin={isAdmin} />
+                                {orderAppointments.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {orderAppointments.map((appointment, index) => (
+                                            <div key={appointment.id || `${appointment.date}-${index}`} className="flex justify-between items-center p-3 rounded-xl border bg-white border-stone-100">
+                                                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                                                    {index === 0 ? '📅 Appointment' : `📅 Appointment ${index + 1}`}
+                                                </span>
+                                                <span className="text-sm font-bold text-stone-900">{formatAppointment(appointment)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-stone-100 bg-white p-3 text-sm text-stone-500">
+                                        Appointment schedule not available.
+                                    </div>
+                                )}
                                 <DateRow label="🏁 Expected Pickup" date={order.expected_completion_date} isAdmin={isAdmin} isHighlight />
                             </section>
 

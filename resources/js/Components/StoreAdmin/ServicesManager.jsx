@@ -1,9 +1,9 @@
 import { useForm, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Image, Pencil, Trash2, Plus, X, Clock, DollarSign, CheckCircle, AlertCircle, Calendar, FileText } from 'lucide-react';
 import { TbCurrencyPeso } from 'react-icons/tb';
 import { confirmDialog } from '@/utils/dialog';
-import { getImageUploadError } from '@/utils/imageUpload';
 import { getImageUploadError } from '@/utils/imageUpload';
 export default function ServicesManager({ services, serviceCategories, getServiceCategoryName, onSaved }) {
     const [addImagePreview, setAddImagePreview] = useState(null);
@@ -161,6 +161,21 @@ export default function ServicesManager({ services, serviceCategories, getServic
             router.delete(route('store.services.delete', id));
         }
     };
+
+    // Highlight handling: read ?highlight= from URL and scroll into view
+    const [highlightedId, setHighlightedId] = useState(null);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const highlight = params.get('highlight');
+        if (highlight) {
+            const idNum = Number(highlight);
+            setHighlightedId(idNum);
+            setTimeout(() => {
+                document.getElementById(`service-row-${highlight}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        }
+    }, []);
 
     return (
         <>
@@ -323,21 +338,34 @@ export default function ServicesManager({ services, serviceCategories, getServic
                         </div>
 
                         {/* Appointment Required */}
-                        <div className="flex items-center p-4 border border-stone-200 rounded-2xl bg-white/50 hover:border-emerald-400 transition-colors">
-                            <input
-                                type="checkbox"
-                                id="appointment_required"
-                                checked={serviceData.appointment_required}
-                                onChange={e => setServiceData('appointment_required', e.target.checked)}
-                                className="w-5 h-5 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2 mr-4"
-                            />
-                            <label htmlFor="appointment_required" className="text-lg font-semibold text-slate-800 cursor-pointer select-none flex-1">
-                                Appointment required before service
-                            </label>
+                        <div className="flex flex-col gap-2 mt-4">
+                            <div className="flex items-center p-4 border border-stone-200 rounded-2xl bg-white/50 hover:border-emerald-400 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    id="appointment_required"
+                                    checked={serviceData.appointment_required}
+                                    onChange={e => setServiceData('appointment_required', e.target.checked)}
+                                    className="w-5 h-5 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2 mr-4"
+                                />
+                                <label htmlFor="appointment_required" className="text-lg font-semibold text-slate-800 cursor-pointer select-none flex-1">
+                                    Strictly require a fitting appointment
+                                </label>
+                            </div>
+                            {!serviceData.appointment_required ? (
+                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-3 ml-2">
+                                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                    <p><strong>Self-Measurement Allowed:</strong> Customers can submit their own measurements. <span className="font-semibold text-rose-700">Caution:</span> This increases the risk of fit issues. Ensure your measurement instructions are very clear.</p>
+                                </div>
+                            ) : (
+                                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-sm flex items-start gap-3 ml-2">
+                                    <Calendar className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                    <p><strong>Appointment Enforced:</strong> Customers must book an In-Shop or Home Visit fitting. Self-measurement will be disabled for this service.</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Notes */}
-                        <div className="lg:col-span-2">
+                        {/* <div className="lg:col-span-2">
                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                 <AlertCircle className="w-4 h-4 text-amber-600" />
                                 Internal Notes
@@ -349,7 +377,7 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 className="w-full border border-stone-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 rounded-2xl transition-all duration-300 shadow-sm py-4 px-5 text-lg bg-white/50 resize-vertical"
                                 placeholder="Internal notes for staff (not visible to customers)..."
                             />
-                        </div>
+                        </div> */}
 
                         {/* Portfolio Image */}
                         <div className="lg:col-span-2">
@@ -433,7 +461,12 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 </thead>
                                 <tbody className="divide-y divide-emerald-100 [&>*:hover]:bg-emerald-50/50 transition-all duration-200">
                                     {services.map((service) => (
-                                        <tr key={service.id} className="group">
+                                        <tr
+                                            id={`service-row-${service.id}`}
+                                            key={service.id}
+                                            className={`group transition-all duration-700 ${highlightedId === Number(service.id) ? 'ring-2 ring-emerald-400 bg-emerald-50 shadow-md scale-[1.01]' : ''}`}
+                                            onMouseEnter={() => { if (highlightedId === Number(service.id)) setHighlightedId(null); }}
+                                        >
                                             <td className="px-6 py-6">
                                                 {service.image ? (
                                                     <img 
@@ -529,9 +562,12 @@ export default function ServicesManager({ services, serviceCategories, getServic
                 )}
 
                 {/* Edit Service Modal */}
-                {editingService && (
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-6">
-                        <div className="bg-white/95 backdrop-blur-2xl rounded-3xl border border-emerald-200/50 shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                {editingService && createPortal(
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 backdrop-blur-md p-4 sm:p-6"
+                        onClick={(e) => { if (e.target === e.currentTarget) closeEditModal(); }}
+                    >
+                        <div className="my-auto w-full max-w-4xl overflow-y-auto max-h-[calc(100vh-2rem)] rounded-3xl border border-emerald-200/50 bg-white/95 shadow-2xl backdrop-blur-2xl sm:max-h-[calc(100vh-3rem)]" onClick={(e) => e.stopPropagation()}>
                             {/* Header */}
                             <div className="sticky top-0 bg-white/100 backdrop-blur-sm border-b border-emerald-200/50 p-8 rounded-t-3xl">
                                 <div className="flex items-center justify-between">
@@ -682,18 +718,31 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                         </label>
                                     </div>
 
-                                    <div className="flex items-center p-4 border border-stone-200 rounded-2xl bg-white/50 hover:border-emerald-400 transition-colors">
-                                        <input
-                                            type="checkbox"
-                                            id="edit_appointment_required"
-                                            checked={editServiceData.appointment_required}
-                                            onChange={e => setEditServiceData('appointment_required', e.target.checked)}
-                                            className="w-5 h-5 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2 mr-4"
-                                            disabled={editProcessing}
-                                        />
-                                        <label htmlFor="edit_appointment_required" className="text-lg font-semibold text-slate-800 cursor-pointer select-none flex-1">
-                                            Appointment required before service
-                                        </label>
+                                    <div className="flex flex-col gap-2 mt-4">
+                                        <div className="flex items-center p-4 border border-stone-200 rounded-2xl bg-white/50 hover:border-emerald-400 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                id="edit_appointment_required"
+                                                checked={editServiceData.appointment_required}
+                                                onChange={e => setEditServiceData('appointment_required', e.target.checked)}
+                                                className="w-5 h-5 text-emerald-600 border-stone-300 rounded focus:ring-emerald-500 focus:ring-2 mr-4"
+                                                disabled={editProcessing}
+                                            />
+                                            <label htmlFor="edit_appointment_required" className="text-lg font-semibold text-slate-800 cursor-pointer select-none flex-1">
+                                                Strictly require a fitting appointment
+                                            </label>
+                                        </div>
+                                        {!editServiceData.appointment_required ? (
+                                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-3 ml-2">
+                                                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                                <p><strong>Self-Measurement Allowed:</strong> Customers can submit their own measurements. <span className="font-semibold text-rose-700">Caution:</span> This increases the risk of fit issues. Ensure your measurement instructions are very clear.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-sm flex items-start gap-3 ml-2">
+                                                <Calendar className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                                <p><strong>Appointment Enforced:</strong> Customers must book an In-Shop or Home Visit fitting. Self-measurement will be disabled for this service.</p>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="lg:col-span-2">
@@ -769,7 +818,8 @@ export default function ServicesManager({ services, serviceCategories, getServic
                                 </div>
                             </form>
                         </div>
-                    </div>
+                    </div>,
+                    document.body
                 )}
             </div>
         </>

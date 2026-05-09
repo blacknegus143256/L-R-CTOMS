@@ -25,6 +25,9 @@ class DatabaseSeeder extends Seeder
         
         $this->call([
             UserRoleSeeder::class,
+            OrderStatusSeeder::class,
+            PaymentStatusSeeder::class,
+            ShopStatusSeeder::class,
             ServiceCategorySeeder::class,
             TailoringShopSeeder::class,
             SchedulingDatabaseSeeder::class,
@@ -38,7 +41,7 @@ class DatabaseSeeder extends Seeder
             'contact_person' => 'John Doe',
             'contact_role' => 'Manager',
             'is_active' => true,
-            'status' => 'approved',
+            'shop_status_id' => \App\Models\ShopStatus::where('name', 'Approved')->value('id'),
         ]);
     }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
 import { useForm } from '@inertiajs/react';
 import AddNewAttributeModal from './AddNewAttributeModal';
@@ -19,6 +19,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
         attribute_type_id: '',
         item_name: '',
         price: '',
+        stock_quantity: 0,
         unit: 'per yard',
         notes: '',
         image: null,
@@ -42,7 +43,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
             forceFormData: true,
             onSuccess: () => {
                 closeNewAttributeModal();
-                onSaved?.();
+                notifySaved();
             }
         });
     };
@@ -57,7 +58,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
             onSuccess: () => {
                 setCategoryModal(false);
                 resetCategoryForm();
-                onSaved?.();
+                notifySaved();
             }
         });
     };
@@ -66,6 +67,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
         attribute_type_id: '',
         item_name: '',
         price: '',
+        stock_quantity: 0,
         unit: '',
         notes: '',
         image: null,
@@ -78,6 +80,7 @@ export default function InventoryAssetsManager({ categories, shopAttributes, att
             attribute_type_id: attr.pivot.id,
             item_name: attr.pivot.item_name || '',
             price: attr.pivot.price,
+            stock_quantity: attr.pivot?.stock_quantity || 0,
             unit: attr.pivot.unit,
             notes: attr.pivot.notes || '',
             is_available: attr.pivot.is_available,
@@ -99,7 +102,7 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () =>{ closeEditAttrModal();
-                onSaved?.();
+                notifySaved();
                 showAlert({
                     title: 'Success',
                     message: 'Inventory item updated successfully!',
@@ -128,7 +131,11 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
         });
 
         if (confirmed) {
-            router.delete(route('store.attributes.delete', id));
+            router.delete(route('store.attributes.delete', id), {
+                onSuccess: () => {
+                    notifySaved();
+                },
+            });
         }
     };
 
@@ -140,13 +147,34 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
     );
 
     const getCategoryAssets = (catId) => shopAttributes.filter(sa => sa.attribute_category_id === catId);
+    const notifySaved = () => {
+        onSaved?.({
+            activeCategoryCount: activeCategories.length,
+            inventoryItemCount: shopAttributes.length,
+        });
+    };
+
+    // Highlight handling: read ?highlight= from URL and scroll into view
+    const [highlightedId, setHighlightedId] = useState(null);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const highlight = params.get('highlight');
+        if (highlight) {
+            const idNum = Number(highlight);
+            setHighlightedId(idNum);
+            setTimeout(() => {
+                document.getElementById(`inventory-row-${highlight}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        }
+    }, []);
 
     return (
         <>
-            <div className="bg-white/70 backdrop-blur-2xl rounded-[2rem] border border-emerald-100/50 p-10 shadow-2xl shadow-emerald-900/5">
+            <div className="bg-white/70 backdrop-blur-2xl rounded-[2rem] border border-emerald-100/50 p-6 shadow-2xl shadow-emerald-900/5">
                 <div className="flex justify-between items-center mb-12">
                     <h2 className="text-4xl font-black bg-gradient-to-r from-emerald-900 to-emerald-600 bg-clip-text text-transparent tracking-tight">Inventory Assets</h2>
-                    <div className="flex gap-3">
+                    {/* <div className="flex gap-3">
                         <button 
                             onClick={() => setCategoryModal(true)}
                             className="inline-flex items-center gap-2 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-black py-3 px-6 rounded-2xl shadow-xl hover:shadow-slate-500/50 hover:scale-[1.02] transition-all duration-300 text-sm"
@@ -154,15 +182,15 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
                             <Plus size={18} />
                             New Category
                         </button>
-                    </div>
+                    </div> */}
                 </div>
 
                 {/* Active Assets View */}
                 {activeCategories.length === 0 ? (
-                    <div className="text-center py-24 border-4 border-dashed border-emerald-200/50 rounded-3xl bg-emerald-50/50 backdrop-blur-xl">
-                        <div className="text-8xl mb-8 opacity-20">📦</div>
-                        <h3 className="text-4xl font-black text-slate-800 mb-4">No Active Assets</h3>
-                        <p className="text-2xl text-slate-500 mb-8 max-w-2xl mx-auto">Activate a category below to start managing your inventory</p>
+                    <div className="text-center py-10 border-2 border-dashed border-emerald-200/50 rounded-2xl bg-emerald-50/50 backdrop-blur-xl">
+                        <div className="text-5xl mb-3 opacity-20">📦</div>
+                        <h3 className="text-xl font-black text-slate-800 mb-2">No Active Assets</h3>
+                        <p className="text-sm text-slate-500 max-w-xl mx-auto">Activate a category below to start managing your inventory</p>
                     </div>
                 ) : (
                     activeCategories.map((cat) => {
@@ -187,13 +215,19 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
                                                 <th className="px-6 py-6 text-left text-sm font-black text-emerald-950 uppercase tracking-widest">Asset Name</th>
                                                 <th className="px-6 py-6 text-left text-sm font-black text-emerald-950 uppercase tracking-widest">Price</th>
                                                 <th className="px-6 py-6 text-left text-sm font-black text-emerald-950 uppercase tracking-widest">Unit</th>
+                                                <th className="px-6 py-6 text-left text-sm font-black text-emerald-950 uppercase tracking-widest">Stock Qty</th>
                                                 <th className="px-6 py-6 text-left text-sm font-black text-emerald-950 uppercase tracking-widest">Status</th>
                                                 <th className="px-6 py-6 text-right text-sm font-black text-emerald-950 uppercase tracking-widest">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white/80 backdrop-blur-sm divide-y divide-emerald-100">
 {categoryAssets.map((shopAttr, index) => (
-    <tr key={`shopAttr-${shopAttr.id}-${shopAttr.pivot?.id || 'nopivot'}-${index}`} className="group hover:bg-emerald-50/50 transition-all duration-300">
+    <tr
+        id={`inventory-row-${shopAttr.pivot?.id || shopAttr.id}`}
+        key={`shopAttr-${shopAttr.id}-${shopAttr.pivot?.id || 'nopivot'}-${index}`}
+        className={`group hover:bg-emerald-50/50 transition-all duration-300 ${highlightedId === Number(shopAttr.pivot?.id || shopAttr.id) ? 'ring-2 ring-rose-400 bg-rose-50 shadow-md scale-[1.01]' : ''}`}
+        onMouseEnter={() => { if (highlightedId === Number(shopAttr.pivot?.id || shopAttr.id)) setHighlightedId(null); }}
+    >
         {/* 1. Larger Image */}
         <td className="px-6 py-6">
             <div className="w-24 h-24 rounded-2xl overflow-hidden bg-stone-100 border-2 border-stone-200 shadow-md group-hover:border-emerald-300 transition-all">
@@ -227,15 +261,38 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
         <td className="px-6 py-6 font-bold text-slate-600 text-base uppercase tracking-wider">
             {shopAttr.pivot?.unit}
         </td>
+
+        {/* 4. Stock Quantity + Progress */}
+        <td className="px-6 py-6 min-w-[180px]">
+            {(() => {
+                const stockQty = Number(shopAttr.pivot?.stock_quantity || 0);
+                const clampedPct = Math.min(Math.max(stockQty, 0), 100);
+                const isLowStock = stockQty < 10;
+
+                return (
+                    <div>
+                        <div className={`font-black text-lg ${isLowStock ? 'text-rose-600' : 'text-emerald-700'}`}>
+                            {stockQty}
+                        </div>
+                        <div className="mt-2 h-2.5 w-full bg-stone-200 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-300 ${isLowStock ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${clampedPct}%` }}
+                            />
+                        </div>
+                    </div>
+                );
+            })()}
+        </td>
         
-        {/* 4. Status Badge */}
+        {/* 5. Status Badge */}
         <td className="px-6 py-6">
-            <span className={`inline-flex px-5 py-2 text-sm font-black uppercase tracking-wider rounded-xl shadow-sm border ${shopAttr.pivot?.is_available ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-stone-100 text-stone-600 border-stone-300'}`}>
-                {shopAttr.pivot?.is_available ? 'In Stock' : 'Out of Stock'}
+            <span className={`inline-flex px-5 py-2 text-sm font-black uppercase tracking-wider rounded-xl shadow-sm border ${Number(shopAttr.pivot?.stock_quantity || 0) <= 0 ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'}`}>
+                {Number(shopAttr.pivot?.stock_quantity || 0) <= 0 ? 'Out of Stock' : 'In Stock'}
             </span>
         </td>
         
-        {/* 5. Larger Action Buttons */}
+        {/* 6. Larger Action Buttons */}
         <td className="px-6 py-6 text-right space-x-3">
             <button 
                 onClick={() => openEditAttrModal(shopAttr)}
@@ -264,24 +321,24 @@ router.post(route('store.attributes.update', editingAttribute.pivot.id), {
 
                 {/* Available Categories Grid */}
                 {inactiveCategories.length > 0 && (
-                    <div className="mt-20 pt-12 border-t-4 border-emerald-200/30">
-                        <h3 className="text-3xl font-black bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent tracking-tight mb-10 text-center">
+                    <div className="mt-8 pt-6 border-t-2 border-emerald-200/30">
+                        <h3 className="text-xl font-black bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent tracking-tight mb-6 text-center">
                             Available Categories
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
                             {inactiveCategories.map((cat) => (
                                 <button
                                     key={cat.id}
                                     onClick={() => openNewAttributeModal(cat.id)}
-                                    className="group relative bg-white/80 backdrop-blur-xl hover:bg-white hover:shadow-2xl hover:shadow-emerald-500/25 hover:border-emerald-400/80 hover:scale-[1.05] transition-all duration-500 rounded-3xl border-2 border-emerald-200/50 p-10 text-center shadow-xl"
+                                    className="group relative bg-white/80 backdrop-blur-xl hover:bg-white hover:shadow-lg hover:shadow-emerald-500/20 hover:border-emerald-400/80 transition-all duration-300 rounded-2xl border border-emerald-200/60 p-4 text-center shadow-sm"
                                 >
                                     <div className="absolute -inset-1 bg-gradient-to-r from-emerald-400/20 to-emerald-500/20 rounded-3xl blur opacity-0 group-hover:opacity-100 transition duration-1000 group-hover:animate-tilt"></div>
-                                    <div className="relative flex flex-col items-center gap-4">
-                                        <div className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-3xl flex items-center justify-center shadow-2xl group-hover:shadow-emerald-300/50 group-hover:scale-110 transition-all">
-                                            <Plus className="w-10 h-10 text-emerald-700 font-bold" />
+                                    <div className="relative flex flex-col items-center gap-2">
+                                        <div className="w-14 h-14 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-2xl flex items-center justify-center shadow-md group-hover:shadow-emerald-300/40 transition-all">
+                                            <Plus className="w-7 h-7 text-emerald-700 font-bold" />
                                         </div>
-                                        <h4 className="text-xl font-black text-slate-900 drop-shadow-lg leading-tight">{cat.name}</h4>
-                                        <span className="text-sm text-emerald-600 font-bold uppercase tracking-wider px-4 py-2 bg-emerald-100/80 rounded-2xl border border-emerald-200/50 backdrop-blur-sm shadow-inner">Activate</span>
+                                        <h4 className="text-sm font-bold text-slate-900 leading-snug">{cat.name}</h4>
+                                        <span className="text-[10px] text-emerald-700 font-black uppercase tracking-wide px-3 py-1 bg-emerald-100 rounded-full border border-emerald-200/80">Activate</span>
                                     </div>
                                 </button>
                             ))}

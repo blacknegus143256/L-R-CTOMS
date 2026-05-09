@@ -17,6 +17,7 @@ import { router, usePage } from '@inertiajs/react';
 export default function TailorOrderWorkspace({ auth, order }) {
     const { props, url } = usePage();
     const parsedUrl = new URL(url, 'http://localhost');
+    const action = (parsedUrl.searchParams.get('action') || '').trim().toLowerCase();
     const requestedTab = (parsedUrl.searchParams.get('tab') || '').trim().toLowerCase();
     const highlightFromQuery = parsedUrl.searchParams.get('highlight');
     const highlightFromHash = parsedUrl.hash ? parsedUrl.hash.replace('#', '') : null;
@@ -27,7 +28,8 @@ export default function TailorOrderWorkspace({ auth, order }) {
     const paymentDisplay = getPaymentDisplayData(currentOrder);
     const paymentStatus = paymentDisplay.paymentStatus;
     const isPaymentVerified = paymentDisplay.isVerified;
-    const statusLabel = getNormalizedStatusLabel(currentOrder.status);
+    const statusLabel = getNormalizedStatusLabel(currentOrder.status?.name || currentOrder.status);
+    const paymentStatusRaw = (currentOrder.payment?.status?.name || currentOrder.payment_status || currentOrder.payment?.payment_status || '').toString().trim();
     
     // Safe status normalization for Mark Ready button
     const rawStatus = actionFlags.rawStatus;
@@ -172,34 +174,44 @@ const [showRejectModal, setShowRejectModal] = useState(false);
     }, [activeTab, activeHighlight]);
 
     // --- QUOTING & MEASUREMENT STATE ---
-    const [laborPrice, setLaborPrice] = useState(currentOrder.service?.price || 0);
+    const [laborPrice, setLaborPrice] = useState(currentOrder.orderServices?.[0]?.price || 0);
     const [rushFee, setRushFee] = useState(Number(currentOrder?.rush_fee || 0));
     const [productionMinDays, setProductionMinDays] = useState(currentOrder?.production_min_days ?? '');
     const [productionMaxDays, setProductionMaxDays] = useState(currentOrder?.production_max_days ?? '');
-const [measurementFields, setMeasurementFields] = useState(() => {
-    // Map over requested fields, and inject the customer's submitted values if they exist
-    const submittedMap = currentOrder.measurement_snapshot?.submitted || {};
-    const initialMeasurementFields = (currentOrder.measurement_snapshot?.requested || []).map(req => ({
-        ...req,
-        // Safely check the 'submitted' object for a matching name and inject its value
-        value: submittedMap[req.name] ?? req.value ?? ''
-    }));
-    return initialMeasurementFields;
-});
-    const [measurementUnit, setMeasurementUnit] = useState('inches');
+    const initialMeasurementFields = currentOrder?.order_measurements?.length > 0
+        ? currentOrder.order_measurements.map((measurement) => ({
+            name: measurement.measurement_name,
+            instruction: measurement.instruction || '',
+            value: measurement.measurement_value || '',
+            unit: measurement.unit || '',
+        }))
+        : [{ name: '', instruction: '', value: '' }];
+
+    const [measurementFields, setMeasurementFields] = useState(initialMeasurementFields);
+    const initialUnit = (() => {
+        const rowUnit = currentOrder.order_measurements?.[0]?.unit;
+        const candidate = (rowUnit || 'inches').toString().trim().toLowerCase();
+        if (candidate === 'cm') return 'cm';
+        if (candidate === 'in') return 'inches';
+        return candidate === 'inches' ? 'inches' : 'inches';
+    })();
+    const [measurementUnit, setMeasurementUnit] = useState(initialUnit);
     const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
     const [isSubmittingMeasurements, setIsSubmittingMeasurements] = useState(false);
     const [measurementSuccess, setMeasurementSuccess] = useState(false);
     
     const isQuoteLocked = ['quoted', 'confirmed', 'ready for production', 'in progress', 'appointment scheduled', 'in production', 'ready for pickup', 'completed', 'rejected', 'declined', 'cancelled'].includes(rawStatus);
-    const measurementType = (currentOrder.measurement_type || '').toString().trim().toLowerCase();
-    const isCustomerMeasurementFlow = ['profile', 'self_measured'].includes(measurementType);
-    const isInShopMeasurementFlow = ['scheduled', 'workshop_fitting'].includes(measurementType);
+    const fitMethodName = currentOrder.fit_method?.name || currentOrder.fitMethod?.name || 'Unknown';
+    const isCustomerMeasurementFlow = fitMethodName === 'Self-Measured';
+    const isInShopMeasurementFlow = fitMethodName === 'In-Shop Fitting';
     const isFinalOrderState = ['completed', 'rejected', 'declined', 'cancelled'].includes(rawStatus);
-    const hasRequestedMeasurements = Array.isArray(currentOrder.measurement_snapshot?.requested) && currentOrder.measurement_snapshot.requested.length > 0;
-    const hasSubmittedMeasurements = !!currentOrder.measurement_snapshot?.submitted && Object.keys(currentOrder.measurement_snapshot.submitted).length > 0;
+    const orderMeasurements = currentOrder?.order_measurements || [];
+// If there are ANY rows in the table, it means the tailor requested something.
+const hasRequestedMeasurements = orderMeasurements.length > 0;
+// If ANY row has a measurement_value, the customer has submitted data.
+const hasSubmittedMeasurements = orderMeasurements.some(m => m.measurement_value !== null && m.measurement_value !== undefined && m.measurement_value !== '');
     const hasRecordedMeasurementsForQuote = Boolean(currentOrder?.measurements_taken) || hasSubmittedMeasurements;
-    const requiresMeasurementBeforeQuote = measurementType !== 'none';
+    const requiresMeasurementBeforeQuote = fitMethodName !== 'No Measurement Required';
     const isMeasurementLocked = isCustomerMeasurementFlow
         ? hasRequestedMeasurements || hasSubmittedMeasurements
         : isInShopMeasurementFlow
@@ -248,30 +260,28 @@ const [measurementFields, setMeasurementFields] = useState(() => {
 
 const handleSendMeasurements = (e) => {
     if (e) e.preventDefault(); // Stop any default browser behavior
-    
-    const requestedArr = measurementFields.filter(m => m.name.trim() !== '');
+
+    const requestedArr = (measurementFields || [])
+        .map((measurement) => ({
+            name: (measurement?.name || '').trim(),
+            instruction: (measurement?.instruction || '').trim(),
+        }))
+        .filter((measurement) => measurement.name !== '');
+
         if (isCustomerMeasurementFlow && requestedArr.length === 0) {
             setAlertConfig({ isOpen: true, title: 'Validation Error', message: 'Please add at least one measurement part, or change the fit method.', type: 'error' });
             return;
         }
 
-    if (!measurementFields || measurementFields.length === 0) {
+    if (requestedArr.length === 0) {
         setAlertConfig({ isOpen: true, title: 'Validation Error', message: 'Please add at least one measurement.', type: 'error' });
-        return;
-    }
-
-    const hasEmpty = measurementFields.some(f => !f.name?.trim());
-
-    if (hasEmpty) {
-        setAlertConfig({ isOpen: true, title: 'Validation Error', message: 'All measurement fields must have a name.', type: 'error' });
         return;
     }
 
     // Explicitly use router.patch, NOT router.get or router.post
     router.patch(`/store/orders/${currentOrder.id}/request-measurements`, {
-        measurement_fields: measurementFields,
+        measurement_fields: requestedArr,
         measurement_unit: measurementUnit,
-        requested_measurements: requestedArr,
     }, {
         preserveScroll: true,
         onStart: () => setIsSubmittingMeasurements(true),
@@ -301,10 +311,7 @@ const handleSendMeasurements = (e) => {
                 instruction: (m.instruction || '').trim(),
             }));
 
-        if (
-            (order.measurement_type === 'profile' || order.measurement_type === 'self_measured')
-            && (!requestedMeasurements || requestedMeasurements.length === 0)
-        ) {
+        if (isCustomerMeasurementFlow && (!requestedMeasurements || requestedMeasurements.length === 0)) {
             return setAlertConfig({
                 isOpen: true,
                 title: 'Action Required',
@@ -337,11 +344,13 @@ const handleSendMeasurements = (e) => {
                 return;
             }
         }
-
+        const finalLaborPrice = laborPrice !== '' && Number(laborPrice) >= 0 
+        ? Number(laborPrice) 
+        : (Number(currentOrder?.orderServices?.[0]?.price) || Number(currentOrder?.service?.price) || 0);
         setIsSubmittingQuote(true);
         router.patch(route('store.orders.quote', currentOrder.id), {
-            base_labor: laborPrice,
-            rush_fee: currentOrder?.rush_order ? Number(rushFee || 0) : 0,
+            base_labor: finalLaborPrice,
+            rush_fee: currentOrder?.is_rush ? Number(rushFee || 0) : 0,
             production_min_days: Number(productionMinDays),
             production_max_days: Number(productionMaxDays),
             
@@ -349,9 +358,24 @@ const handleSendMeasurements = (e) => {
             material_source: currentOrder.material_source,
             status: 'Quoted'
         }, {
-            onSuccess: () => {
+            onSuccess: async () => {
                 setIsSubmittingQuote(false);
-                setAlertConfig({ isOpen: true, title: 'Success', message: 'Quote & Requirements sent successfully!', type: 'success' });
+
+                // Hide any existing alerts
+                setAlertConfig({ isOpen: false, title: '', message: '', type: 'info' });
+
+                // Prompt the user
+                const goToDashboard = await confirmDialog({
+                    title: 'Quote Sent Successfully! ✅',
+                    message: 'Your financial quote and requirements have been sent to the customer. What would you like to do next?',
+                    confirmText: 'Back to Orders List',
+                    cancelText: 'Stay on this Page',
+                    type: 'success',
+                });
+
+                if (goToDashboard) {
+                    router.visit(route('store.orders'));
+                }
             },
             onError: () => setIsSubmittingQuote(false),
             preserveScroll: true
@@ -641,7 +665,7 @@ const handleSendMeasurements = (e) => {
                             )}
                         </div>
                     ) : (
-                        currentOrder.payment_status === 'Pending' && currentOrder.manual_payment_proof_path ? (
+                        paymentStatusRaw === 'Pending' && currentOrder.manual_payment_proof_path ? (
                             <div className="mb-6 rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-6 shadow-sm">
                                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="flex items-center gap-3">
@@ -890,12 +914,12 @@ const handleSendMeasurements = (e) => {
                 </div>
 
                 <div className="rounded-2xl border border-indigo-200 bg-white px-4 py-3 text-xs font-bold text-indigo-700 shadow-sm">
-                    Current Status: {currentOrder.status || 'Pending'}
+                    Current Status: {(currentOrder.status?.name || currentOrder.status) || 'Pending'}
                 </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-3">
-                        {!(currentOrder.payment_status === 'Pending' && currentOrder.manual_payment_proof_path) && actionFlags.canRecordCashPayment && (
+                        {!(paymentStatusRaw === 'Pending' && currentOrder.manual_payment_proof_path) && actionFlags.canRecordCashPayment && (
                             <button
                                 type="button"
                                 onClick={handleRecordCashPayment}
@@ -960,6 +984,7 @@ const handleSendMeasurements = (e) => {
             currentOrder={currentOrder}
             tailorMaterials={tailorMaterials}
             availableShopAttributes={availableShopAttributes}
+            shouldHighlightMeasurements={action === 'view_measurements'}
             onAccept={handleAccept}
             onReject={() => setShowRejectModal(true)}
         />
@@ -1190,8 +1215,11 @@ const handleSendMeasurements = (e) => {
 
                     {/* Reject Modal */}
                     {showRejectModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+                        <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4"
+                            onClick={(event) => { if (event.target === event.currentTarget) { setShowRejectModal(false); } }}
+                        >
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                                 <div className="p-6 border-b border-stone-100 flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
                                         <AlertCircle className="w-5 h-5" />

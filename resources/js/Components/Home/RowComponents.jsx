@@ -1,22 +1,25 @@
-import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, Scale, X, Zap } from 'lucide-react';
+import PrimaryButton from '@/Components/PrimaryButton';
+import { router, usePage } from '@inertiajs/react';
 
 /**
  * Dumb Row Primitives - Zero Logic, Pure Props-to-UI
  * Consume exact data contract from engine
  */
 
-// Price Badge (core primitive)
-export function PriceBadge({ isHighlight, value, label, className = '' }) {
+// Price Badge (core primitive) - can be sized for different contexts
+export function PriceBadge({ isHighlight, value, label, className = '', compact = false }) {
+  const sizeClass = compact ? 'text-sm px-2 py-1' : 'text-sm px-2 py-1';
   if (isHighlight) {
     return (
-      <div className={`bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full text-xs font-bold w-fit inline-flex items-center gap-1 border border-emerald-200 ${className}`}>
+      <div className={`bg-emerald-50 text-emerald-700 rounded-full font-bold w-fit inline-flex items-center gap-1 border border-emerald-200 ${sizeClass} ${className}`}>
         {label} {value}
       </div>
     );
   }
   return (
-    <div className={`bg-stone-100 text-stone-600 px-2 py-1 rounded-full text-xs font-medium w-fit inline-flex items-center gap-1 border border-stone-200 ${className}`}>
+    <div className={`bg-stone-100 text-stone-600 rounded-full font-medium w-fit inline-flex items-center gap-1 border border-stone-200 ${sizeClass} ${className}`}>
       {label} {value}
     </div>
   );
@@ -33,28 +36,66 @@ export function NABadge() {
 
 // Data Cell (services/attributes)
 export function DataCell({ cell }) {
+  const { displayValue, isHighlight, meta } = cell;
+  const [imageFailed, setImageFailed] = useState(false);
+
   if (!cell.isAvailable) {
     return <NABadge />;
   }
-
-  const { displayValue, isHighlight, meta } = cell;
   const label = meta?.serviceName || meta?.itemName || meta?.label || '';
 
+  // Normalize image path for both services and materials
+  const rawImage = meta?.raw?.image || meta?.raw?.image_url || meta?.raw?.pivot?.image_url;
+  let imageSrc = '';
+  if (rawImage) {
+    if (rawImage.startsWith('http')) {
+      imageSrc = rawImage;
+    } else if (rawImage.startsWith('/storage/')) {
+      imageSrc = rawImage;
+    } else {
+      imageSrc = `/storage/${rawImage.replace(/^\/+/, '')}`;
+    }
+  }
+
   return (
-    <div className="space-y-2">
-      {/* For multi-items, engine provides flattened rows, but meta.allItems for lists */}
-      <div className="border border-stone-200/80 rounded-xl p-3 bg-slate-50/80 shadow-sm">
+    <div className="flex items-center gap-3">
+      {/* Image thumbnail (h-16 w-16) for better readability */}
+      <div className="w-16 h-16 rounded-md overflow-hidden bg-stone-100 border border-stone-200 flex-shrink-0">
+        {imageSrc && !imageFailed ? (
+          <img
+            src={imageSrc}
+            alt={label}
+            className="w-full h-full object-cover"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <div className="w-full h-full bg-stone-100 flex items-center justify-center text-stone-400 text-xs font-medium">
+            No Image
+          </div>
+        )}
+      </div>
+
+      {/* Price badge with compact sizing */}
+      <div>
         <PriceBadge 
           isHighlight={isHighlight} 
           value={displayValue} 
           label={label}
+          compact={true}
         />
+        {/* Rush availability badge for services */}
+        {meta?.type === 'service' && (meta?.raw?.rush_service_available || meta?.raw?.is_rush) && (
+          <div className="flex items-center gap-1 text-xs font-semibold text-amber-500 mt-1">
+            <Zap size={14} />
+            <span>Available</span>
+          </div>
+        )}
+        {meta.allItems && meta.allItems.length > 1 && (
+          <div className="text-[9px] text-stone-500 mt-0.5">
+            +{meta.allItems.length - 1} more
+          </div>
+        )}
       </div>
-      {meta.allItems && meta.allItems.length > 1 && (
-        <div className="text-xs text-stone-500">
-          +{meta.allItems.length - 1} more
-        </div>
-      )}
     </div>
   );
 }
@@ -146,6 +187,7 @@ export function ContentRow({ row, data, callbacks }) {
       case 'location':
         return <LocationCell cell={matchingCell} allLocationData={allLocationData} {...cellCallbacks} />;
       case 'service':
+      case 'rush-availability':
       case 'attribute':
         return <DataCell cell={matchingCell} />;
       default:
@@ -157,7 +199,7 @@ export function ContentRow({ row, data, callbacks }) {
 
   return (
     <div
-      className="group relative grid grid-cols-1 md:grid-cols-[minmax(200px,1fr)_repeat(auto-fit,minmax(250px,1fr))] gap-4 p-4 border border-stone-100 rounded-lg hover:bg-stone-50/50 hover:border-stone-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orchid-blue/40"
+      className="group relative grid grid-cols-1 md:grid-cols-[minmax(200px,1fr)_repeat(auto-fit,minmax(250px,1fr))] gap-4 py-4 px-4 border border-stone-100 rounded-lg hover:bg-stone-50/50 hover:border-stone-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orchid-blue/40"
       onClick={(e) => {
         if (e.target.closest('button')) return;
         cellCallbacks?.onRowClick?.(row);
@@ -176,14 +218,44 @@ export function ContentRow({ row, data, callbacks }) {
       <span className="pointer-events-none absolute right-4 top-4 rounded-full border border-orchid-blue/20 bg-white/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-orchid-blue opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
         Compare Details
       </span>
-      <div className="font-semibold text-stone-800 px-6 py-4 bg-gradient-to-r from-stone-50 to-transparent rounded-l-lg sticky left-0">
+      <div className="font-black text-lg text-stone-800 px-6 py-4 bg-gradient-to-r from-stone-50 to-transparent rounded-l-lg sticky left-0">
         {label}
       </div>
-      {Array.from({length: numShopCells}, (_, i) => (
-        <div key={`cell-${i}`} className="px-6 py-4 border-l border-stone-200 first-of-type:border-l-0">
-          {renderCell(null, i)}
-        </div>
-      ))}
+      {Array.from({length: numShopCells}, (_, i) => {
+        const shopId = data.shopIds[i];
+        const matchingCell = cells.find(c => c.shopId === shopId);
+        const auth = usePage().props.auth;
+
+        return (
+          <div key={`cell-${i}`} className="px-6 py-4 border-l border-stone-200 first-of-type:border-l-0">
+            {renderCell(null, i)}
+
+            {/* If this cell represents a service, show an Order button */}
+            {matchingCell && matchingCell.meta?.type === 'service' && (
+              <div className="mt-3">
+                <PrimaryButton
+                  className="w-full py-2 text-sm"
+                  onClick={() => {
+                    const serviceId = matchingCell.meta?.raw?.id || matchingCell.meta?.raw?.service_id || null;
+                    const intentUrl = serviceId
+                      ? `/shop/${shopId}?order=true&service_id=${serviceId}`
+                      : `/shop/${shopId}?order=true`;
+
+                    if (!auth?.user) {
+                      router.visit(`/login?redirect=${encodeURIComponent(intentUrl)}`);
+                      return;
+                    }
+
+                    router.visit(intentUrl);
+                  }}
+                >
+                  Order This
+                </PrimaryButton>
+              </div>
+            )}
+          </div>
+        );
+      })}
       {hasGhostColumn && (
         <div className="px-6 py-4">
           <GhostCell onGhostClick={cellCallbacks.onGhostClick} />

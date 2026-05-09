@@ -17,14 +17,12 @@ const MeasurementRequest = ({
     isSubmitted,
     isRequested
 }) => {
+    const fitMethodName = currentOrder?.fit_method?.name || currentOrder?.fitMethod?.name || 'Unknown';
+    const isCustomerFlow = fitMethodName === 'Self-Measured';
+    const isInShopFlow = fitMethodName === 'In-Shop Fitting';
+
     return (
         <div id="measurements" tabIndex={-1} className="bg-white p-6 md:p-8 rounded-3xl border border-stone-200 shadow-sm flex flex-col h-full outline-none">
-            {(() => {
-                const measurementType = (currentOrder?.measurement_type || '').toString().trim().toLowerCase();
-                const isCustomerFlow = ['profile', 'self_measured'].includes(measurementType);
-                const isInShopFlow = ['scheduled', 'workshop_fitting'].includes(measurementType);
-
-                return (
             <div className="mb-6">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-1">
                     <Ruler className="w-6 h-6 text-indigo-600" />
@@ -32,10 +30,8 @@ const MeasurementRequest = ({
                 </h2>
                 <p className="text-sm text-stone-500">List the specific body parts the customer needs to measure.</p>
             </div>
-                );
-            })()}
 
-            {['profile', 'self_measured'].includes((currentOrder?.measurement_type || '').toString().trim().toLowerCase()) ? (
+            {isCustomerFlow ? (
                 <div className="flex flex-col flex-1">
                     {/* Status Banner */}
                     {isMeasurementFormLocked && (
@@ -85,7 +81,7 @@ const MeasurementRequest = ({
                                             <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
                                                 Part to Measure
                                             </label>
-                                            {currentOrder?.measurement_snapshot?.submitted?.[field.name] && (
+                                            {currentOrder?.order_measurements?.some(m => m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && m.measurement_value) && (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                                                     ✓ Customer Provided
                                                 </span>
@@ -158,7 +154,6 @@ const MeasurementRequest = ({
                         onClick={(e) => {
                             e.preventDefault();
                             if (handleSendMeasurements) handleSendMeasurements(e);
-                            else if (handleSendQuote) handleSendQuote(e);
                         }}
                         disabled={isMeasurementLocked || isSubmittingMeasurements}
                         className={`w-full mt-6 py-4 font-black text-lg rounded-xl transition-all shadow-md ${
@@ -189,7 +184,7 @@ const MeasurementRequest = ({
                         }
                     </button>
                 </div>
-            ) : ['scheduled', 'workshop_fitting'].includes(currentOrder?.measurement_type) ? (
+            ) : isInShopFlow ? (
                 <div className="flex flex-col flex-1">
                     <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between">
                         <div>
@@ -201,7 +196,7 @@ const MeasurementRequest = ({
                         <div className="text-right">
                             <span className="text-[10px] font-black uppercase text-blue-400 block tracking-wider">Fitting Date</span>
                             <span className="text-sm font-bold text-blue-900">
-                                {currentOrder?.measurement_date ? new Date(currentOrder.measurement_date).toLocaleDateString() : 'TBD'}
+                                {currentOrder?.appointments?.[0]?.date ? new Date(currentOrder.appointments[0].date).toLocaleDateString() : 'TBD'}
                             </span>
                         </div>
                     </div>
@@ -226,7 +221,7 @@ const MeasurementRequest = ({
                                             <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
                                                 Part to Measure
                                             </label>
-                                            {currentOrder?.measurement_snapshot?.submitted?.[field.name] && (
+                                            {currentOrder?.order_measurements?.some(m => m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && m.measurement_value) && (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                                                     ✓ Customer Provided
                                                 </span>

@@ -44,17 +44,32 @@ export default function OrderWorkspace({ auth, order }) {
 
     // Quote acceptance states
     const [customerMeasurements, setCustomerMeasurements] = useState(() => {
-        const requested = currentOrder.measurement_snapshot?.requested;
-        if (Array.isArray(requested)) {
-            // Ensure we map the objects sent by the tailor into input objects
-            return requested.map(req => ({
-                name: req.name || req,
-                instruction: req.instruction || '',
-                value: '' // This is what the customer will fill out
+        const pendingMeasures = (currentOrder.order_measurements || [])
+            .filter((measurement) => !measurement.measurement_value)
+            .map((measurement) => ({
+                name: measurement.measurement_name,
+                value: '',
+                unit: measurement.unit || 'inches',
             }));
+
+        if (pendingMeasures.length > 0) {
+            return pendingMeasures;
         }
+
         return [];
     });
+
+    useEffect(() => {
+        const pendingMeasures = (currentOrder.order_measurements || [])
+            .filter((measurement) => !measurement.measurement_value)
+            .map((measurement) => ({
+                name: measurement.measurement_name,
+                value: '',
+                unit: measurement.unit || 'inches',
+            }));
+
+        setCustomerMeasurements(pendingMeasures);
+    }, [currentOrder, setCustomerMeasurements]);
     const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
     const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' });
 
@@ -138,7 +153,7 @@ export default function OrderWorkspace({ auth, order }) {
     };
 
     // Safe status normalization for bulletproof timeline + button logic
-    const rawStatus = (currentOrder.status || 'Requested')
+    const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested')
         .toString()
         .trim()
         .toLowerCase();
@@ -165,7 +180,7 @@ const handleAcceptQuote = (e) => {
 
     return new Promise((resolve, reject) => {
         const normalizedMeasurementType = (currentOrder.measurement_type || '').toString().trim().toLowerCase();
-        const requiresSubmittedMeasurements = ['profile', 'self_measured'].includes(normalizedMeasurementType);
+        const requiresSubmittedMeasurements = ['profile', 'self_measured', 'self_measure'].includes(normalizedMeasurementType);
 
         let submittedMeasurements = [];
 
@@ -288,7 +303,7 @@ const handleAcceptQuote = (e) => {
                                         : 'bg-orchid-100 text-orchid-800'
                                 }`}
                             >
-                                {currentOrder.status || 'Pending'}
+                                {(currentOrder.status?.name || currentOrder.status) || 'Pending'}
                             </div>
 
                             <Link 
@@ -304,7 +319,7 @@ const handleAcceptQuote = (e) => {
                 {/* ================= TABS NAVIGATION ================= */}
                 <div className="flex space-x-2 bg-white p-1.5 rounded-2xl shadow-sm border border-stone-100 mb-6 overflow-x-auto">
                     {['tracking', 'details', 'showcase', 'timeline', 'rework'].map((tab) => {
-                        const isQuoted = currentOrder.status === 'Quoted';
+                        const isQuoted = (currentOrder.status?.name || currentOrder.status) === 'Quoted';
                         return (
                             <button
                                 key={tab}

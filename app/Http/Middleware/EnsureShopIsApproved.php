@@ -16,8 +16,9 @@ class EnsureShopIsApproved
     public function handle(Request $request, Closure $next): Response
     {
         $shop = $request->user()?->tailoringShop;
+        $hasBirDocument = $shop?->documents()->where('document_type', 'bir_2303')->exists();
 
-        if (! $shop || ! $shop->document_bir) {
+        if (! $shop || ! $hasBirDocument) {
             return redirect()->route('store.onboarding');
         }
 

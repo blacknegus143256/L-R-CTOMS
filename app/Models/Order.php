@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use BackedEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,34 +21,25 @@ class Order extends Model
         'tailoring_shop_id',
         'user_id',
         'customer_id',
-        'service_id',
+        
         'style_tag',
         'material_source',
-        'material_dropoff_date',
         'design_image',
         'measurement_type',
-        'measurement_date',
-        'measurement_snapshot',
+        'fit_method_id',
         'production_min_days',
         'production_max_days',
         'production_started_at',
-        'payment_status',
-        'payment_type',
-        'manual_payment_reference_id',
-        'manual_payment_proof_path',
-        'total_amount',
-        'amount_paid',
+        'order_status_id',
+        'status',
         'payout_status',
-        'paymongo_link_id',
-        'paymongo_payment_id',
         'materials_received',
         'measurements_taken',
-        'status',
         'expected_completion_date',
-        'total_price',
+        
         'notes',
         'required_materials',
-        'rush_order',
+        
         'is_rush',
         'rush_fee',
     ];
@@ -55,18 +47,14 @@ class Order extends Model
     protected function casts(): array
     {
         return [
-            'status' => \App\Enums\OrderStatus::class,
             'expected_completion_date' => 'date',
             'production_started_at' => 'datetime',
-            'material_dropoff_date' => 'date',
             'total_price' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
             'payout_status' => 'string',
-            'measurement_snapshot' => 'array',
-            'required_measurements' => 'array',
-            'submitted_measurements' => 'array',
             'required_materials' => 'array',
+            'order_status_id' => 'integer',
             'payment_status' => 'string',
             'payment_type' => 'string',
             'manual_payment_reference_id' => 'string',
@@ -80,9 +68,21 @@ class Order extends Model
         ];
     }
 
-    protected $appends = ['is_urgent'];
+    protected $appends = [
+        'total_price',
+        'is_urgent',
+        'status',
+        'payment_status',
+        'payment_type',
+        'manual_payment_reference_id',
+        'manual_payment_proof_path',
+        'amount_paid',
+        'paymongo_link_id',
+        'paymongo_payment_id',
+    ];
 
-    protected $with = ['user.profile', 'customer', 'service', 'items', 'reworkRequest'];
+    protected $with = ['user.profile', 'customer', 'service', 'items', 'reworkRequest', 'payment', 'measurements', 'order_measurements'];
+
 
     public static function normalizeMeasurementType(?string $measurementType): ?string
     {   
@@ -94,8 +94,8 @@ class Order extends Model
 
         return match ($value) {
             'none', '' => self::MEASUREMENT_TYPE_NONE,
-            'scheduled', 'workshop_fitting', 'inperson' => self::MEASUREMENT_TYPE_SCHEDULED,
-            'profile', 'self_measured' => self::MEASUREMENT_TYPE_PROFILE,
+            'scheduled', 'workshop_fitting', 'inperson', 'in_shop', 'home_visit' => self::MEASUREMENT_TYPE_SCHEDULED,
+            'profile', 'self_measured', 'self_measure' => self::MEASUREMENT_TYPE_PROFILE,
             default => $measurementType,
         };
     }
@@ -126,6 +126,23 @@ class Order extends Model
         return false;
     }
 
+    public function getTotalPriceAttribute(): float
+    {
+        if ((float) ($this->total_amount ?? 0) > 0) {
+            return (float) $this->total_amount;
+        }
+
+        $servicesTotal = $this->orderServices
+            ? $this->orderServices->sum(fn ($orderService) => (float) $orderService->price * (int) $orderService->quantity)
+            : 0;
+
+        $itemsTotal = $this->items
+            ? $this->items->sum(fn ($item) => (float) $item->price * (int) $item->quantity)
+            : 0;
+
+        return (float) $servicesTotal + (float) $itemsTotal + (float) ($this->rush_fee ?? 0);
+    }
+
     public function tailoringShop(): BelongsTo
     {
         return $this->belongsTo(TailoringShop::class);
@@ -146,9 +163,34 @@ class Order extends Model
         return $this->belongsTo(Service::class);
     }
 
+    public function status(): BelongsTo
+    {
+        return $this->belongsTo(OrderStatus::class, 'order_status_id');
+    }
+
+    public function fitMethod(): BelongsTo
+    {
+        return $this->belongsTo(FitMethod::class, 'fit_method_id');
+    }
+
+    public function orderServices(): HasMany
+    {
+        return $this->hasMany(OrderService::class);
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function measurements(): HasMany
+    {
+        return $this->hasMany(OrderMeasurement::class);
+    }
+
+    public function order_measurements(): HasMany
+    {
+        return $this->hasMany(OrderMeasurement::class);
     }
 
     public function appointments(): HasMany
@@ -164,6 +206,82 @@ class Order extends Model
     public function reworkRequest(): HasOne
     {
         return $this->hasOne(OrderRework::class);
+    }
+
+    public function payment(): HasOne
+    {
+        return $this->hasOne(Payment::class);
+    }
+
+    public function getPaymentStatusAttribute(): string
+    {
+        return $this->payment?->payment_status ?? 'Pending';
+    }
+
+    public function getStatusAttribute(): ?string
+    {
+        if ($this->relationLoaded('status')) {
+            return $this->getRelation('status')?->name;
+        }
+
+        return $this->status()->value('name');
+    }
+
+    public function setStatusAttribute($value): void
+    {
+        if ($value instanceof BackedEnum) {
+            $value = $value->value;
+        }
+
+        if ($value === null || $value === '') {
+            $this->attributes['order_status_id'] = null;
+            return;
+        }
+
+        if (is_numeric($value)) {
+            $this->attributes['order_status_id'] = (int) $value;
+            return;
+        }
+
+        $statusId = OrderStatus::idByName((string) $value);
+        if (! $statusId) {
+            $statusId = OrderStatus::query()->create([
+                'name' => (string) $value,
+                'description' => null,
+            ])->id;
+        }
+
+        $this->attributes['order_status_id'] = $statusId;
+    }
+
+    public function getPaymentTypeAttribute(): ?string
+    {
+        return $this->payment?->payment_type;
+    }
+
+    public function getManualPaymentReferenceIdAttribute(): ?string
+    {
+        return $this->payment?->manual_payment_reference_id;
+    }
+
+    public function getManualPaymentProofPathAttribute(): ?string
+    {
+        return $this->payment?->manual_payment_proof_path;
+    }
+
+    public function getAmountPaidAttribute(): float
+    {
+        return (float) ($this->payment?->amount ?? 0);
+    }
+
+    public function getPaymongoLinkIdAttribute(): ?string
+    {
+        return $this->payment?->paymongo_link_id;
+    }
+
+    public function getPaymongoPaymentIdAttribute(): ?string
+    {
+        return $this->payment?->paymongo_payment_id;
     }
 
     public function logs(): HasMany

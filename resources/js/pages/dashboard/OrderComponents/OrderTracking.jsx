@@ -35,7 +35,7 @@ const OrderTracking = ({
     };
 
     // Normalize status to lowercase to prevent case-sensitivity bugs (e.g. 'CONFIRMED' vs 'Confirmed')
-    const rawStatus = (currentOrder.status || 'Requested')
+    const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested')
         .toString()
         .trim()
         .toLowerCase();
@@ -127,7 +127,7 @@ const OrderTracking = ({
             </div>
 
             {/* Call to Action when Quoted */}
-            {currentOrder.status === 'Quoted' && (
+            {(currentOrder.status?.name || currentOrder.status) === 'Quoted' && (
                 <div className="mt-10 bg-orchid-50 border border-orchid-200 rounded-2xl p-6 text-center">
                     <CheckCircle className="w-8 h-8 text-orchid-600 mx-auto mb-3" />
                     <h3 className="text-lg font-bold text-orchid-700">

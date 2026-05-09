@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Enums\OrderStatus;
+use App\Models\Payment;
 use App\Models\Order;
 use App\Models\ShopSchedule;
 use App\Notifications\OrderUpdatedNotification;
@@ -29,18 +30,23 @@ class PaymentController extends Controller
 
         $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
 
-        if ($order->manual_payment_proof_path && Storage::disk('public')->exists($order->manual_payment_proof_path)) {
-            Storage::disk('public')->delete($order->manual_payment_proof_path);
+        $existingPayment = $order->payment;
+        if ($existingPayment?->manual_payment_proof_path && Storage::disk('public')->exists($existingPayment->manual_payment_proof_path)) {
+            Storage::disk('public')->delete($existingPayment->manual_payment_proof_path);
         }
 
-        $order->update([
-            'payment_type' => $validated['payment_type'] ?? $order->payment_type,
-            'manual_payment_reference_id' => $validated['reference_id'],
-            'manual_payment_proof_path' => $proofPath,
-            'payment_status' => 'Pending',
-            'total_amount' => (float) ($order->total_amount ?: $order->total_price),
-            'amount_paid' => 0,
-        ]);
+        Payment::updateOrCreate(
+            ['order_id' => $order->id],
+            [
+                'payment_type' => $validated['payment_type'] ?? $existingPayment?->payment_type,
+                'payment_status' => 'Pending',
+                'amount' => 0,
+                'manual_payment_reference_id' => $validated['reference_id'],
+                'manual_payment_proof_path' => $proofPath,
+                'paymongo_link_id' => $existingPayment?->paymongo_link_id,
+                'paymongo_payment_id' => $existingPayment?->paymongo_payment_id,
+            ]
+        );
 
         $order->tailoringShop?->user?->notify(new OrderUpdatedNotification(
             $order,
@@ -83,9 +89,6 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Order total amount not set or invalid'], 400);
         }
 
-        // Keep legacy payment tracking column in sync for downstream logic.
-        $order->update(['total_amount' => $basePrice]);
-
         // Compute charge based on selected payment type.
         $chargeAmount = $request->payment_type === 'partial' ? ($basePrice / 2) : $basePrice;
 
@@ -124,11 +127,18 @@ class PaymentController extends Controller
             $paymongoLinkId = $data['id'];
             $checkoutUrl = $data['attributes']['checkout_url'];
 
-            // Save payment metadata to order
-            $order->update([
-                'payment_type' => $request->payment_type,
-                'paymongo_link_id' => $paymongoLinkId,
-            ]);
+            Payment::updateOrCreate(
+                ['order_id' => $order->id],
+                [
+                    'payment_type' => $request->payment_type,
+                    'payment_status' => 'Pending',
+                    'amount' => $chargeAmount,
+                    'paymongo_link_id' => $paymongoLinkId,
+                    'paymongo_payment_id' => null,
+                    'manual_payment_reference_id' => null,
+                    'manual_payment_proof_path' => null,
+                ]
+            );
 
             return response()->json([
                 'checkout_url' => $checkoutUrl,
@@ -177,24 +187,32 @@ class PaymentController extends Controller
             $amountPaidInCents = $paymentData['amount'] ?? 0;
             $amountPaid = $amountPaidInCents / 100;
 
+            $paymentRecord = Payment::firstOrCreate(
+                ['order_id' => $order->id],
+                ['payment_status' => 'Pending', 'amount' => 0]
+            );
+
             // Extract PayMongo payment ID for receipt verification
             $payment = $request->input('data.relationships.payment.data');
             $paymongoPaymentId = $payment['id'] ?? null;
 
             // Idempotency guard for retried webhooks.
-            if ($paymongoPaymentId && $order->paymongo_payment_id === $paymongoPaymentId) {
+            if ($paymongoPaymentId && $paymentRecord->paymongo_payment_id === $paymongoPaymentId) {
                 return response()->json(['ok' => true]);
             }
 
-            $updatedAmountPaid = (float) $order->amount_paid + (float) $amountPaid;
+            $updatedAmountPaid = (float) $amountPaid;
             $totalAmount = (float) ($order->total_amount ?: $order->total_price);
             $paymentStatus = $updatedAmountPaid + 0.01 >= $totalAmount ? 'Paid' : 'Partial';
 
-            // Update order with payment info and confirm order status
-            $order->update([
-                'amount_paid' => $updatedAmountPaid,
+            // Persist payment info in the payments table and confirm order status
+            $paymentRecord->update([
+                'amount' => $updatedAmountPaid,
                 'paymongo_payment_id' => $paymongoPaymentId,
                 'payment_status' => $paymentStatus,
+            ]);
+
+            $order->update([
                 'status' => \App\Enums\OrderStatus::CONFIRMED->value,
             ]);
 
@@ -251,7 +269,7 @@ class PaymentController extends Controller
         }
 
         if ($linkId) {
-            return Order::where('paymongo_link_id', $linkId)->first();
+            return Payment::where('paymongo_link_id', $linkId)->with('order')->first()?->order;
         }
 
         return null;
@@ -318,13 +336,22 @@ class PaymentController extends Controller
                 'status' => ['nullable', Rule::in(['Partial', 'Paid'])],
             ]);
 
+            $paymentRecord = Payment::firstOrCreate(
+                ['order_id' => $order->id],
+                ['payment_status' => 'Pending', 'amount' => 0]
+            );
+
             $totalAmount = (float) ($order->total_amount ?: $order->total_price);
             $paymentStatus = $validated['status'] ?? ($order->payment_type === 'partial' ? 'Partial' : 'Paid');
             $amountPaid = $paymentStatus === 'Partial' ? ($totalAmount / 2) : $totalAmount;
 
-            $order->update([
-                'amount_paid' => $amountPaid,
+            $paymentRecord->update([
                 'payment_status' => $paymentStatus,
+                'amount' => $amountPaid,
+                'payment_type' => $paymentRecord->payment_type ?? $order->payment_type,
+            ]);
+
+            $order->update([
                 'status' => OrderStatus::CONFIRMED->value,
             ]);
 
@@ -341,20 +368,22 @@ class PaymentController extends Controller
             return redirect()->back()->with('success', 'Manual payment approved successfully.');
         }
 
+        $paymentRecord = Payment::where('order_id', $order->id)->first();
+
         // Check if order has a PayMongo link ID
-        if (!$order->paymongo_link_id) {
+        if (!$paymentRecord?->paymongo_link_id) {
             return redirect()->back()->with('error', 'Payment link is still unpaid or an error occurred.');
         }
 
         try {
             // Fetch link status from PayMongo API
             $response = Http::withBasicAuth(config('services.paymongo.secret_key'), '')
-                ->get("https://api.paymongo.com/v1/links/{$order->paymongo_link_id}");
+                ->get("https://api.paymongo.com/v1/links/{$paymentRecord->paymongo_link_id}");
 
             if (!$response->successful()) {
                 Log::error('PayMongo link status fetch failed', [
                     'order_id' => $order->id,
-                    'link_id' => $order->paymongo_link_id,
+                    'link_id' => $paymentRecord->paymongo_link_id,
                     'status' => $response->status(),
                     'response' => $response->json(),
                 ]);
@@ -375,12 +404,15 @@ class PaymentController extends Controller
             $amountPaid = $linkAmount / 100;
 
             // Determine payment status based on payment type
-            $paymentStatus = $order->payment_type === 'full' ? 'Paid' : 'Partial';
+            $paymentStatus = $paymentRecord->payment_type === 'full' ? 'Paid' : 'Partial';
+
+            $paymentRecord->update([
+                'amount' => $amountPaid,
+                'payment_status' => $paymentStatus,
+            ]);
 
             // Update order with payment information and confirm order status
             $order->update([
-                'amount_paid' => $amountPaid,
-                'payment_status' => $paymentStatus,
                 'status' => \App\Enums\OrderStatus::CONFIRMED->value,
             ]);
 
@@ -424,16 +456,20 @@ class PaymentController extends Controller
             'reason' => ['required', 'string'],
         ]);
 
-        if ((string) $order->payment_status !== 'Pending' || empty($order->manual_payment_proof_path)) {
+        $paymentRecord = Payment::firstOrCreate(
+            ['order_id' => $order->id],
+            ['payment_status' => 'Pending', 'amount' => 0]
+        );
+
+        if ((string) $paymentRecord->payment_status !== 'Pending' || empty($paymentRecord->manual_payment_proof_path)) {
             return redirect()->back()->with('error', 'No pending manual payment proof to reject.');
         }
 
-        $order->update([
+        $paymentRecord->update([
             'payment_status' => 'Pending',
-            'amount_paid' => 0,
+            'amount' => 0,
             'manual_payment_reference_id' => null,
             'manual_payment_proof_path' => null,
-            'notes' => 'PAYMENT_REJECTED: ' . $validated['reason'] . "\n\n" . ($order->notes ?? ''),
         ]);
 
         $order->tailoringShop?->user?->notify(new OrderUpdatedNotification(
@@ -455,10 +491,18 @@ class PaymentController extends Controller
         $totalAmount = (float) ($order->total_amount ?: $order->total_price);
         $paymentStatus = $amountPaid + 0.01 >= $totalAmount ? 'Paid' : 'Partial';
 
-        $order->update([
-            'amount_paid' => $amountPaid,
+        $paymentRecord = Payment::firstOrCreate(
+            ['order_id' => $order->id],
+            ['payment_status' => 'Pending', 'amount' => 0]
+        );
+
+        $paymentRecord->update([
+            'amount' => $amountPaid,
             'payment_status' => $paymentStatus,
             'payment_type' => 'cash',
+        ]);
+
+        $order->update([
             'status' => OrderStatus::CONFIRMED->value,
         ]);
 
@@ -479,13 +523,18 @@ class PaymentController extends Controller
 
     public function settleRemainingBalance(Order $order)
     {
-        if ((string) $order->payment_status !== 'Partial') {
+        $paymentRecord = Payment::firstOrCreate(
+            ['order_id' => $order->id],
+            ['payment_status' => 'Pending', 'amount' => 0]
+        );
+
+        if ((string) $paymentRecord->payment_status !== 'Partial') {
             return redirect()->back()->with('error', 'Only partially paid orders can be settled.');
         }
 
-        $order->update([
+        $paymentRecord->update([
             'payment_status' => 'Paid',
-            'amount_paid' => (float) $order->total_price,
+            'amount' => (float) $order->total_price,
         ]);
 
         return redirect()->back()->with('success', 'Remaining balance collected successfully.');

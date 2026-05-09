@@ -4,8 +4,8 @@ export default function DesignContext({
   service, 
   styleTag, 
   setStyleTag, 
-  rushOrder,
-  setRushOrder,
+  isRush,
+  setIsRush,
   designImagePreview, 
   setDesignImageFile, 
   handleDesignImage, 
@@ -55,13 +55,13 @@ export default function DesignContext({
         </div>
       )}
 
-      {service?.rush_service_available && (
+      {service?.rush_service_available ? (
         <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/70">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={Boolean(rushOrder)}
-              onChange={(e) => setRushOrder(e.target.checked)}
+              checked={Boolean(isRush)}
+              onChange={(e) => setIsRush(e.target.checked)}
               className="mt-1 w-4 h-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
             />
             <div>
@@ -72,30 +72,24 @@ export default function DesignContext({
             </div>
           </label>
         </div>
-      )}
-
-      <div className="space-y-6">
-        <div className="mb-2">
-          <label className="block text-sm font-medium text-stone-700 mb-2">
-            Design Notes <span className="text-amber-600">*</span>
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value.slice(0,500))}
-            placeholder="Describe your vision in detail - fabric feel, silhouette, special details, inspiration... (500 chars max)"
-            rows={6}
-            maxLength={500}
-            className="w-full rounded-lg border border-stone-300 px-4 py-3 text-stone-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-vertical min-h-[140px] font-medium"
-            required
-          />
-          <div className="text-right mt-1">
-            <span className={`text-sm ${notes.length > 450 ? 'text-red-600 font-bold' : 'text-stone-500'}`}>
-              {notes.length}/500
-            </span>
+      ) : (
+        <div className="mb-6 p-4 rounded-xl border border-stone-200 bg-stone-50">
+          <div className="flex items-start gap-3 opacity-60">
+            <input
+              type="checkbox"
+              disabled
+              className="mt-1 w-4 h-4 rounded border-stone-300 text-stone-400 cursor-not-allowed"
+            />
+            <div>
+              <span className="text-sm font-bold text-stone-600">Rush not available</span>
+              <p className="text-xs text-stone-500 mt-1">
+                This service does not support rush orders. Contact the shop for expedited options.
+              </p>
+            </div>
           </div>
         </div>
-
-        <div>
+      )}
+ <div>
           <label className="mb-2 block text-sm font-medium text-stone-700">
             Reference Photo <span className="text-amber-600">*</span>
           </label>
@@ -120,6 +114,28 @@ onClick={() => handleDesignImage({ target: { files: [] } })}
             )}
           </div>
         </div>
+      <div className="space-y-6">
+        <div className="mb-2">
+          <label className="block text-sm font-medium text-stone-700 mb-2">
+            Design Notes <span className="text-amber-600">*</span>
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value.slice(0,500))}
+            placeholder="Describe your vision in detail - fabric feel, silhouette, special details, inspiration... (500 chars max)"
+            rows={6}
+            maxLength={500}
+            className="w-full rounded-lg border border-stone-300 px-4 py-3 text-stone-800 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-vertical min-h-[140px] font-medium"
+            required
+          />
+          <div className="text-right mt-1">
+            <span className={`text-sm ${notes.length > 450 ? 'text-red-600 font-bold' : 'text-stone-500'}`}>
+              {notes.length}/500
+            </span>
+          </div>
+        </div>
+
+       
 
         <div className="pt-4 border-t border-stone-200">
           <div className="flex gap-3">
@@ -136,7 +152,7 @@ onClick={() => handleDesignImage({ target: { files: [] } })}
               disabled={!canNext}
               className="flex-1 rounded-lg bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {isRepair ? 'Continue to Drop-off' : 'Next: Materials'} →
+              {isRepair ? 'Continue to Materials' : 'Next: Materials'} →
             </button>
           </div>
         </div>

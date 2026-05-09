@@ -1,6 +1,4 @@
-import React, { useState } from 'react';
-import { router } from '@inertiajs/react';
-import MapLibrePicker from '../MapLibrePicker.jsx';
+import React from 'react';
 import { format } from 'date-fns';
 
 export default function OrderSummary({ 
@@ -15,14 +13,15 @@ export default function OrderSummary({
   materialDropoffDate,
   materialDropoffTime,
   notes, 
-  rushOrder,
+  isRush,
+  quantity,
+  setQuantity,
   selectedAttributes, 
   attributeQuantities,
   designImagePreview, 
   totalPrice, 
   onSubmit,
   loading,
-  profileComplete,
   onBack
 }) {
   if (!service) return null;
@@ -32,80 +31,6 @@ export default function OrderSummary({
   const isCustomQuote = service.checkout_type === 'requires_quote';
 
   // No attributes display needed in summary - handled by totalPrice
-
-  // Local state for inline edits
-  const [localPhone, setLocalPhone] = useState(auth.user.profile?.phone || '');
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [isSavingPhone, setIsSavingPhone] = useState(false);
-  
-  // Profile completeness check
-  const isProfileComplete = auth.user.profile?.phone && 
-                           auth.user.profile?.street && 
-                           auth.user.profile?.barangay && 
-                           auth.user.profile?.latitude;
-  
-  // Map picker local state
-  const [tempProfile, setTempProfile] = useState({
-    latitude: auth.user.profile?.latitude || '',
-    longitude: auth.user.profile?.longitude || '',
-    address: auth.user.profile?.address || '',
-    barangay: auth.user.profile?.barangay || '',
-    street: auth.user.profile?.street || '',
-    purok: auth.user.profile?.purok || '',
-  });
-  const [isSavingLocation, setIsSavingLocation] = useState(false);
-
-  const handleSetData = (field, value) => {
-    setTempProfile(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSaveLocation = () => {
-    if (!tempProfile.latitude || !tempProfile.longitude) return;
-    setIsSavingLocation(true);
-    
-    router.patch('/profile', { 
-      ...auth.user, 
-      latitude: tempProfile.latitude,
-      longitude: tempProfile.longitude,
-      address: tempProfile.address || '',
-      barangay: tempProfile.barangay || '',
-      street: tempProfile.street || '',
-      purok: tempProfile.purok || '',
-    }, {
-      preserveState: true,
-      preserveScroll: true,
-      onSuccess: () => {
-        setIsSavingLocation(false);
-        setShowMapModal(false);
-      },
-      onError: (errors) => {
-        console.error(errors);
-        setIsSavingLocation(false);
-      }
-    });
-  };
-
-  // Strictly bind missing status to the authentic user profile, not the typing state!
-  const isPhoneMissing = !auth.user.profile?.phone;
-  const isMapMissing = !auth.user.profile?.latitude;
-
-  const handleSavePhone = () => {
-    if (localPhone.trim().length < 10) return;
-    setIsSavingPhone(true);
-    
-    router.patch('/profile', { 
-      ...auth.user, 
-      phone: localPhone.trim() 
-    }, {
-      preserveState: true, // CRITICAL: Tells Inertia not to wipe the modal state
-      preserveScroll: true,
-      onSuccess: () => setIsSavingPhone(false),
-      onError: (errors) => {
-        console.error(errors);
-        setIsSavingPhone(false);
-      }
-    });
-  };
 
   const formatDateTime = (dateValue, timeValue) => {
     if (!dateValue) return 'TBD';
@@ -121,12 +46,24 @@ export default function OrderSummary({
     return `${formattedDate} at ${formattedTime}`;
   };
 
+  const normalizedQuantity = Math.max(1, Number(quantity) || 1);
+
+  const handleQuantityInput = (value) => {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) {
+      setQuantity(1);
+      return;
+    }
+
+    setQuantity(Math.max(1, parsed));
+  };
+
   const summaryItems = [
     { label: 'Notes', value: notes },
     { label: 'Service', value: service.service_name + ' - ' + (service.price ? `₱${service.price.toLocaleString()}` : 'Price TBD') },
     { label: 'Material', value: materialSource?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) },
     ...(service?.rush_service_available
-      ? [{ label: 'Rush Order', value: rushOrder ? 'Yes (subject to additional fee)' : 'No' }]
+      ? [{ label: 'Rush Order', value: isRush ? 'Yes (subject to additional fee)' : 'No' }]
       : []),
     ...(materialSource === 'customer'
       ? [{ label: 'Drop-off Schedule', value: formatDateTime(materialDropoffDate, materialDropoffTime) }]
@@ -135,9 +72,13 @@ export default function OrderSummary({
     label: 'Fit Method', 
     value: (measurementPreference === 'none' || !measurementPreference)
         ? 'No Measurements Required' 
-        : (measurementPreference === 'self_measured' || measurementPreference === 'profile' ? 'I will provide measurements' : 'In-Shop Fitting') 
+        : (measurementPreference === 'self_measure' || measurementPreference === 'self_measured' || measurementPreference === 'profile'
+            ? 'I will provide measurements'
+            : measurementPreference === 'home_visit'
+              ? 'Home Visit'
+              : 'In-Shop Fitting') 
 },
-    ...(measurementPreference === 'workshop_fitting'
+    ...(['in_shop', 'home_visit', 'workshop_fitting'].includes(measurementPreference)
       ? [{
           label: 'Fitting Schedule',
           value: formatDateTime(measurementDate || materialDropoffDate, measurementTime || materialDropoffTime),
@@ -184,7 +125,7 @@ export default function OrderSummary({
   const qty = attributeQuantities[attrId] || 1;
   const unit = attr.pivot?.unit || 'unit';
   const unitPrice = Number(attr.pivot?.price || 0);
-  const lineTotal = unitPrice * qty;
+  const lineTotal = unitPrice * qty * normalizedQuantity;
 
   return (
 <div key={attrId} className="flex justify-between items-center py-4 border-b border-stone-100 last:border-0 gap-4">
@@ -206,7 +147,7 @@ export default function OrderSummary({
                 {attr.pivot?.item_name || attr.name}
             </span>
             <span className="text-xs text-stone-500 block font-bold">
-                ₱{unitPrice.toFixed(2)} x {qty} {unit}
+              ₱{unitPrice.toFixed(2)} x {qty} {unit} x {normalizedQuantity} order{normalizedQuantity > 1 ? 's' : ''}
             </span>
         </div>
     </div>
@@ -220,7 +161,36 @@ export default function OrderSummary({
       </div>
 
       <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl mb-8">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold uppercase tracking-wider text-amber-800">Quantity</span>
+            <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-2 py-1">
+              <button
+                type="button"
+                onClick={() => setQuantity(Math.max(1, normalizedQuantity - 1))}
+                className="h-8 w-8 rounded-lg bg-amber-100 text-amber-800 font-black hover:bg-amber-200"
+                aria-label="Decrease quantity"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                min={1}
+                value={normalizedQuantity}
+                onChange={(e) => handleQuantityInput(e.target.value)}
+                className="h-8 w-16 rounded-lg border border-amber-200 text-center font-bold text-stone-900 focus:border-amber-500 focus:outline-none"
+                aria-label="Order quantity"
+              />
+              <button
+                type="button"
+                onClick={() => setQuantity(normalizedQuantity + 1)}
+                className="h-8 w-8 rounded-lg bg-amber-100 text-amber-800 font-black hover:bg-amber-200"
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl font-black text-amber-800">Total</span>
             <span className="text-3xl sm:text-4xl font-black text-amber-600 tracking-tight">
@@ -235,7 +205,7 @@ export default function OrderSummary({
               </p>
             </div>
           )}
-          {rushOrder && (
+          {isRush && (
             <div className="mt-2 flex gap-2 items-start bg-rose-100/60 p-3 rounded-lg border border-rose-200/70">
               <span className="text-rose-600 mt-0.5">⚠️</span>
               <p className="text-sm text-rose-800 font-medium">
@@ -246,118 +216,17 @@ export default function OrderSummary({
         </div>
       </div>
 
-      {/* Profile Complete Summary or Checklist */}
-      {!isProfileComplete ? (
-        <>
-          {/* INLINE CHECKLIST - NO REDIRECTS */}
-          <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
-            <h4 className="text-lg font-bold text-amber-900 mb-4">Pre-Order Checklist</h4>
-            <div className="space-y-3">
-              
-              {/* Phone Checklist Item */}
-              <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isPhoneMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
-                <span className="text-xl">{isPhoneMissing ? '❌' : '✅'}</span>
-                <span className="text-sm font-medium text-stone-800">{isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}</span>
-                
-                {isPhoneMissing && (
-                  <div className="ml-auto flex items-center gap-2">
-                    <input 
-                      type="tel" 
-                      value={localPhone} 
-                      onChange={(e) => setLocalPhone(e.target.value)}
-                      placeholder="09xxxxxxxxx"
-                      className="px-3 py-2 border border-amber-300 rounded-lg text-sm w-32 focus:ring-2 focus:ring-amber-500"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={handleSavePhone}
-                      disabled={isSavingPhone}
-                      className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 disabled:opacity-50"
-                    >
-                      {isSavingPhone ? '...' : 'Save'}
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* Map Checklist Item */}
-              <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${isMapMissing ? 'border-amber-400' : 'border-emerald-400'}`}>
-                <span className="text-xl">{isMapMissing ? '❌' : '✅'}</span>
-                <span className="text-sm font-medium text-stone-800">{isMapMissing ? 'Home Location not pinned' : 'Location Verified'}</span>
-                
-                {isMapMissing && (
-                  <button 
-                    type="button" 
-                    onClick={() => setShowMapModal(true)} 
-                    className="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700"
-                  >
-                    Pin Map
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="p-6 bg-emerald-50 border-2 border-emerald-200 rounded-2xl mb-8 shadow-lg">
-          <h4 className="text-lg font-bold text-emerald-900 mb-4">✅ Profile Complete</h4>
-          <div className="text-sm font-medium text-emerald-800">
-            Phone: {auth.user.profile.phone} | 
-            Address: {auth.user.profile.street}, {auth.user.profile.barangay}
-          </div>
-        </div>
-      )}
-
       <div className="flex gap-3 pt-4 border-t border-stone-200">
         <button type="button" onClick={onBack} className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50">← Back</button>
         <button 
           type="button"
           onClick={onSubmit} 
-          disabled={!isProfileComplete || loading} 
+          disabled={loading} 
           className="flex-1 rounded-lg bg-emerald-600 px-8 py-4 font-bold text-xl text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {loading ? 'Processing...' : (isCustomQuote ? '📝 Request a Quote' : '✅ Confirm & Submit Order')}
         </button>
       </div>
-
-      {/* User Location Picker Modal */}
-      {showMapModal && (
-        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-stone-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-stone-900">📍 Pin Your Home Location</h3>
-                <button 
-                  onClick={() => setShowMapModal(false)} 
-                  className="p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <MapLibrePicker data={tempProfile} setData={handleSetData} />
-            </div>
-            <div className="p-6 border-t border-stone-200 bg-stone-50 flex gap-3 justify-end">
-              <button 
-                type="button"
-                onClick={() => setShowMapModal(false)} 
-                className="px-6 py-3 border border-stone-300 text-stone-700 rounded-xl hover:bg-stone-100 font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                type="button"
-                onClick={handleSaveLocation} 
-                disabled={isSavingLocation || !tempProfile.latitude || !tempProfile.longitude}
-                className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSavingLocation ? 'Saving Location...' : '💾 Save Location'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

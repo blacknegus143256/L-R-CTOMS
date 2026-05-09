@@ -19,6 +19,7 @@ export default function EditShopAttributeModal({
 
         setEditAttrData('item_name', attribute.pivot?.item_name || '');
         setEditAttrData('price', attribute.pivot?.price || '');
+        setEditAttrData('stock_quantity', attribute.pivot?.stock_quantity || 0);
         setEditAttrData('unit', attribute.pivot?.unit || 'per piece');
         setEditAttrData('notes', attribute.pivot?.notes || '');
         setEditAttrData('image', null);
@@ -112,6 +113,24 @@ export default function EditShopAttributeModal({
                                 setEditAttrData('price', val);
                             }}
                             required
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
+
+                    {/* STOCK QTY */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            Stock Qty
+                        </label>
+                        <input 
+                            type="number" 
+                            className="w-full border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
+                            value={editAttrData.stock_quantity === 0 ? '' : editAttrData.stock_quantity}
+                            onChange={e => {
+                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                setEditAttrData('stock_quantity', val);
+                            }}
                             min="0"
                             step="0.01"
                         />

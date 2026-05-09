@@ -7,6 +7,7 @@ import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 export default function Login({ status, canResetPassword }) {
+    const redirectUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null;
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
@@ -16,7 +17,9 @@ export default function Login({ status, canResetPassword }) {
     const submit = (e) => {
         e.preventDefault();
 
-        post(route('login'), {
+        const target = redirectUrl ? `${route('login')}?redirect=${encodeURIComponent(redirectUrl)}` : route('login');
+
+        post(target, {
             onFinish: () => reset('password'),
         });
     };
@@ -99,7 +102,7 @@ export default function Login({ status, canResetPassword }) {
                     <p className="text-sm text-stone-500">
                         Don't have an account yet?{' '}
                         <Link
-                            href={route('register')}
+                            href={redirectUrl ? `${route('register')}?redirect=${encodeURIComponent(redirectUrl)}` : route('register')}
                             className="font-bold text-orchid-blue hover:text-orchid-purple transition-colors duration-200 underline underline-offset-4"
                         >
                             Register Now

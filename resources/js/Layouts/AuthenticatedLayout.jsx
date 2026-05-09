@@ -237,10 +237,10 @@ export default function AuthenticatedLayout({ header, children }) {
                                     <FiActivity className="w-5 h-5 mr-3" />
                                     Audit Logs
                                 </NavLink>
-                                <NavLink href={route('super.payouts.index')} active={route().current('super.payouts.*')} className="text-base px-4 py-3">
+                                {/* <NavLink href={route('super.payouts.index')} active={route().current('super.payouts.*')} className="text-base px-4 py-3">
                                     <FiCheckCircle className="w-5 h-5 mr-3" />
                                     Escrow Payouts
-                                </NavLink>
+                                </NavLink> */}
                             </>
                         )}
                         {user.role === 'store_admin' && (

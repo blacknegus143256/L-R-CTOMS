@@ -18,6 +18,7 @@ class Appointment extends Model
         'time_start',
         'time_end',
         'status',
+        'type',
     ];
 
     protected function casts(): array

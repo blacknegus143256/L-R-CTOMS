@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { Zap } from 'lucide-react';
 import { buildMapUrl } from '@/utils/map';
 import { Link, usePage, router } from "@inertiajs/react";
 import { Head } from '@inertiajs/react';
@@ -6,7 +7,7 @@ import OrderModal from "@/Components/OrderModal";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { FiPlus } from 'react-icons/fi';
 
-export default function Shop({ shop, auth }) {
+export default function Shop({ shop, auth, fitMethods = [] }) {
     if (!shop) return null;
 
     const { url } = usePage();
@@ -17,6 +18,12 @@ export default function Shop({ shop, auth }) {
     useEffect(() => {
         if (url.includes('order=true')) setShowOrderForm(true);
     }, [url]);
+
+    useEffect(() => {
+        if (!auth?.user && url.includes('order=true')) {
+            router.visit(`/login?redirect=${encodeURIComponent(url)}`);
+        }
+    }, [auth?.user, url]);
 
     const services = shop.services || [];
     
@@ -127,22 +134,35 @@ export default function Shop({ shop, auth }) {
         const category = s.service_category || s.serviceCategory;
         const isRepair = category?.slug?.includes('repairs') || category?.slug?.includes('alterations');
         const categoryName = category?.name || 'Custom';
-        
+        // Normalize image source: support full URLs, already-prefixed '/storage/...', or raw filenames
+        const rawImage = s.image || s.image_url || s.service_image;
+        let imageSrc;
+        if (rawImage) {
+            if (rawImage.startsWith('http')) {
+                imageSrc = rawImage;
+            } else if (rawImage.startsWith('/storage/')) {
+                imageSrc = rawImage;
+            } else {
+                // strip leading slashes to avoid double slashes
+                imageSrc = `/storage/${rawImage.replace(/^\/+/, '')}`;
+            }
+        } else {
+            imageSrc = '/images/default-service.jpg';
+        }
         return (
             <div key={s.id} className="bg-white border-2 border-stone-100 hover:border-orchid-blue/40 rounded-[2rem] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-orchid-blue/10 flex flex-col group hover:-translate-y-1">
             
             {/* Image Header */}
             <div className="h-48 w-full relative overflow-hidden bg-stone-100 shrink-0">
-                    <img 
-                    src={(s.image || s.image_url || s.service_image) ? ((s.image || s.image_url || s.service_image).startsWith('http') ? (s.image || s.image_url || s.service_image) : `/storage/${s.image || s.image_url || s.service_image}`) : '/images/default-service.jpg'} 
-                    alt={s.service_name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    onError={(e) => {
-                            e.target.onerror = null; 
+                    <img
+                        src={imageSrc}
+                        alt={s.service_name}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        onError={(e) => {
+                            e.target.onerror = null;
                             e.target.src = '/images/default-service.jpg';
-    
-                    }}
-                />
+                        }}
+                    />
                 {/* Overlay Badge */}
                 <div className="absolute top-4 left-4 z-10">
                         <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-sm ${
@@ -163,6 +183,29 @@ export default function Shop({ shop, auth }) {
                             ₱{Number(s.price).toFixed(0)}
                         </span>
                 </div>
+                {s.rush_service_available && (
+                  <div className="flex items-center gap-1 text-xs font-semibold text-amber-600 mb-3">
+                    <Zap size={14} />
+                    Rush Available
+                  </div>
+                )}
+                
+                {/* Measurement Preference Badge */}
+                {s.appointment_required ? (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-blue-200">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Appointment Required
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-amber-200">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                        </svg>
+                        Self-Measure Available
+                    </span>
+                )}
                 
                 <div className="flex-1 mb-6 mt-2">
                         <p className="text-sm text-stone-500 line-clamp-3 leading-relaxed">
@@ -172,7 +215,13 @@ export default function Shop({ shop, auth }) {
                 
                 <button 
                     onClick={() => {
-                            router.visit(window.location.pathname + `?order=true&service_id=${s.id}`, { preserveScroll: true });
+                            const intentUrl = `${window.location.pathname}?order=true&service_id=${s.id}`;
+                            if (!auth?.user) {
+                                router.visit(`/login?redirect=${encodeURIComponent(intentUrl)}`);
+                                return;
+                            }
+
+                            router.visit(intentUrl, { preserveScroll: true });
                     }} 
                     className="w-full py-3.5 bg-stone-50 hover:bg-orchid-50 text-stone-600 hover:text-orchid-700 font-bold rounded-xl transition-colors flex justify-center items-center gap-2 border border-stone-200 hover:border-orchid-200 mt-auto"
                 >
@@ -278,7 +327,15 @@ export default function Shop({ shop, auth }) {
 
             {/* 3. SYSTEM FAB (ORCHID THEME) */}
             <button
-                onClick={() => setShowOrderForm(true)}
+                onClick={() => {
+                    const intentUrl = `${window.location.pathname}?order=true`;
+                    if (!auth?.user) {
+                        router.visit(`/login?redirect=${encodeURIComponent(intentUrl)}`);
+                        return;
+                    }
+
+                    setShowOrderForm(true);
+                }}
                 className="fixed bottom-8 right-8 z-50 flex items-center gap-3 bg-gradient-to-r from-orchid-blue to-orchid-purple px-8 py-4 rounded-2xl text-white font-bold shadow-2xl shadow-orchid-blue/30 hover:scale-105 active:scale-95 transition-all"
             >
                 <FiPlus className="w-6 h-6" />
@@ -287,6 +344,7 @@ export default function Shop({ shop, auth }) {
 
             <OrderModal
                 shop={shop}
+                fitMethods={fitMethods}
                 isOpen={showOrderForm}
                 onClose={() => setShowOrderForm(false)}
             />

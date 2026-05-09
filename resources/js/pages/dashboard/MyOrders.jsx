@@ -18,6 +18,11 @@ const PAYMENT_STATUS_CLASSES = {
     Paid: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
 };
 
+const getOrderTotal = (order) => {
+    const servicesTotal = order.orderServices?.reduce((sum, s) => sum + ((Number(s.price) || 0) * (Number(s.quantity) || 1)), 0);
+    return Number(servicesTotal || order.total_price || 0);
+};
+
 export default function MyOrders({ auth, orders = [] }) {
 
 
@@ -41,7 +46,7 @@ export default function MyOrders({ auth, orders = [] }) {
         if (filterStatus === 'Pending Payment') return o.status === 'Confirmed' && paymentStatus === 'Pending';
         if (filterStatus === 'Ready for Production') return o.status === 'Ready for Production';
         if (filterStatus === 'Ready to Pick Up') return ['Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status);
-        if (filterStatus === 'Rush') return !!o.rush_order;
+        if (filterStatus === 'Rush') return !!o.is_rush;
         if (filterStatus === 'In Progress') return ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status);
         if (filterStatus === 'Completed') return o.status === 'Completed';
         return true;
@@ -57,10 +62,10 @@ export default function MyOrders({ auth, orders = [] }) {
             return aDue - bDue;
         }
         if (sortBy === 'price-high') {
-            return Number(b.total_price || 0) - Number(a.total_price || 0);
+            return Number(getOrderTotal(b)) - Number(getOrderTotal(a));
         }
         if (sortBy === 'price-low') {
-            return Number(a.total_price || 0) - Number(b.total_price || 0);
+            return Number(getOrderTotal(a)) - Number(getOrderTotal(b));
         }
 
         return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
@@ -74,7 +79,7 @@ export default function MyOrders({ auth, orders = [] }) {
         pendingPayment: orders.filter(o => o.status === 'Confirmed' && normalizePaymentStatus(o.payment_status) === 'Pending').length,
         readyForProduction: orders.filter(o => o.status === 'Ready for Production').length,
         readyToPickUp: orders.filter(o => ['Ready forPickup', 'Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status)).length,
-        rush: orders.filter(o => o.rush_order).length,
+        rush: orders.filter(o => o.is_rush).length,
         inProgress: orders.filter(o => ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status)).length,
         completed: orders.filter(o => o.status === 'Completed').length,
     };
@@ -178,7 +183,7 @@ export default function MyOrders({ auth, orders = [] }) {
                 />
             ) : (
                 <span className="text-2xl sm:text-3xl font-black text-stone-300 uppercase">
-                    {order.service?.service_name?.charAt(0) || 'O'}
+                    {order.orderServices?.[0]?.service?.service_name?.charAt(0) || 'O'}
                 </span>
             )}
         </div>
@@ -200,7 +205,7 @@ export default function MyOrders({ auth, orders = [] }) {
                             🔴 URGENT
                         </span>
                     )}
-                    {order.rush_order && (
+                    {order.is_rush && (
                         <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-rose-600 border border-rose-200">
                             Rush
                         </span>
@@ -221,7 +226,7 @@ export default function MyOrders({ auth, orders = [] }) {
             </div>
             
             <h3 className="text-lg font-black text-slate-800 truncate leading-tight mb-1">
-                {order.service?.service_name || 'Custom Service'}
+                {order.orderServices?.[0]?.service?.service_name || 'Custom Service'}
             </h3>
             
 <div className="flex items-center gap-2 mt-1.5">
@@ -262,7 +267,7 @@ export default function MyOrders({ auth, orders = [] }) {
         <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto pt-3 sm:pt-0 border-t border-stone-100 sm:border-none gap-4 shrink-0 sm:pl-4">
             <div className="text-left sm:text-right">
                 <p className="text-xl font-black text-stone-900 leading-none">
-                    ₱{Number(order.total_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                    ₱{Number(getOrderTotal(order)).toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </p>
                 {/* Dynamic Materials Tag */}
                 {order.material_source === 'shop' && ['Requested', 'Pending'].includes(order.status) ? (

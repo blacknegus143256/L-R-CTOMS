@@ -23,6 +23,11 @@ const PAYMENT_STATUS_CLASSES = {
     Paid: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
 };
 
+const getOrderTotal = (order) => {
+    const servicesTotal = order.orderServices?.reduce((sum, os) => sum + ((Number(os.price) || 0) * (Number(os.quantity) || 1)), 0);
+    return Number(servicesTotal || order.total_price || 0);
+};
+
 export default function OrdersPage() {
 const { props } = usePage();
     const shop = props.shop;
@@ -56,7 +61,7 @@ const { props } = usePage();
             if (filterStatus === 'Pending Payment') return o.status === 'Confirmed' && paymentStatus === 'Pending';
             if (filterStatus === 'Ready for Production') return o.status === 'Ready for Production';
             if (filterStatus === 'Ready to Pick Up') return ['Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status);
-            if (filterStatus === 'Rush') return !!o.rush_order;
+            if (filterStatus === 'Rush') return !!o.is_rush;
             if (filterStatus === 'In Progress') return ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status);
             if (filterStatus === 'Completed') return o.status === 'Completed';
             return true;
@@ -72,10 +77,10 @@ const { props } = usePage();
                 return aDue - bDue;
             }
             if (sortBy === 'price-high') {
-                return Number(b.total_price || 0) - Number(a.total_price || 0);
+                return Number(getOrderTotal(b)) - Number(getOrderTotal(a));
             }
             if (sortBy === 'price-low') {
-                return Number(a.total_price || 0) - Number(b.total_price || 0);
+                return Number(getOrderTotal(a)) - Number(getOrderTotal(b));
             }
 
             return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
@@ -89,7 +94,7 @@ const { props } = usePage();
             pendingPayment: orders.filter(o => o.status === 'Confirmed' && normalizePaymentStatus(o.payment_status) === 'Pending').length,
             readyForProduction: orders.filter(o => o.status === 'Ready for Production').length,
             readyToPickUp: orders.filter(o => ['Ready forPickup', 'Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status)).length,
-            rush: orders.filter(o => o.rush_order).length,
+            rush: orders.filter(o => o.is_rush).length,
             inProgress: orders.filter(o => ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status)).length,
             completed: orders.filter(o => o.status === 'Completed').length,
         };
@@ -249,15 +254,15 @@ const { props } = usePage();
         <div className="flex items-center gap-4 w-full lg:w-auto flex-1 min-w-0">
             {/* Thumbnail */}
             <div className="hidden sm:flex w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-stone-100 border border-stone-200 items-center justify-center shrink-0 overflow-hidden shadow-inner">
-                {order.design_image ? (
+                        {order.design_image ? (
                     <img 
                         src={order.design_image.startsWith('http') ? order.design_image : `/storage/${order.design_image}`} 
                         alt="Design" 
                         className="w-full h-full object-cover" 
                     />
                 ) : (
-                    <span className="text-xl sm:text-2xl font-black text-stone-300 uppercase">
-                        {order.service?.service_name?.charAt(0) || '#'}
+                            <span className="text-xl sm:text-2xl font-black text-stone-300 uppercase">
+                        {order.orderServices?.[0]?.service?.service_name?.charAt(0) || '#'}
                     </span>
                 )}
             </div>
@@ -278,7 +283,7 @@ const { props } = usePage();
                             🔴 URGENT
                         </span>
                     )}
-                    {order.rush_order && (
+                    {order.is_rush && (
                         <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-rose-600 border border-rose-200">
                             Rush
                         </span>
@@ -290,7 +295,7 @@ const { props } = usePage();
                     )}
                 </div>
                 <h3 className="text-lg font-black text-slate-800 truncate leading-tight mb-1">
-                    {order.service?.service_name || 'Custom Service'}
+                    {order.orderServices?.[0]?.service?.service_name || 'Custom Service'}
                 </h3>
                 <p className="text-xs font-bold text-stone-500 truncate flex items-center gap-1">
                     <span className="w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-[10px] shrink-0">👤</span>
@@ -326,7 +331,7 @@ const { props } = usePage();
         <div className="flex items-center justify-between lg:justify-end gap-4 w-full lg:w-auto pt-3 lg:pt-0 border-t border-stone-100 lg:border-none shrink-0">
             <div className="text-left lg:text-right hidden sm:block">
                 <p className="text-xl font-black text-stone-900 leading-none mb-1">
-                    ₱{Number(order.total_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                    ₱{Number(getOrderTotal(order)).toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </p>
                 <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Total</p>
             </div>
@@ -334,7 +339,7 @@ const { props } = usePage();
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 {/* Mobile Price Display (Hidden on Desktop) */}
                 <div className="sm:hidden flex-1 text-left">
-                    <p className="text-lg font-black text-stone-900 leading-none">₱{Number(order.total_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                    <p className="text-lg font-black text-stone-900 leading-none">₱{Number(getOrderTotal(order)).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
                 </div>
 
                 {/* Preserved Action Logic */}

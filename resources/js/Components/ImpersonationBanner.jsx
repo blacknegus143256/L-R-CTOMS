@@ -21,7 +21,13 @@ export default function ImpersonationBanner() {
   const handleLeaveImpersonation = () => {
     setIsLeaving(true);
     router.post(route('super.leave-impersonation'), {}, {
-      onFinish: () => setIsLeaving(false),
+      onError: (errors) => {
+        console.error('Failed to leave impersonation', errors);
+        setIsLeaving(false);
+      },
+      onFinish: () => {
+        setIsLeaving(false);
+      },
     });
   };
 

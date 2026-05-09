@@ -10,6 +10,7 @@ const OrderDetails = ({ currentOrder, shop, availableShopAttributes, customerMea
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
     const [isDeclineModalOpen, setIsDeclineModalOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [isDecliningQuote, setIsDecliningQuote] = useState(false);
@@ -34,7 +35,7 @@ const OrderDetails = ({ currentOrder, shop, availableShopAttributes, customerMea
     const materialsTotal = initialItemsTotal + addedMaterialsTotal;
     const grandTotal = Number(currentOrder.total_amount || currentOrder.total_price || 0);
 const rushFee = Number(currentOrder.rush_fee || 0);
-const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Math.max(0, grandTotal - materialsTotal - rushFee) : Number(currentOrder.service?.price || 0));
+const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Math.max(0, grandTotal - materialsTotal - rushFee) : Number(currentOrder.orderServices?.[0]?.price || 0));
     const productionMinDays = Number(currentOrder.production_min_days || 0);
     const productionMaxDays = Number(currentOrder.production_max_days || 0);
     const hasExpectedCompletionDate = !!currentOrder.expected_completion_date;
@@ -51,49 +52,62 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
     const amountPaid = Number(currentOrder.amount_paid || 0);
     const remainingBalance = Math.max(0, grandTotal - amountPaid);
     const downpaymentAmount = grandTotal / 2;
-    const normalizedMeasurementType = (currentOrder.measurement_type || '').toString().trim().toLowerCase();
-    const hasNoRequiredMeasurement = !normalizedMeasurementType || normalizedMeasurementType === 'none';
-    const requestedMeasurements = Array.isArray(currentOrder.measurement_snapshot?.requested)
-        ? currentOrder.measurement_snapshot.requested
-            .map((entry) => (typeof entry === 'string' ? entry : entry?.name))
-            .filter((name) => !!name)
-            .map((name) => String(name).trim().toLowerCase())
-        : [];
-    const submittedSnapshot = currentOrder.measurement_snapshot?.submitted;
-    const submittedMeasurementKeys = new Set(
-        Array.isArray(submittedSnapshot)
-            ? submittedSnapshot
-                .map((entry) => (typeof entry === 'string' ? entry : entry?.name || entry?.key))
-                .filter((name) => !!name)
-                .map((name) => String(name).trim().toLowerCase())
-            : Object.keys(submittedSnapshot || {}).map((name) => String(name).trim().toLowerCase())
-    );
-    const requiresRemoteMeasurements = ['profile', 'self_measured'].includes(normalizedMeasurementType);
-    const hasPendingMeasurements = requiresRemoteMeasurements
-        && requestedMeasurements.length > 0
-        && requestedMeasurements.some((requiredKey) => !submittedMeasurementKeys.has(requiredKey));
-    const hasRecordedMeasurements = Boolean(currentOrder?.measurements_taken) || submittedMeasurementKeys.size > 0;
-    const canPay = hasNoRequiredMeasurement || hasRecordedMeasurements;
-    const isPaymentUnderReview = currentOrder.payment_status === 'Pending' && !!currentOrder.manual_payment_proof_path;
+    const fitMethodName = currentOrder.fit_method?.name || currentOrder.fitMethod?.name || 'Unknown';
+    const customerAddress = currentOrder.user?.profile
+        ? `${currentOrder.user.profile.street || 'Address not provided'}, ${currentOrder.user.profile.barangay || ''}`.replace(/,\s*$/, '')
+        : 'Address not provided';
+    const shopProfile = currentOrder.tailoring_shop?.user?.profile || currentOrder.tailoringShop?.user?.profile || shop?.user?.profile || null;
+    const shopAddress = shopProfile
+        ? `${shopProfile.street || 'Shop Address'}, ${shopProfile.barangay || ''}`.replace(/,\s*$/, '')
+        : 'Shop Address';
+    const pendingMeasures = (currentOrder.order_measurements || []).filter((measurement) => !measurement.measurement_value);
+    const completedMeasures = (currentOrder.order_measurements || []).filter((measurement) => measurement.measurement_value);
+    const requiresRemoteMeasurements = fitMethodName === 'Self-Measured';
+    const lockedMeasurementUnit = (() => {
+        const fromSnapshot = currentOrder.measurement_snapshot?.unit;
+        const fromOrder = currentOrder.unit;
+        const candidate = String(fromSnapshot || fromOrder || 'inches').trim().toLowerCase();
+        return candidate === 'cm' ? 'cm' : 'inches';
+    })();
+    const lockedMeasurementUnitLabel = lockedMeasurementUnit.toUpperCase();
+    const hasPendingMeasurements = requiresRemoteMeasurements && pendingMeasures.length > 0;
+    const hasRecordedMeasurements = Boolean(currentOrder?.measurements_taken) || completedMeasures.length > 0;
+    const canPay = fitMethodName === 'No Measurement Required' || hasRecordedMeasurements;
+    const paymentStatusRaw = (currentOrder.payment?.status?.name || currentOrder.payment_status || currentOrder.payment?.payment_status || '').toString().trim();
+    const isPaymentUnderReview = paymentStatusRaw === 'Pending' && !!currentOrder.manual_payment_proof_path;
     const rejectionMatch = currentOrder.notes?.match(/PAYMENT_REJECTED:\s*(.*?)(?:\n\n|$)/);
     const rejectionReason = rejectionMatch ? rejectionMatch[1] : null;
-  useEffect(() => {
-    if (
-      ['profile', 'self_measured'].includes(currentOrder.measurement_type) &&
-      currentOrder.measurement_snapshot?.requested &&
-      !currentOrder.measurement_snapshot?.submitted
-    ) {
-      setCustomerMeasurements(
-        currentOrder.measurement_snapshot.requested
-          .filter(m => m.name)
-          .map(m => ({
-            name: m.name,
-            instruction: m.instruction || '',
-            value: ''
-          }))
-      );
-    }
-  }, [currentOrder, setCustomerMeasurements]);
+    const orderAppointments = Array.isArray(currentOrder.appointments) ? currentOrder.appointments : [];
+
+    const formatAppointment = (appointment) => {
+        if (!appointment?.date) return 'TBD';
+
+        const date = new Date(appointment.date);
+        if (Number.isNaN(date.getTime())) return 'TBD';
+
+        const time = appointment.time_start
+            ? new Date(`1970-01-01T${appointment.time_start}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            : '';
+
+        return time ? `${date.toLocaleDateString()} • ${time}` : date.toLocaleDateString();
+    };
+    useEffect(() => {
+        if (currentOrder?.order_measurements) {
+            const pending = currentOrder.order_measurements.filter((measurement) => !measurement.measurement_value);
+
+            // Only initialize when the local state is empty or the backend request set changes.
+            if (customerMeasurements.length === 0 || customerMeasurements.length !== pending.length) {
+                setCustomerMeasurements(
+                    pending.map((measurement) => ({
+                        name: measurement.measurement_name,
+                        instruction: measurement.instruction || '',
+                        value: measurement.measurement_value || '',
+                        unit: measurement.unit || lockedMeasurementUnit,
+                    }))
+                );
+            }
+        }
+    }, [currentOrder?.order_measurements, lockedMeasurementUnit]);
 
     const submitReworkRequest = () => {
         if (!reworkCustomerNotes.trim()) {
@@ -160,11 +174,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
             {/* Left Column: Specs, Design & Itemized List */}
             <div className="lg:col-span-2 space-y-8">
 
-                <section
-                    ref={reworkRef}
-                    tabIndex={-1}
-                    className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm outline-none"
-                >
+                <section ref={reworkRef} tabIndex={-1} className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm outline-none">
                     <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">Post-Completion Rework</h3>
                     {reworkRequest ? (
                         <div>
@@ -207,7 +217,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                                 <p className="text-sm text-stone-700 mt-4"><span className="font-bold">Tailor Response:</span> {reworkRequest.tailor_response_notes}</p>
                             )}
                         </div>
-                    ) : currentOrder.status === 'Completed' ? (
+                    ) : (currentOrder.status?.name || currentOrder.status) === 'Completed' ? (
                         <div>
                             <p className="text-sm text-stone-700 mb-4">Need a minor alteration after completion? You can request a separate rework process without changing the completed order.</p>
                             <button
@@ -222,7 +232,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         <p className="text-sm text-stone-600">Rework requests become available only after the order is completed.</p>
                     )}
                 </section>
-                
+
                 {/* Design Context Section */}
                 <section>
                     <h3 className="text-[11px] font-black text-stone-900 uppercase tracking-[0.2em] mb-4">Design Context</h3>
@@ -241,15 +251,6 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         
                         {/* Context Details */}
                         <div className="flex-1 space-y-6">
-                            {currentOrder.style_tag && (
-                                <div>
-                                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-2">Style Tag</span>
-                                    <span className="inline-block px-4 py-2 bg-stone-50 border border-stone-200 text-stone-800 rounded-xl text-sm font-bold shadow-sm">
-                                        {currentOrder.style_tag}
-                                    </span>
-                                </div>
-                            )}
-
                             {currentOrder.rush_order && (
                                 <div>
                                     <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-2">Rush Order</span>
@@ -286,14 +287,15 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                                 {currentOrder.items && currentOrder.items.length > 0 ? (
                                     currentOrder.items.map((item, idx) => {
                                         const qty = Number(item.quantity || item.pivot?.quantity || 1);
-                                        const unitPrice = Number(item.price || item.pivot?.price || 0);
+                                        const shopAttribute = item.shopAttribute;
+                                        const unitPrice = Number(item.price || shopAttribute?.price || item.pivot?.price || 0);
                                         const lineTotal = unitPrice * qty;
                                         
                                         // Complex material matching logic (preserved exactly)
-                                        const targetAttrId = parseInt(item.attribute_type_id || item.attribute_id || item.attribute?.id);
+                                        const targetAttrId = parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id);
                                         const targetPrice = Number(item.price || item.pivot?.price || 0);
                                         
-                                        let exactShopItem = availableShopAttributes.find(a => 
+                                        let exactShopItem = shopAttribute || availableShopAttributes.find(a => 
                                             parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId && 
                                             Number(a.price || a.pivot?.price || 0) === targetPrice
                                         );
@@ -302,12 +304,12 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                                             exactShopItem = availableShopAttributes.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId);
                                         }
 
-                                        const customName = exactShopItem?.item_name || exactShopItem?.pivot?.item_name;
-                                        const displayName = customName || item.attribute?.name || item.attribute_name || 'Custom Add-on';
-                                        const notes = exactShopItem?.notes || exactShopItem?.pivot?.notes || '';
-                                        const unit = exactShopItem?.unit || exactShopItem?.pivot?.unit || 'unit';
+                                        const customName = exactShopItem?.item_name || exactShopItem?.name;
+                                        const displayName = customName || item.attribute_name || 'Custom Add-on';
+                                        const notes = exactShopItem?.notes || '';
+                                        const unit = exactShopItem?.unit || 'unit';
 
-                                        const rawImage = exactShopItem?.image_url || exactShopItem?.pivot?.image_url || item.image_path || item.image_url || item.attribute?.image_url || item.attribute?.image_path || null;
+                                        const rawImage = exactShopItem?.image_url || item.image_path || item.image_url || null;
                                         const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
 
                                         return (
@@ -324,10 +326,10 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                                                     )}
                                                     <div>
                                                         <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                                                            {item.attribute?.attributeCategory?.name || item.attribute?.attribute_category?.name || 'Specification'}
+                                                            {shopAttribute?.attributeType?.attributeCategory?.name || 'Specification'}
                                                         </span>
                                                         <span className="text-sm font-bold text-stone-800 block mb-1">
-                                                            {item.attribute?.name || item.attribute_name} - {displayName}
+                                                            {shopAttribute?.item_name || item.attribute_name || shopAttribute?.attributeType?.name || 'Custom Add-on'} - {displayName}
                                                         </span>
                                                         {notes && (
                                                             <span className="text-[10px] font-medium text-stone-500 block mb-1 italic">
@@ -433,60 +435,46 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                     </div>
                 </section>
 
-{/* Unified Measurements Record */}
-{(
-    currentOrder.measurement_snapshot?.submitted ||
-    (
-        currentOrder.measurement_snapshot?.requested &&
-        currentOrder.measurement_snapshot.requested.some(m => m.name)
-    )
-) && (
-    <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm mt-6">
-        <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-2">
-            {currentOrder.measurement_type === 'scheduled'
-                ? "Tailor's Recorded Measurements"
-                : "Measurement Requirements"}
-        </h3>
-        
-        {/* Explanatory Statement for Customers */}
-        {['profile', 'self_measured'].includes(currentOrder.measurement_type)
-            && !currentOrder.measurement_snapshot?.submitted && (
-            <p className="text-sm text-stone-500 mb-4 bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-                <span className="font-bold text-indigo-700">Action Required:</span>{' '}
-                The tailor has requested specific measurements. These are needed to calculate
-                the exact material yardage required before finalizing your quote.
-            </p>
-        )}
-
-        {/* Dynamic Display: Input Form OR Read-Only List */}
-        {['profile', 'self_measured'].includes(currentOrder.measurement_type) && !currentOrder.measurement_snapshot?.submitted ? (
-            <div className="space-y-4 mt-2">
-                <div className="grid sm:grid-cols-full gap-4">
-                    {customerMeasurements.map((measure, idx) => (
-                        <div key={idx} className="bg-stone-50 p-3 rounded-xl border-stone-200">
-                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">
-                                {measure.name}
+{/* Measurement Section - Split View: Pending Input + Completed Read-Only */}
+{(hasPendingMeasurements || hasRecordedMeasurements) && (
+    <div className="space-y-6">
+        {/* Pending Measurements: Input Form (Amber Box) */}
+        {hasPendingMeasurements && (
+            <div className="bg-amber-50 p-6 rounded-3xl border border-amber-200 shadow-sm">
+                <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">
+                    Pending Measurements
+                </h3>
+                <p className="text-sm text-amber-700 mb-4">
+                    Please provide the following measurements. These are required to finalize your quote.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                    {pendingMeasures.map((measure, idx) => (
+                        <div key={`pending-${idx}`}>
+                            <label className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block mb-2">
+                                {measure.measurement_name}
                             </label>
                             <div className="relative">
                                 <input
                                     type="number"
                                     step="0.1"
-                                    value={measure.value || ''}
+                                    value={customerMeasurements.find(m => m.name === measure.measurement_name)?.value || ''}
                                     onChange={(e) => {
-                                        const newM = [...customerMeasurements];
-                                        newM[idx].value = e.target.value;
-                                        setCustomerMeasurements(newM);
+                                        const newValue = e.target.value;
+                                        setCustomerMeasurements((prev) =>
+                                            prev.map((m) =>
+                                                m.name === measure.measurement_name
+                                                    ? { ...m, value: newValue }
+                                                    : m
+                                            )
+                                        );
                                     }}
-                                    className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 font-bold"
+                                    className="w-full rounded-lg border border-stone-200 shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-bold bg-white"
                                     placeholder="0.0"
                                 />
                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                    <span className="text-stone-400 font-bold text-xs uppercase">{currentOrder.measurement_snapshot?.unit || 'in'}</span>
+                                    <span className="text-amber-600 font-bold text-xs">{lockedMeasurementUnitLabel}</span>
                                 </div>
                             </div>
-                            {measure.instruction && (
-                                <p className="text-[9px] text-stone-500 italic mt-1 leading-tight">{measure.instruction}</p>
-                            )}
                         </div>
                     ))}
                 </div>
@@ -503,9 +491,17 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                             });
                             return;
                         }
-                        
+
+                        const submitted = customerMeasurements.map(m => ({
+                            name: m.name,
+                            value: m.value,
+                            unit: lockedMeasurementUnit,
+                            measurements_taken: true
+                        }));
+
                         router.patch(`/my-orders/${currentOrder.id}/measurements`, {
-                            submitted_measurements: customerMeasurements
+                            submitted_measurements: submitted,
+                            unit: lockedMeasurementUnit
                         }, { 
                             preserveScroll: true,
                             onStart: () => setIsSubmitting(true),
@@ -518,50 +514,40 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         });
                     }}
                     disabled={isSubmitting || submitSuccess}
-                    className={`w-full sm:w-auto px-8 py-3 font-black rounded-xl transition-colors shadow-md ${
+                    className={`mt-4 w-full sm:w-auto px-8 py-3 font-black rounded-xl transition-colors shadow-md ${
                         submitSuccess 
                             ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-amber-600 text-white hover:bg-amber-700'
                     }`}
                 >
                     {submitSuccess ? '✅ Measurements Submitted!' : (isSubmitting ? 'Submitting...' : 'Submit Measurements')}
                 </button>
             </div>
-        ) : (
-            <ul className="grid sm:grid-cols-full gap-4 mt-2">
-                {currentOrder.measurement_snapshot?.submitted ? (
-                    /* Profile / Self-Measured Display (Already Submitted) */
-                    Object.entries(currentOrder.measurement_snapshot.submitted).map(([part, value], idx) => (
-                        <li key={idx} className="bg-stone-50 p-3 rounded-xl border border-stone-100 flex flex-col">
-                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                                {part}
+        )}
+
+        {/* Completed Measurements: Read-Only Grid (Stone Box) */}
+        {hasRecordedMeasurements && (
+            <div className="bg-stone-50 p-6 rounded-3xl border border-stone-200 shadow-sm">
+                <h3 className="text-[11px] font-black text-stone-700 uppercase tracking-[0.2em] mb-4">
+                    Submitted Measurements
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                    {completedMeasures.map((measure, idx) => (
+                        <div key={`completed-${idx}`} className="bg-white p-4 rounded-xl border border-stone-200">
+                            <span className="text-[10px] font-bold uppercase text-stone-500 tracking-wider block mb-1">
+                                {measure.measurement_name}
                             </span>
-                            <span className="text-lg font-black text-slate-800">
-                                {value} {currentOrder.measurement_snapshot?.unit || 'in'}
+                            <span className="text-xl font-black text-slate-800">
+                                {measure.measurement_value} <span className="text-sm text-stone-500 font-normal">{measure.unit || lockedMeasurementUnitLabel}</span>
                             </span>
-                        </li>
-                    ))
-                ) : (
-                    /* Requested Parts (Tailor OR Pending Customer Input) */
-                    currentOrder.measurement_snapshot?.requested
-                        ?.filter(m => m.name)
-                        .map((measure, idx) => (
-                            <li key={idx} className="bg-stone-50 p-3 rounded-xl border border-stone-100 flex flex-col">
-                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                                    {measure.name}
-                                </span>
-                                <span className="text-lg font-black text-slate-800">
-                                    {measure.value
-                                        ? `${measure.value} ${currentOrder.measurement_snapshot?.unit || 'in'}`
-                                        : 'Pending'}
-                                </span>
-                            </li>
-                        ))
-                )}
-            </ul>
+                        </div>
+                    ))}
+                </div>
+            </div>
         )}
     </div>
 )}
+
             </div>
 
             {/* Right Column: Invoice & Logistics */}
@@ -627,10 +613,11 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                     amountPaid={amountPaid}
                     remainingBalance={remainingBalance}
                     onPrintReceipt={handlePrintReceipt}
+                    paymentStatusRaw={paymentStatusRaw}
                 />
 
                 {/* Moved Review & Accept Quote Block */}
-                {currentOrder.status === 'Quoted' && !['Partial', 'Paid'].includes((currentOrder.payment_status || '').toString().trim()) && (
+                {((currentOrder.status?.name || currentOrder.status) === 'Quoted') && !['Partial', 'Paid'].includes(paymentStatusRaw) && (
                     <div className="mt-12 bg-white p-6 md:p-8 rounded-3xl border border-orchid-200 shadow-lg shadow-orchid-100">
                         <div className="mb-6 border-b border-stone-100 pb-6">
                             <h3 className="text-xl font-black text-orchid-800 flex items-center gap-2 mb-2">
@@ -667,19 +654,19 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                             </div>
                         ) : (
                             <div className="flex flex-col items-start gap-2 pt-2">                          
-<button 
-    type="button"
-    onClick={(e) => {
-        e?.preventDefault();
-        setIsPaymentModalOpen(true);
-    }}
-    disabled={isAcceptingQuote || hasPendingMeasurements || !canPay}
-    className={`flex-1 py-4 font-black text-lg rounded-xl transition-all duration-200 shadow-md disabled:cursor-not-allowed ${
-        (hasPendingMeasurements || !canPay)
-            ? 'bg-stone-300 text-stone-600 shadow-stone-200/60'
-            : 'bg-indigo-600 hover:bg-orchid-700 text-white shadow-orchid-200/50 hover:shadow-lg'
-    }`}
->
+                            <button 
+                                type="button"
+                                onClick={(e) => {
+                                    e?.preventDefault();
+                                    setIsPaymentModalOpen(true);
+                                }}
+                                disabled={isAcceptingQuote}
+                                className={`flex-1 py-4 font-black text-lg rounded-xl transition-all duration-200 shadow-md disabled:cursor-not-allowed ${
+                                    isAcceptingQuote
+                                        ? 'bg-stone-300 text-stone-600 shadow-stone-200/60'
+                                        : 'bg-indigo-600 hover:bg-orchid-700 text-white shadow-orchid-200/50 hover:shadow-lg'
+                                }`}
+                            >
                                 {isAcceptingQuote ? 'Processing...' : 'Accept Quote & Proceed'}
                             </button>
                             <button 
@@ -691,17 +678,16 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                             </button>
                             </div>
                         )}
-                        {!isPaymentUnderReview && (hasPendingMeasurements || !canPay) && (
-                            <p className="mt-3 text-sm font-semibold text-amber-700">
-                                Please fill out and save your required measurements above before accepting the quote.
-                            </p>
-                        )}
+                        {/* Measurement requirement removed: customers can accept and pay without saved measurements. */}
                     </div>
                 )}
 
                 {isDeclineModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4"
+                        onClick={(e) => { if (e.target === e.currentTarget) { setIsDeclineModalOpen(false); } }}
+                    >
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                             <div className="p-6 border-b border-stone-100 flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
                                     <CheckCircle className="w-5 h-5" />
@@ -781,8 +767,11 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                 />
 
                 {showReworkModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4"
+                        onClick={(e) => { if (e.target === e.currentTarget) { setShowReworkModal(false); } }}
+                    >
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                             <div className="p-6 border-b border-stone-100">
                                 <h2 className="text-xl font-black text-slate-800">Request Alteration / Rework</h2>
                                 <p className="text-sm text-stone-500 mt-1">This request is tracked separately and does not change your completed order status.</p>
@@ -926,7 +915,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                                                     placeholder={`Enter value`}
                                                 />
                                                 <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                                                    <span className="text-stone-400 font-bold text-sm uppercase">{currentOrder.measurement_snapshot?.unit || 'in'}</span>
+                                                    <span className="text-stone-400 font-bold text-sm uppercase">{lockedMeasurementUnitLabel}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -987,58 +976,57 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
             )}
         </div>
         
-        {/* 1. Material Source & Drop-off Date */}
+        {/* 1. Appointment Schedule */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
-            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Material Source</p>
-            {['customer', 'dropoff'].includes(currentOrder.material_source ?? '') ? (
-                <div>
-                    <p className="text-sm font-bold text-slate-800">Customer Provided</p>
-                    <p className="text-xs text-stone-500 mt-1 leading-relaxed">You will deliver the required materials for your order.</p>
-                    {currentOrder.material_dropoff_date ? (
-                        !isNaN(new Date(currentOrder.material_dropoff_date)) ? (
-                            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-lg shadow-sm">
-                                <span className="text-xs">📅</span>
-                                <span className="text-xs font-bold text-stone-700">Drop-off: {new Date(currentOrder.material_dropoff_date).toLocaleDateString()}</span>
-                            </div>
-                        ) : (
-                            <p className="text-xs text-amber-600 mt-2 font-medium">Drop-off schedule to be arranged.</p>
-                        )
-                    ) : (
-                        <p className="text-xs text-amber-600 mt-2 font-medium">Drop-off schedule to be arranged.</p>
-                    )}
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Appointment Schedule</p>
+            {orderAppointments.length > 0 ? (
+                <div className="space-y-2">
+                    {orderAppointments.map((appointment, index) => (
+                        <div key={appointment.id || `${appointment.date}-${index}`} className="flex justify-between items-center rounded-xl bg-white border border-stone-200 px-3 py-2 shadow-sm gap-4">
+                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                                {index === 0 ? 'Appointment' : `Appointment ${index + 1}`}
+                            </span>
+                            <span className="text-xs font-bold text-stone-700 text-right">{formatAppointment(appointment)}</span>
+                        </div>
+                    ))}
                 </div>
             ) : (
-                <div>
-                    <p className="text-sm font-bold text-emerald-600">Shop Provided</p>
-                    <p className="text-xs text-stone-500 mt-1 leading-relaxed">The shop will provide and include the required materials in your final bill.</p>
-                </div>
+                <p className="text-xs text-amber-600 mt-2 font-medium">Appointment schedule to be arranged.</p>
             )}
         </div>
 
-        {/* 2. Fit Method & Fitting Date */}
+        {/* 2. Fit Method */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
             <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Fit Method</p>
-            <p className="text-sm font-bold text-slate-800">
-                {hasNoRequiredMeasurement
-                    ? 'No required measurement'
-                    : (['self_measured'].includes(normalizedMeasurementType)
-                        ? 'Self-Measured (Profile)'
-                        : 'In-Shop Fitting')}
-            </p>
-            {/* Show date if it's an in-shop fitting */}
-            {['scheduled', 'workshop_fitting'].includes(normalizedMeasurementType) && currentOrder.measurement_date && !isNaN(new Date(currentOrder.measurement_date)) && (
-                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-lg shadow-sm">
-                    <span className="text-xs">📍</span>
-                    <span className="text-xs font-bold text-stone-700">Fitting: {new Date(currentOrder.measurement_date).toLocaleDateString()}</span>
-                </div>
-            )}
+            <p className="text-sm font-bold text-slate-800">{fitMethodName}</p>
+
+            <div className="mt-4 pt-4 border-t border-stone-100">
+                <span className="text-[10px] font-black uppercase tracking-wider text-stone-500 block mb-1">
+                    Location
+                </span>
+                {fitMethodName === 'Home Visit' ? (
+                    <div>
+                        <p className="font-bold text-slate-800">Your Home Address</p>
+                        <p className="text-sm text-slate-600">{customerAddress}</p>
+                        <span className="inline-block mt-1 text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">Staff will visit you</span>
+                    </div>
+                ) : fitMethodName === 'In-Shop Fitting' ? (
+                    <div>
+                        <p className="font-bold text-slate-800">Shop Address</p>
+                        <p className="text-sm text-slate-600">{shopAddress}</p>
+                        <span className="inline-block mt-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">Please visit the shop</span>
+                    </div>
+                ) : (
+                    <p className="text-sm font-bold text-slate-600">Online / Remote (No visit required)</p>
+                )}
+            </div>
         </div>
 
         {/* 3. Service Category */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
             <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Service Category</p>
             <p className="text-sm font-bold text-orchid-600">
-                {currentOrder.service?.serviceCategory?.name || currentOrder.service?.service_category?.name || 'Custom Service'}
+                {currentOrder.orderServices?.[0]?.service?.serviceCategory?.name || currentOrder.orderServices?.[0]?.service?.service_category?.name || 'Custom Service'}
             </p>
         </div>
         
@@ -1057,9 +1045,10 @@ function PaymentSection({
     amountPaid,
     remainingBalance,
     onPrintReceipt,
+    paymentStatusRaw,
 }) {
     const [isProofViewerOpen, setIsProofViewerOpen] = useState(false);
-    const paymentStatus = (currentOrder.payment_status || '').toString().trim();
+    const paymentStatus = paymentStatusRaw;
     const isPartialPayment = paymentStatus === 'Partial';
     const isFullPayment = paymentStatus === 'Paid';
     const manualProofPath = currentOrder?.manual_payment_proof_path || null;
@@ -1124,7 +1113,7 @@ function PaymentSection({
                             </div>
                             <div>
                                 <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Shop</div>
-                                <div className="font-bold text-stone-900">{currentOrder.tailoring_shop?.name || currentOrder.tailoringShop?.shop_name || 'N/A'}</div>
+                                <div className="font-bold text-stone-900">{currentOrder.tailoring_shop?.shop_name || currentOrder.tailoringShop?.shop_name || 'N/A'}</div>
                             </div>
                         </div>
                     </div>

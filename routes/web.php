@@ -26,6 +26,7 @@ use App\Http\Controllers\Customer\CustomerDashboardController;
 use App\Http\Controllers\ReworkController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\StoreAdmin\OnboardingController;
+use App\Models\FitMethod;
 
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->name('web.payments.webhook');
 
@@ -42,6 +43,7 @@ Route::middleware(['auth', 'verified', 'role:super_admin'])->group(function () {
     
     Route::get('/super-admin/shops', [App\Http\Controllers\SuperAdmin\ShopController::class, 'index'])->name('super.shops.index');
     Route::get('/super-admin/shops/{shop}/documents/{type}', [App\Http\Controllers\SuperAdmin\ShopController::class, 'document'])->name('super.shops.document');
+    Route::post('/super-admin/shops/{shop}/review-document', [App\Http\Controllers\SuperAdmin\ShopController::class, 'reviewDocument'])->name('super.shops.review-document');
     Route::post('/super-admin/shops/{shop}/reject', [App\Http\Controllers\SuperAdmin\ShopController::class, 'reject'])->name('super.shops.reject');
     
     Route::post('/super-admin/shops/{id}/approve', [DashboardController::class, 'approve'])->name('super.shops.approve');
@@ -54,7 +56,6 @@ Route::middleware(['auth', 'verified', 'role:super_admin'])->group(function () {
     
     // Impersonation Routes
     Route::post('/super-admin/impersonate/{user}', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'impersonate'])->name('super.impersonate');
-    Route::post('/super-admin/leave-impersonation', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'leaveImpersonation'])->name('super.leave-impersonation');
 });
 
 // For the Store Admin
@@ -105,7 +106,7 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
                     'user.profile',
                     'customer',
                     'service.serviceCategory',
-                    'items.attribute',
+                    'items.shopAttribute.attributeType.attributeCategory',
                     'tailoringShop',
                     'latestLog.user:id,name,role',
                 ])
@@ -173,7 +174,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-orders', function () {
         // Get orders for the current logged in user, prioritizing urgent/rush orders
         $orders = Order::where('user_id', Auth::id())
-            ->with(['user.profile', 'service.serviceCategory', 'items.attribute', 'tailoringShop.attributes'])
+            ->with(['user.profile', 'service.serviceCategory', 'items.shopAttribute.attributeType.attributeCategory', 'tailoringShop.attributes'])
             ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
             ->orderBy('expected_completion_date', 'ASC')
             ->get();
@@ -204,13 +205,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
 Route::get('/shop/{shop}',  function ($shop){
-    $shop = TailoringShop::where('status', 'approved')
+    $shop = TailoringShop::whereHas('shopStatus', function ($query) {
+            $query->where('name', 'Approved');
+        })
         ->where('is_active', true)
         ->with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory', 'user.profile'])
         ->findOrFail($shop);
 
+    $fitMethods = FitMethod::select('id', 'name', 'description')
+        ->orderBy('id')
+        ->get();
+
     return Inertia::render('Shop', [
-        'shop' => $shop
+        'shop' => $shop,
+        'fitMethods' => $fitMethods,
     ]);
 });
 
@@ -221,6 +229,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    
+    // Checkout - quiet API endpoint for phone/location saves
+    Route::patch('/api/checkout/save-profile', [ProfileController::class, 'updateLogistics'])->name('checkout.save-profile');
+    
+    // Allow any authenticated user to leave impersonation (controller enforces security)
+    Route::post('/leave-impersonation', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'leaveImpersonation'])
+        ->middleware('auth')
+        ->name('super.leave-impersonation');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

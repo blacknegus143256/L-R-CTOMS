@@ -102,4 +102,31 @@ class ProfileController extends Controller
 
         return Redirect::to('/');
     }
+
+    /**
+     * Update user profile logistics (phone/location) for checkout.
+     * This is a quiet JSON endpoint that avoids redirect loops.
+     */
+    public function updateLogistics(Request $request)
+    {
+        $user = $request->user();
+        
+        // Update Phone
+        if ($request->has('phone')) {
+            $user->profile()->updateOrCreate(
+                ['user_id' => $user->id],
+                ['phone' => $request->phone]
+            );
+        }
+        
+        // Update Location
+        if ($request->has('latitude')) {
+            $user->profile()->updateOrCreate(
+                ['user_id' => $user->id],
+                $request->only(['latitude', 'longitude', 'address', 'barangay', 'street', 'purok', 'location_details'])
+            );
+        }
+        
+        return response()->json(['success' => true]);
+    }
 }

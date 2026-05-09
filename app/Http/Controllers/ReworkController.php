@@ -28,7 +28,7 @@ class ReworkController extends Controller
             ->with([
                 'order.user.profile',
                 'order.customer',
-                'order.items.attribute',
+                'order.items.shopAttribute.attributeType',
                 'order.tailoringShop.user.profile',
             ])
             ->latest()
@@ -48,7 +48,7 @@ class ReworkController extends Controller
             ->with([
                 'order.tailoringShop.user.profile',
                 'order.customer',
-                'order.items.attribute',
+                'order.items.shopAttribute.attributeType',
             ])
             ->latest()
             ->get();

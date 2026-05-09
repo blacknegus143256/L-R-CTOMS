@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildMapUrl } from '@/utils/map';
 import { router, usePage } from '@inertiajs/react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Scale, ChevronUp, Trash2 } from 'lucide-react';
 import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
@@ -11,12 +12,100 @@ import ServiceCarousel from '@/Components/Home/ServiceCarousel';
 
 import MaterialFilters from '@/Components/Home/MaterialFilters';
 import ShopActionCard from '@/Components/Home/ShopActionCard';
-import { FiMapPin, FiArrowRight } from 'react-icons/fi';
+import { FiMapPin, FiArrowRight, FiShoppingBag } from 'react-icons/fi';
 
 import ComparisonTable from '@/Components/Home/ComparisonTable';
 import ShopCoverCarousel from '@/Components/Home/ShopCoverCarousel';
 
 import Footer from '@/Components/Home/Footer';
+
+function ReplaceShopModal({ pendingShop, selectedShops, onReplace, onCancel }) {
+    if (!pendingShop) return null;
+
+    return (
+        <div className="fixed inset-0 z-[95] flex items-end justify-center bg-stone-950/40 backdrop-blur-[2px]">
+            <div className="absolute inset-0" onClick={onCancel} />
+            <motion.div
+                initial={{ y: '100%' }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: '100%', opacity: 0 }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                className="relative w-full max-w-4xl overflow-hidden rounded-t-[2.5rem] border-t border-stone-200 bg-white pb-10 shadow-[0_-20px_50px_-12px_rgba(0,0,0,0.3)]"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Replace shop comparison modal"
+            >
+                <div className="flex justify-center py-4">
+                    <div className="h-1.5 w-12 rounded-full bg-stone-300" />
+                </div>
+
+                <div className="px-8 pt-2">
+                    <div className="mb-8 text-center">
+                        <p className="mb-1 text-[11px] font-black uppercase tracking-[0.3em] text-orchid-500">Limit Reached</p>
+                        <h3 className="text-2xl font-black text-stone-900">
+                            Swap a shop to add <span className="text-orchid-600">{pendingShop.shop_name}</span>
+                        </h3>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {selectedShops.map((shop) => (
+                            <div key={shop.id} className="group relative rounded-3xl border-2 border-stone-100 bg-stone-50/50 p-4 transition-all hover:border-orchid-200 hover:bg-white hover:shadow-xl md:p-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orchid-blue to-orchid-purple text-xl font-black text-white shadow-inner">
+                                        {shop.logo_url ? (
+                                            <img
+                                                src={`/storage/${shop.logo_url}`}
+                                                alt={shop.shop_name}
+                                                className="h-full w-full rounded-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.style.display = 'none';
+                                                    e.target.nextSibling?.style?.removeProperty('display');
+                                                }}
+                                            />
+                                        ) : null}
+                                        <span className={shop.logo_url ? 'hidden' : ''}>
+                                            {(shop.shop_name || shop.user?.name || 'S').charAt(0).toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-black uppercase tracking-widest text-stone-400">Current Comparison</p>
+                                        <p className="truncate text-lg font-black text-stone-900">{shop.shop_name}</p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => onReplace(shop)}
+                                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-4 text-sm font-black text-white transition-all hover:bg-orchid-600 hover:shadow-lg active:scale-[0.98]"
+                                >
+                                    Replace with {pendingShop.shop_name.split(' ')[0]}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="mt-8 w-full text-center text-sm font-bold text-stone-400 transition-colors hover:text-stone-600"
+                    >
+                        Nevermind, keep my current selection
+                    </button>
+
+                    <div className="mt-2 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="rounded-xl border border-stone-200 bg-stone-100 px-4 py-2.5 text-sm font-bold text-stone-700 transition hover:bg-stone-200 md:hidden"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
 
 
 
@@ -31,6 +120,9 @@ export default function Home({ auth, categories: initialCategories, services: in
 
     const [selectedForCompare, setSelectedForCompare] = useState([]);
     const [showCompareModal, setShowCompareModal] = useState(false);
+    const [isSelectionListOpen, setIsSelectionListOpen] = useState(false);
+    const [pendingShop, setPendingShop] = useState(null);
+    const [isReplaceModalOpen, setIsReplaceModalOpen] = useState(false);
 
     const [selectedAttributes, setSelectedAttributes] = useState([]);
     const [selectedServiceCategories, setSelectedServiceCategories] = useState([]);
@@ -80,25 +172,44 @@ export default function Home({ auth, categories: initialCategories, services: in
 
     // Prevent background scrolling when any modal is active
     useEffect(() => {
-        const isAnyModalOpen = showModal || showCompareModal || locationModalOpen;
+        const isAnyModalOpen = showModal || showCompareModal || locationModalOpen || isReplaceModalOpen;
         document.body.style.overflow = isAnyModalOpen ? 'hidden' : 'auto';
         
         // Cleanup on unmount
         return () => {
             document.body.style.overflow = 'auto';
         };
-    }, [showModal, showCompareModal, locationModalOpen]);
+    }, [showModal, showCompareModal, locationModalOpen, isReplaceModalOpen]);
 
-    const toggleCompare = (shop) => {
+    const handleCompareClick = (shop) => {
         setSelectedForCompare(prev => {
             if (prev.find(s => s.id === shop.id)) {
                 return prev.filter(s => s.id !== shop.id);
             }
-            if (prev.length >= 2) {
-                return [prev[0], shop];
+            if (prev.length === 2) {
+                setPendingShop(shop);
+                setIsReplaceModalOpen(true);
+                return prev;
             }
             return [...prev, shop];
         });
+    };
+
+    const handleReplaceShop = (shopToReplace) => {
+        if (!pendingShop) return;
+
+        setSelectedForCompare(prev => prev
+            .filter(shop => shop.id !== shopToReplace.id)
+            .concat(pendingShop)
+        );
+        setPendingShop(null);
+        setIsReplaceModalOpen(false);
+        setIsSelectionListOpen(false);
+    };
+
+    const closeReplaceModal = () => {
+        setPendingShop(null);
+        setIsReplaceModalOpen(false);
     };
 
     const uniqueServiceCategories = useMemo(() => {
@@ -162,19 +273,16 @@ export default function Home({ auth, categories: initialCategories, services: in
     };
 
     const handlePlaceOrder = (shop, serviceId = null) => {
+        const intentUrl = serviceId
+            ? `/shop/${shop.id}?order=true&service_id=${serviceId}`
+            : `/shop/${shop.id}?order=true`;
+
         if (!auth.user) {
-            router.visit('/login');
+            router.visit(`/login?redirect=${encodeURIComponent(intentUrl)}`);
             return;
         }
 
-        let url = `/shop/${shop.id}?order=true`;
-        if (serviceId) {
-            url += `&service_id=${serviceId}`;
-        }
-        
-        // This sends them to your Shop page and triggers the modal automatically
-        // with the specific service_id in the URL
-        router.visit(url);
+        router.visit(intentUrl);
     };
 
     const selectedAttributeNames = useMemo(() => {
@@ -331,15 +439,15 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
         href={mapUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-sm text-stone-600 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
+        className="text-sm text-stone-900 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
         onClick={(e) => e.stopPropagation()}
         title={shop.google_maps_link ? "Open in Google Street View" : "View on Google Maps"}
     >
         {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
     </a>
 ) : (
-    <span className="text-sm text-stone-400 font-medium truncate">
-        Location not available
+    <span className="text-sm text-stone-600 font-medium">
+         {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'Location not available'}
     </span>
 )}
     </div>
@@ -366,7 +474,7 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            toggleCompare(shop);
+                            handleCompareClick(shop);
                         }}
                         className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${
                             selectedForCompare.find(s => s.id === shop.id)
@@ -374,7 +482,7 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
                                 : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50 hover:border-stone-300'
                         }`}
                     >
-                        ⚖️ {selectedForCompare.find(s => s.id === shop.id) ? 'Added' : 'Compare'}
+                        <Scale className="w-4 h-4" /> {selectedForCompare.find(s => s.id === shop.id) ? 'Added' : 'Compare'}
                     </button>
 
                     <button
@@ -402,28 +510,180 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
             {locationModalOpen && selectedLocation && (
                 <LocationMapModal locations={selectedLocation} onClose={() => setLocationModalOpen(false)} />
             )}
+            <AnimatePresence>
+                {isReplaceModalOpen && pendingShop && (
+                    <ReplaceShopModal
+                        pendingShop={pendingShop}
+                        selectedShops={selectedForCompare}
+                        onReplace={handleReplaceShop}
+                        onCancel={closeReplaceModal}
+                    />
+                )}
+            </AnimatePresence>
             {selectedForCompare.length > 0 && (
                 <motion.div 
                     initial={{ y: 100, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="fixed bottom-0 left-0 right-0 z-[60] bg-white/95 border-t p-4"
+                    exit={{ y: 100, opacity: 0 }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                    className="fixed bottom-0 left-0 right-0 z-[60] bg-white/95 backdrop-blur-sm border-t border-stone-200 p-4 shadow-2xl"
                 >
-                    <div className="max-w-7xl mx-auto flex justify-between items-center">
-                        <span>{selectedForCompare.length} selected</span>
+                    <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+                        {/* Left: Shop Avatars & Count */}
+                        <div className="flex items-center gap-3 flex-1">
+                            {/* Shopping Bag Icon */}
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-orchid-50 border border-orchid-200 flex-shrink-0">
+                                <FiShoppingBag className="w-5 h-5 text-orchid-purple" />
+                            </div>
 
-                        <button
-                            disabled={selectedForCompare.length < 2}
-                            onClick={() => setShowCompareModal(true)}
-                            className="px-6 py-2 bg-black text-white rounded"
-                        >
-                            Compare
-                        </button>
+                            {/* Shop Avatars */}
+                            <div className="flex items-center -space-x-3">
+                                {selectedForCompare.map((shop, idx) => (
+                                    <div
+                                        key={shop.id}
+                                        className="relative w-10 h-10 flex-shrink-0 group"
+                                        title={`Click to remove ${shop.shop_name}`}
+                                    >
+                                        <div
+                                            className="w-10 h-10 rounded-full bg-gradient-to-br from-orchid-blue to-orchid-purple border-2 border-white shadow-md flex items-center justify-center text-white font-bold text-xs hover:shadow-lg transition-shadow cursor-pointer"
+                                            title={shop.shop_name}
+                                        >
+                                            {shop.logo_url ? (
+                                                <img
+                                                    src={`/storage/${shop.logo_url}`}
+                                                    alt={shop.shop_name}
+                                                    className="w-full h-full rounded-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                        e.target.nextSibling?.style?.removeProperty('display');
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <span className={shop.logo_url ? 'hidden' : ''}>
+                                                {(shop.shop_name || shop.user?.name || 'S').charAt(0).toUpperCase()}
+                                            </span>
+                                        </div>
+                                        
+                                        {/* Remove Button - Always visible at opacity-80 */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedForCompare(prev => prev.filter(s => s.id !== shop.id));
+                                            }}
+                                            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-80 hover:opacity-100 transition-opacity hover:bg-rose-600 border border-white shadow-md"
+                                            title={`Click to remove ${shop.shop_name}`}
+                                            aria-label={`Remove ${shop.shop_name} from comparison`}
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Manage Selection Button */}
+                            <button
+                                onClick={() => setIsSelectionListOpen(!isSelectionListOpen)}
+                                className="flex items-center gap-1 text-sm font-semibold text-stone-700 ml-2 hover:text-orchid-600 transition-colors group"
+                                title="View and manage selected shops"
+                            >
+                                <span>{selectedForCompare.length} selected</span>
+                                <ChevronUp 
+                                    className={`w-4 h-4 transition-transform ${isSelectionListOpen ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                            {/* Clear All Button */}
+                            <button
+                                onClick={() => setSelectedForCompare([])}
+                                className="px-4 py-2.5 text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors border border-stone-300 flex items-center gap-2"
+                            >
+                                <X className="w-4 h-4" /> Clear All
+                            </button>
+
+                            {/* Compare Button */}
+                            <button
+                                disabled={selectedForCompare.length < 2}
+                                onClick={() => setShowCompareModal(true)}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white font-bold text-sm rounded-lg hover:shadow-lg hover:shadow-orchid-blue/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Scale className="w-4 h-4" />
+                                Compare
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Selection List Popover */}
+                    <AnimatePresence>
+                        {isSelectionListOpen && (
+                            <motion.div
+                                key="selection-list"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                                className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden"
+                            >
+                                <div className="max-w-7xl mx-auto">
+                                    <div className="p-4 space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                        {selectedForCompare.map((shop) => (
+                                            <div
+                                                key={shop.id}
+                                                className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl hover:bg-stone-100 transition-colors group"
+                                            >
+                                                {/* Shop Avatar */}
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orchid-blue to-orchid-purple flex items-center justify-center text-white font-bold text-xs flex-shrink-0 border border-white shadow-sm">
+                                                    {shop.logo_url ? (
+                                                        <img
+                                                            src={`/storage/${shop.logo_url}`}
+                                                            alt={shop.shop_name}
+                                                            className="w-full h-full rounded-full object-cover"
+                                                            onError={(e) => {
+                                                                e.target.style.display = 'none';
+                                                                e.target.nextSibling?.style?.removeProperty('display');
+                                                            }}
+                                                        />
+                                                    ) : null}
+                                                    <span className={shop.logo_url ? 'hidden' : ''}>
+                                                        {(shop.shop_name || shop.user?.name || 'S').charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+
+                                                {/* Shop Name */}
+                                                <span className="flex-1 font-semibold text-stone-800 truncate">
+                                                    {shop.shop_name}
+                                                </span>
+
+                                                {/* Remove Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedForCompare(prev => prev.filter(s => s.id !== shop.id));
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                    title={`Remove ${shop.shop_name}`}
+                                                    aria-label={`Remove ${shop.shop_name} from comparison`}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                    <span className="text-xs font-bold">Remove</span>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </motion.div>
             )}
 {showCompareModal && (
-    <div className="fixed inset-0 z-[70] isolate flex items-start justify-center bg-stone-900/60 backdrop-blur-sm p-4 sm:p-6 sm:pt-12">
-        <div className="bg-white w-[95vw] max-w-7xl min-w-[320px] mx-auto max-h-[90vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden relative">
+    <div
+        className="fixed inset-0 z-[70] isolate flex items-start justify-center bg-stone-900/60 backdrop-blur-sm p-4 sm:p-6 sm:pt-12"
+        onClick={(e) => { if (e.target === e.currentTarget) setShowCompareModal(false); }}
+    >
+        <div className="bg-white w-[95vw] max-w-7xl min-w-[320px] mx-auto max-h-[90vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-stone-200 shrink-0">
                 <div>
                     <h2 className="text-2xl font-black text-stone-900">Shop Comparison</h2>

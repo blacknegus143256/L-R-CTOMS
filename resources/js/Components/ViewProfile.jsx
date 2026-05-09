@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Zap } from 'lucide-react';
 import { buildMapUrl } from '@/utils/map';
 import { Link, usePage } from '@inertiajs/react';
 import useRequireAuth from '@/hooks/useRequireAuth';
@@ -36,8 +37,11 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     }, {}) || {};
 
     return (
-<div className="fixed inset-0 z-[100] isolate flex items-center justify-center bg-stone-900/80 backdrop-blur-sm p-4 sm:p-6">
-            <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col relative">
+<div
+    className="fixed inset-0 z-[100] isolate flex items-center justify-center bg-stone-900/80 backdrop-blur-sm p-4 sm:p-6"
+    onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+>
+            <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col relative" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Close Button */}
                 <button 
@@ -132,6 +136,30 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
             </h4>
             <span className="font-black text-emerald-600 shrink-0 text-lg">₱{Number(service.price).toFixed(2)}</span>
         </div>
+        {service.rush_service_available && (
+          <div className="flex items-center gap-1 text-xs font-semibold text-amber-600 mt-1 mb-2">
+            <Zap size={14} />
+            Rush Available
+          </div>
+        )}
+        
+        {/* Measurement Preference Badge */}
+        {service.appointment_required ? (
+            <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-blue-200">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Appointment Required
+            </span>
+        ) : (
+            <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-amber-200">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                </svg>
+                Self-Measure Available
+            </span>
+        )}
+        
         <p className="text-xs text-stone-500 line-clamp-2 mb-4 flex-1 mt-1">
             {service.service_description || 'Inquire for specific details and fabric options.'}
         </p>
@@ -192,10 +220,7 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                                                                             onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
                                                                         />
                                                                     ) : (
-                                                                        <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 bg-stone-100">
-                                                                            <span className="text-2xl mb-1">📷</span>
-                                                                            <span className="text-[9px] font-bold uppercase tracking-wider">No Image</span>
-                                                                        </div>
+                                                                        <img src="/images/default-service.jpg" alt="No Image" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = '/images/default-service.jpg'; }} />
                                                                     )}
                                                                     {/* Out of Stock Overlay */}
                                                                     {!attr.pivot?.is_available && (

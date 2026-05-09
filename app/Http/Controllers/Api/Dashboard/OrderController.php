@@ -8,6 +8,8 @@ use App\Models\AttributeCategory;
 use App\Models\AttributeType;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Payment;
+use App\Models\OrderStatus as OrderStatusLookup;
 use App\Models\ShopSchedule;
 use App\Models\TailoringShop;
 use Carbon\Carbon;
@@ -19,6 +21,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use App\Enums\OrderStatus;
 use App\Notifications\OrderUpdatedNotification;
+use App\Models\OrderService;
 
 class OrderController extends Controller
 {
@@ -70,7 +73,7 @@ class OrderController extends Controller
         }
 
         $orders = $shop->orders()
-            ->with(['customer:id,name,phone_number', 'service:id,service_name,price,service_category_id', 'service.serviceCategory', 'items.attribute'])
+            ->with(['customer:id,name,phone_number', 'orderServices.service:id,service_name,price,service_category_id', 'orderServices.service.serviceCategory', 'items.shopAttribute.attributeType', 'fitMethod', 'appointments', 'status', 'payment.status'])
             ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
             ->orderBy('expected_completion_date', 'ASC')
             ->get();
@@ -92,11 +95,15 @@ class OrderController extends Controller
             'customer.profile',
             'user:id,name,email',
             'user.profile',
-            'service:id,service_name,price,service_description,duration_days,appointment_required',
-            'service.serviceCategory:id,name',
-            'items.attribute',
-            'items.attribute.attributeCategory:id,name',
-            'items.attribute.attributeType:id',
+            'fitMethod',
+            'status',
+            'payment.status',
+            'appointments',
+            'orderServices.service:id,service_name,price,service_description,duration_days,appointment_required',
+            'orderServices.service.serviceCategory:id,name',
+            'items.shopAttribute',
+            'items.shopAttribute.attributeType.attributeCategory:id,name',
+            'items.shopAttribute.attributeType:id',
             'tailoringShop:id,shop_name,contact_number,address,contact_person',
         ]);
 
@@ -135,7 +142,7 @@ class OrderController extends Controller
                 if ($shopAttr) {
                     $totalPrice += (float) $shopAttr->price;
                     $attributesData[] = [
-                        'attribute_type_id' => $shopAttr->attribute_type_id,
+                        'shop_attribute_id' => $shopAttr->id,
                         'price' => (float) $shopAttr->price,
                     ];
                 }
@@ -145,10 +152,8 @@ class OrderController extends Controller
         $orderData = [
             'tailoring_shop_id' => $shop->id,
             'customer_id' => $valid['customer_id'],
-            'service_id' => $valid['service_id'],
-            'status' => $valid['status'] ?? OrderStatus::REQUESTED->value,
+            'order_status_id' => OrderStatusLookup::idByName($valid['status'] ?? OrderStatus::REQUESTED->value),
             'expected_completion_date' => $valid['expected_completion_date'] ?? null,
-            'total_price' => $totalPrice,
             'notes' => $valid['notes'] ?? null,
         ];
 
@@ -158,13 +163,21 @@ class OrderController extends Controller
         foreach ($attributesData as $attrData) {
             OrderItem::create([
                 'order_id' => $order->id,
-                'attribute_type_id' => $attrData['attribute_type_id'],
+                'shop_attribute_id' => $attrData['shop_attribute_id'],
                 'price' => $attrData['price'],
                 'quantity' => 1,
             ]);
         }
 
-        $order->load(['customer:id,name,phone_number', 'service:id,service_name,price', 'items.attribute']);
+        // Attach main service as order service
+        OrderService::create([
+            'order_id' => $order->id,
+            'service_id' => $valid['service_id'],
+            'price' => $service->price,
+            'quantity' => 1,
+        ]);
+
+        $order->load(['customer:id,name,phone_number', 'orderServices.service:id,service_name,price', 'items.shopAttribute.attributeType']);
 
         return redirect()->back()->with('message', 'Order created successfully!');
     }
@@ -174,12 +187,12 @@ class OrderController extends Controller
         // 1. Validation (Note: customer_id is NOT required here because it's the auth user)
         $valid = $request->validate([
             'service_id' => ['required', Rule::exists('services', 'id')->where('tailoring_shop_id', $shop->id)],
-            'style_tag' => 'nullable|string|max:255',
             'material_source' => 'required|in:customer,shop,tailor_choice',
-            'rush_order' => 'nullable|boolean',
+            'is_rush' => 'nullable|boolean',
             'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
-            'measurement_type' => 'required|string',
-            'measurement_date' => 'nullable|date_format:Y-m-d H:i:s|required_if:measurement_type,scheduled',
+            'measurement_type' => 'nullable|string',
+            'measurement_preference' => 'nullable|string',
+            'measurement_date' => 'nullable|date_format:Y-m-d H:i:s',
             'measurement_time' => 'nullable|date_format:H:i',
             'material_dropoff_date' => 'nullable|date',
             'material_dropoff_time' => 'nullable|date_format:H:i',
@@ -190,12 +203,24 @@ class OrderController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $valid['measurement_type'] = Order::normalizeMeasurementType($valid['measurement_type'] ?? null);
+        $submittedFitMethodId = $request->input('fit_method_id');
+        $fitMethodId = null;
+        $fitMethodName = null;
 
-        if (!in_array($valid['measurement_type'], [Order::MEASUREMENT_TYPE_PROFILE, Order::MEASUREMENT_TYPE_SCHEDULED, Order::MEASUREMENT_TYPE_NONE], true)) {
-            return response()->json([
-                'message' => 'Invalid measurement type selected.',
-            ], 422);
+        if ($submittedFitMethodId) {
+            $fitMethodId = \App\Models\FitMethod::whereKey($submittedFitMethodId)->value('id');
+            $fitMethodName = \App\Models\FitMethod::whereKey($fitMethodId)->value('name');
+        }
+
+        if (! $fitMethodId) {
+            $measurementType = $request->input('measurement_type') ?? $request->input('measurement_preference');
+            $fitMethodName = match (strtolower((string) $measurementType)) {
+                'profile', 'self_measured', 'self_measure' => 'Self-Measured',
+                'scheduled', 'workshop_fitting', 'in_shop' => 'In-Shop Fitting',
+                'home_visit' => 'Home Visit',
+                default => 'No Measurement Required',
+            };
+            $fitMethodId = \App\Models\FitMethod::where('name', $fitMethodName)->value('id');
         }
 
         // Handle design_image upload
@@ -205,9 +230,9 @@ class OrderController extends Controller
         }
 
         $service = $shop->services()->findOrFail($valid['service_id']);
-        $rushOrder = (bool) ($valid['rush_order'] ?? false);
+        $isRush = (bool) ($valid['is_rush'] ?? false);
 
-        if ($rushOrder && ! (bool) ($service->rush_service_available ?? false)) {
+        if ($isRush && ! (bool) ($service->rush_service_available ?? false)) {
             return response()->json([
                 'message' => 'Rush ordering is not available for this service.',
             ], 422);
@@ -224,7 +249,7 @@ class OrderController extends Controller
                     $qty = (float) $request->input("attribute_quantities.{$attributeId}", 1);
                     $totalPrice += (float) $shopAttr->price * $qty;
                     $attributesData[] = [
-                        'attribute_type_id' => $shopAttr->attribute_type_id,
+                        'shop_attribute_id' => $shopAttr->id,
                         'price' => (float) $shopAttr->price,
                     ];
                 }
@@ -240,7 +265,7 @@ class OrderController extends Controller
             if (!$measurementTime) {
                 $measurementTime = Carbon::parse($valid['measurement_date'])->format('H:i');
             }
-        } elseif (!empty($valid['date']) && Order::requiresInShopMeasurements($valid['measurement_type'])) {
+        } elseif (!empty($valid['date']) && $fitMethodName === 'In-Shop Fitting') {
             $measurementDate = Carbon::parse($valid['date'])->format('Y-m-d');
             $measurementTime = $measurementTime ?: ($valid['time_start'] ?? null);
         }
@@ -267,7 +292,9 @@ class OrderController extends Controller
                 $request,
                 $shop,
                 $valid,
-                $rushOrder,
+                $service,
+                $isRush,
+                $fitMethodId,
                 $measurementDate,
                 $measurementTime,
                 $materialDropoffDate,
@@ -282,18 +309,14 @@ class OrderController extends Controller
                 $orderData = [
                     'tailoring_shop_id' => $shop->id,
                     'user_id' => $user->id,
-                    'service_id' => $valid['service_id'],
-                    'style_tag' => $valid['style_tag'] ?? null,
+                    'user_id' => $user->id,
+                    'fit_method_id' => $fitMethodId,
                     'material_source' => $valid['material_source'],
                     'design_image' => $valid['design_image'] ?? null,
-                    'measurement_type' => $valid['measurement_type'],
-                    'measurement_date' => $valid['measurement_date'] ?? null,
-                    'material_dropoff_date' => $materialDropoffDate,
-                    'measurement_preference' => $valid['measurement_preference'] ?? null,
-                    'status' => OrderStatus::REQUESTED->value,
-                    'total_price' => $totalPrice,
+                    'order_status_id' => OrderStatusLookup::idByName(OrderStatus::REQUESTED->value),
+                    // total_price moved to order_services
                     'notes' => $valid['notes'] ?? null,
-                    'rush_order' => $rushOrder,
+                    'is_rush' => $isRush,
                     'rush_fee' => 0,
                 ];
 
@@ -306,13 +329,21 @@ class OrderController extends Controller
                         if ($shopAttr) {
                             $qty = (float) $request->input("attribute_quantities.{$attributeId}", 1);
                             $order->items()->create([
-                                'attribute_type_id' => $shopAttr->attribute_type_id,
+                                'shop_attribute_id' => $shopAttr->id,
                                 'price' => (float) $shopAttr->price,
                                 'quantity' => $qty,
                             ]);
                         }
                     }
                 }
+
+                // Attach the main service as an order service
+                OrderService::create([
+                    'order_id' => $order->id,
+                    'service_id' => $valid['service_id'],
+                    'price' => $service->price,
+                    'quantity' => 1,
+                ]);
 
                 $bookAppointment = function (string $date, string $time, string $type) use ($shop, $user, $order, $slotDurationMinutes, $maxBookingsPerSlot, $maxUserBookingsPerSlot) {
                     $normalizedTime = Carbon::createFromFormat('H:i', $time)->format('H:i:s');
@@ -348,6 +379,7 @@ class OrderController extends Controller
                         'time_start' => $slotStart->format('H:i:s'),
                         'time_end' => $slotStart->copy()->addMinutes($slotDurationMinutes)->format('H:i:s'),
                         'status' => 'confirmed',
+                        'type' => $type,
                     ];
 
                     Appointment::create($appointmentData);
@@ -455,7 +487,7 @@ class OrderController extends Controller
                     $totalPrice += $lineTotal;
 
                     $attributesData[] = [
-                        'attribute_type_id' => $pivotItem->attribute_type_id,
+                        'shop_attribute_id' => $pivotItem->id,
                         'price' => $unitPrice,
                         'quantity' => (float) $attrData['qty'],
                     ];
@@ -467,7 +499,7 @@ class OrderController extends Controller
             foreach ($attributesData as $itemData) {
                 OrderItem::create([
                     'order_id' => $order->id,
-                    'attribute_type_id' => $itemData['attribute_type_id'],
+                    'shop_attribute_id' => $itemData['shop_attribute_id'],
                     'price' => $itemData['price'],
                     'quantity' => $itemData['quantity'],
                 ]);
@@ -481,8 +513,8 @@ class OrderController extends Controller
 
         $order->update($valid);
         
-        // Force refresh of the total price in the order record
-        $order->total_price = $valid['total_price'] ?? $order->total_price;
+        // Force refresh of the total amount in the order record
+        $order->total_amount = $valid['total_price'] ?? $order->total_amount;
         $order->save();
 
         if ($order->user) {
@@ -572,8 +604,11 @@ class OrderController extends Controller
             'customer:id,name,email',
             'service:id,service_name,price,service_description,checkout_type',
             'service.serviceCategory:id,name',
-            'items.attribute.attributeCategory',
+            'fitMethod',
+            'appointments',
+            'items.shopAttribute.attributeType.attributeCategory',
             'images',
+            'order_measurements',
             'reworkRequest',
             'logs.user:id,name,role'
         ]);
@@ -583,7 +618,7 @@ class OrderController extends Controller
             'attributes' => function ($query) {
                 $query->withPivot('price', 'item_name', 'image_url', 'notes', 'unit');
             },
-            'attributes.attributeCategory', // 👉 This eager-loads the category!
+            'attributes.attributeCategory', // =��� This eager-loads the category!
         ]);
 
         $categories = AttributeCategory::orderBy('name')->get(['id', 'name']);
@@ -626,7 +661,6 @@ class OrderController extends Controller
         $validated = $request->validate([
             'status' => ['required', Rule::in(array_column(OrderStatus::cases(), 'value'))],
             'expected_completion_date' => 'nullable|date',
-            'measurement_snapshot' => 'nullable|array',
         ]);
 
         $order->fill($validated);
@@ -684,7 +718,16 @@ class OrderController extends Controller
             'payment_status' => ['required', Rule::in(['Partial', 'Paid'])],
         ]);
 
-        $order->update(['payment_status' => $validated['payment_status']]);
+        Payment::updateOrCreate(
+            ['order_id' => $order->id],
+            [
+                'payment_status' => $validated['payment_status'],
+                'amount' => $validated['payment_status'] === 'Paid'
+                    ? (float) $order->total_amount
+                    : ((float) $order->total_amount / 2),
+            ]
+        );
+
         $this->checkReadyForProduction($order);
         $this->logOrderActivity(
             $order,
@@ -716,7 +759,8 @@ class OrderController extends Controller
         }
 
         $needsMaterials = $order->material_source === 'customer';
-        $needsMeasurements = Order::requiresInShopMeasurements($order->measurement_type);
+        $fitMethodName = $order->fitMethod?->name ?? $order->fit_method?->name ?? 'No Measurement Required';
+        $needsMeasurements = $fitMethodName === 'In-Shop Fitting';
 
         $logisticsMet = (! $needsMaterials || $order->materials_received)
             && (! $needsMeasurements || $order->measurements_taken);
@@ -725,7 +769,12 @@ class OrderController extends Controller
         $paymentMet = in_array($order->payment_status, ['Partial', 'Paid'], true);
 
         if ($logisticsMet && $paymentMet) {
-            $order->update(['status' => 'Ready for Production']);
+            // Mark the order as ready for production — do NOT auto-start production.
+            $order->update([
+                'order_status_id' => OrderStatusLookup::idByName('Ready for Production')
+                    ?? OrderStatusLookup::idByName('In Progress'),
+            ]);
+
             $order->loadMissing(['user', 'tailoringShop', 'customer']);
 
             $order->user?->notify(new OrderUpdatedNotification(
@@ -757,7 +806,9 @@ class OrderController extends Controller
         }
 
         // Change status to Quoted using the Enum
-        $order->update(['status' => \App\Enums\OrderStatus::QUOTED->value]);
+        $order->update([
+            'order_status_id' => OrderStatusLookup::idByName(\App\Enums\OrderStatus::QUOTED->value),
+        ]);
         $this->logOrderActivity($order, $user?->id, 'order_accepted', 'Tailor accepted the order for quotation.');
 
         return redirect()->back()->with('message', 'Order Accepted! You can now prepare the quote.');
@@ -788,7 +839,7 @@ class OrderController extends Controller
         // Change status to Rejected and prepend rejection reason to notes
         $currentNotes = $order->notes ?? '';
         $order->update([
-            'status' => \App\Enums\OrderStatus::REJECTED->value,
+            'order_status_id' => OrderStatusLookup::idByName(\App\Enums\OrderStatus::REJECTED->value),
             'notes' => $currentNotes ? "REJECTED BY SHOP: {$validated['reason']}\n\n{$currentNotes}" : "REJECTED BY SHOP: {$validated['reason']}"
         ]);
 
@@ -838,21 +889,13 @@ class OrderController extends Controller
 
         // Prepare the updated data
         $updateData = [
-            'status' => $validated['status'],
+            'order_status_id' => OrderStatusLookup::idByName($validated['status']),
             'production_min_days' => $validated['production_min_days'],
             'production_max_days' => $validated['production_max_days'],
             'required_materials' => $validated['required_materials'] ?? [],
         ];
 
-        // Handle measurement snapshot updates if provided
-        if (!empty($validated['requested_measurements'])) {
-            $snapshot = $order->measurement_snapshot ?? [];
-            $snapshot['requested'] = $validated['requested_measurements'];
-            $snapshot['unit'] = $validated['measurement_unit'] ?? 'inches';
-            $updateData['measurement_snapshot'] = $snapshot;
-        }
-
-        $rushFee = $order->rush_order ? (float) ($validated['rush_fee'] ?? $order->rush_fee ?? 0) : 0;
+        $rushFee = $order->is_rush ? (float) ($validated['rush_fee'] ?? $order->rush_fee ?? 0) : 0;
         $updateData['rush_fee'] = $rushFee;
 
         // If the shop provides the materials, we need to add the tailor's material costs to the total
@@ -869,7 +912,7 @@ class OrderController extends Controller
             }, 0);
 
             // New Grand Total: Labor + Tailor Materials + Customer Items
-            $updateData['total_price'] = (float)$validated['base_labor'] + $tailorMaterialsCost + $customerItemsCost + $rushFee;
+            $updateData['total_amount'] = (float)$validated['base_labor'] + $tailorMaterialsCost + $customerItemsCost + $rushFee;
         } else {
             // If customer provides materials, total is just labor (+ existing shop items)
             $customerItemsCost = $order->items->reduce(function ($sum, $item) {
@@ -878,10 +921,16 @@ class OrderController extends Controller
                 return $sum + ($price * $qty);
             }, 0);
             
-            $updateData['total_price'] = (float)$validated['base_labor'] + $customerItemsCost + $rushFee;
+            $updateData['total_amount'] = (float)$validated['base_labor'] + $customerItemsCost + $rushFee;
         }
 
         $order->update($updateData);
+
+        // Update the specific labor price for this order
+        $orderService = \App\Models\OrderService::where('order_id', $order->id)->first();
+        if ($orderService) {
+            $orderService->update(['price' => $validated['base_labor']]);
+        }
 
         if (!empty($validated['requested_measurements'])) {
             $this->logOrderActivity(
@@ -896,7 +945,7 @@ class OrderController extends Controller
             $order,
             $user?->id,
             'quote_submitted',
-            'Tailor submitted quote for order #' . $order->id . '. Total: ₱' . number_format((float) $updateData['total_price'], 2)
+            'Tailor submitted quote for order #' . $order->id . '. Total: G�' . number_format((float) $updateData['total_amount'], 2)
         );
 
         // Notify the customer that quote has been sent

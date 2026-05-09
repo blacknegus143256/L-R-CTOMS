@@ -50,12 +50,13 @@ const QuoteBuilder = ({
                         <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                             {currentOrder.items.map((item, idx) => {
                                 const qty = Number(item.quantity || item.pivot?.quantity || 1);
-                                const unitPrice = Number(item.price || item.pivot?.price || 0);
+                                const shopAttribute = item.shopAttribute;
+                                const unitPrice = Number(item.price || shopAttribute?.price || item.pivot?.price || 0);
                                 const lineTotal = unitPrice * qty;
                                 
-                                const targetAttrId = parseInt(item.attribute_type_id || item.attribute_id || item.attribute?.id);
+                                const targetAttrId = parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id);
                                 const targetPrice = Number(item.price || item.pivot?.price || 0);
-                                let exactShopItem = availableShopAttributes?.find(a => 
+                                let exactShopItem = shopAttribute || availableShopAttributes?.find(a => 
                                     parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId && 
                                     Number(a.price || a.pivot?.price || 0) === targetPrice
                                 );
@@ -63,12 +64,12 @@ const QuoteBuilder = ({
                                     exactShopItem = availableShopAttributes?.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId);
                                 }
                                 
-                                const customName = exactShopItem?.item_name || exactShopItem?.pivot?.item_name;
-                                const displayName = customName || item.attribute?.name || item.attribute_name || 'Custom Add-on';
-                                const notes = exactShopItem?.notes || exactShopItem?.pivot?.notes || '';
-                                const unit = exactShopItem?.unit || exactShopItem?.pivot?.unit || 'unit';
+                                const customName = exactShopItem?.item_name || exactShopItem?.name;
+                                const displayName = customName || item.attribute_name || 'Custom Add-on';
+                                const notes = exactShopItem?.notes || '';
+                                const unit = exactShopItem?.unit || 'unit';
                                 
-                                const rawImage = exactShopItem?.image_url || exactShopItem?.pivot?.image_url || item.image_path || item.image_url || item.attribute?.image_url || item.attribute?.image_path || null;
+                                const rawImage = exactShopItem?.image_url || item.image_path || item.image_url || null;
                                 const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
 
                                 return (
@@ -85,10 +86,10 @@ const QuoteBuilder = ({
                                             )}
                                             <div>
                                                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block mb-1">
-                                                    {item.attribute?.attributeCategory?.name || item.attribute?.attribute_category?.name || 'Specification'}
+                                                    {shopAttribute?.attributeType?.attributeCategory?.name || 'Specification'}
                                                 </span>
                                                 <span className="text-sm font-bold text-stone-200 block mb-1">
-                                                    {item.attribute?.name || item.attribute_name} - {displayName}
+                                                    {shopAttribute?.item_name || item.attribute_name || shopAttribute?.attributeType?.name || 'Custom Add-on'} - {displayName}
                                                 </span>
                                                 {notes && (
                                                     <span className="text-[10px] font-medium text-stone-400 block mb-1 italic">
@@ -316,18 +317,28 @@ const QuoteBuilder = ({
                             min="0" 
                             step="0.01" 
                             value={effectiveLaborPrice}
-                            onChange={(e) => setLaborPrice(e.target.value ? Number(e.target.value) : 0)}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setLaborPrice(val === '' ? '' : val);
+                            }}
+                            onBlur={() => {
+                                if (effectiveLaborPrice === '' || Number(effectiveLaborPrice) < 0) {
+                                    const baseServicePrice = Number(currentOrder?.orderServices?.[0]?.price) || Number(currentOrder?.service?.price) || 0;
+                                    setLaborPrice(baseServicePrice);
+                                } else {
+                                    setLaborPrice(Number(effectiveLaborPrice));
+                                }
+                            }}
                             disabled={isLaborLocked}
                             className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
                                 isLaborLocked 
                                     ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80' 
                                     : 'bg-stone-800 border border-stone-700 text-white focus:ring-emerald-500 focus:border-emerald-500' 
                             }`}
-                            placeholder="0.00"
                         />
                     </div>
 
-                    {currentOrder?.rush_order && (
+                    {currentOrder?.is_rush && (
                         <div>
                             <label className="text-[10px] font-bold uppercase tracking-wider text-rose-300 flex items-center gap-2 mb-2">
                                 Rush Order Surcharge (₱)
@@ -422,7 +433,13 @@ const QuoteBuilder = ({
                                 + ₱{calculateSubtotal().toLocaleString(undefined, {minimumFractionDigits: 2})}
                             </span>
                         </div>
-                        {currentOrder?.rush_order && (
+                        <div className="flex justify-between items-end">
+                            <span className="text-sm font-bold text-cyan-300">Labor Subtotal</span>
+                            <span className="text-base font-bold text-cyan-300">
+                                + ₱{Number(effectiveLaborPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                        {currentOrder?.is_rush && (
                             <div className="flex justify-between items-end">
                                 <span className="text-sm font-bold text-rose-300">Rush Surcharge</span>
                                 <span className="text-base font-bold text-rose-300">

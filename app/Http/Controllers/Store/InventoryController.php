@@ -149,6 +149,7 @@ $request->validate([
             'item_name' => 'nullable|string|max:255',
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
+            'stock_quantity' => 'nullable|numeric|min:0',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
@@ -167,6 +168,7 @@ $request->validate([
             'notes' => $request->notes ?? '',
             'is_available' => true,
             'image_url' => $image_url,
+            'stock_quantity' => $request->input('stock_quantity', 0),
         ]);
             
         return redirect()->back()->with('message', 'New attribute added to your inventory!');
@@ -194,6 +196,7 @@ $request->validate([
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
             'item_name' => 'nullable|string|max:255',
+            'stock_quantity' => 'nullable|numeric|min:0',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
         ]);
 
@@ -210,6 +213,7 @@ $request->validate([
             'item_name' => $request->item_name ?? '',
             'notes' => $request->notes ?? '',
             'is_available' => $request->boolean('is_available', true),
+            'stock_quantity' => $request->input('stock_quantity', 0),
         ];
         
         // Only update image if a new one was provided

@@ -7,6 +7,11 @@ import { useMemo, useState } from 'react';
 
 export default function ShopList({ auth, shops }) {
     const [docFilter, setDocFilter] = useState('all');
+    const [reviewingDocument, setReviewingDocument] = useState(null);
+    const [reviewStatus, setReviewStatus] = useState('approved');
+    const [reviewReason, setReviewReason] = useState('');
+    const [reviewError, setReviewError] = useState('');
+    const [isReviewing, setIsReviewing] = useState(false);
     const [rejectingShop, setRejectingShop] = useState(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [rejectionError, setRejectionError] = useState('');
@@ -33,6 +38,73 @@ export default function ShopList({ auth, shops }) {
 
     const hasCompleteDocs = (shop) => {
         return !!shop.document_gov_id && !!shop.document_bir && !!shop.document_dti;
+    };
+
+    const reviewableDocuments = (shop) => ([
+        {
+            key: 'gov-id',
+            label: 'Gov ID',
+            fileKey: 'document_gov_id',
+            statusKey: 'gov_id_status',
+        },
+        {
+            key: 'bir',
+            label: 'BIR 2303',
+            fileKey: 'document_bir',
+            statusKey: 'bir_2303_status',
+        },
+        {
+            key: 'dti',
+            label: 'DTI / Permit',
+            fileKey: 'document_dti',
+            statusKey: 'dti_permit_status',
+        },
+    ].map((document) => ({
+        ...document,
+        filePath: shop[document.fileKey],
+        status: shop[document.statusKey] || 'pending',
+    })));
+
+    const openReviewModal = (shop, document) => {
+        setReviewingDocument({ shop, document });
+        setReviewStatus(document.status || 'approved');
+        setReviewReason(shop.rejection_reason || '');
+        setReviewError('');
+    };
+
+    const closeReviewModal = () => {
+        setReviewingDocument(null);
+        setReviewStatus('approved');
+        setReviewReason('');
+        setReviewError('');
+    };
+
+    const submitReview = (e) => {
+        e.preventDefault();
+
+        if (!reviewingDocument) {
+            return;
+        }
+
+        setIsReviewing(true);
+        setReviewError('');
+
+        router.post(route('super.shops.review-document', reviewingDocument.shop.id), {
+            document: reviewingDocument.document.key,
+            status: reviewStatus,
+            reason: reviewStatus === 'rejected' ? reviewReason : '',
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                closeReviewModal();
+            },
+            onError: (errors) => {
+                setReviewError(errors.reason || errors.status || 'Unable to update this document review.');
+            },
+            onFinish: () => {
+                setIsReviewing(false);
+            },
+        });
     };
 
     const counts = useMemo(() => {
@@ -166,7 +238,11 @@ export default function ShopList({ auth, shops }) {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredShops.map((shop) => (
+                                {filteredShops.map((shop) => {
+                                    // Safely extract and lowercase the status to prevent case-sensitivity bugs
+                                    const shopStatus = (shop.status?.name || shop.status || '').toString().toLowerCase();
+                                    
+                                    return (
                                     <tr key={shop.id}>
                                         <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{shop.shop_name}</td>
                                         <td className="px-3 py-3 text-sm text-gray-500 max-w-xs align-top">
@@ -183,15 +259,36 @@ export default function ShopList({ auth, shops }) {
                                         </td>
                                         <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                                             <div className="flex flex-col gap-1">
-                                                {shop.document_gov_id ? (
-                                                    <a className="text-indigo-600 hover:text-indigo-800 hover:underline font-semibold" href={route('super.shops.document', { shop: shop.id, type: 'gov-id' })} target="_blank" rel="noopener noreferrer">Gov ID</a>
-                                                ) : <span className="text-gray-400">Gov ID Missing</span>}
-                                                {shop.document_bir ? (
-                                                    <a className="text-indigo-600 hover:text-indigo-800 hover:underline font-semibold" href={route('super.shops.document', { shop: shop.id, type: 'bir' })} target="_blank" rel="noopener noreferrer">BIR 2303</a>
-                                                ) : <span className="text-gray-400">BIR Missing</span>}
-                                                {shop.document_dti ? (
-                                                    <a className="text-indigo-600 hover:text-indigo-800 hover:underline font-semibold" href={route('super.shops.document', { shop: shop.id, type: 'dti' })} target="_blank" rel="noopener noreferrer">DTI / Permit</a>
-                                                ) : <span className="text-gray-400">DTI Missing</span>}
+                                                {reviewableDocuments(shop).map((document) => (
+                                                    <div key={document.key} className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div>
+                                                                {document.filePath ? (
+                                                                    <a className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline" href={route('super.shops.document', { shop: shop.id, type: document.key })} target="_blank" rel="noopener noreferrer">
+                                                                        {document.label}
+                                                                    </a>
+                                                                ) : (
+                                                                    <span className="font-semibold text-stone-400">{document.label} Missing</span>
+                                                                )}
+                                                                <div className="mt-1">
+                                                                    <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider ${document.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : document.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                                        {document.status}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            {document.filePath && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openReviewModal(shop, document)}
+                                                                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800"
+                                                                >
+                                                                    Review
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </td>
                                         <td className="px-3 py-3 align-top">
@@ -210,14 +307,14 @@ export default function ShopList({ auth, shops }) {
                                             )}
                                         </td>
                                         <td className="px-3 py-3 whitespace-nowrap">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${shop.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                                                shop.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                                    {shop.status.charAt(0).toUpperCase() + shop.status.slice(1)}
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${shopStatus === 'approved' ? 'bg-green-100 text-green-800' : 
+                                                shopStatus === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {shopStatus.charAt(0).toUpperCase() + shopStatus.slice(1)}
                                             </span>
                                         </td>
                                         <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                {shop.status === 'pending' && (
+                                                {shopStatus === 'pending' && (
                                                     <>
                                                         <button
                                                             onClick={() => handleApprove(shop.id)}
@@ -233,7 +330,7 @@ export default function ShopList({ auth, shops }) {
                                                         </button>
                                                     </>
                                                 )}
-                                                {shop.status === 'approved' && (
+                                                {shopStatus === 'approved' && (
                                                     <button
                                                         onClick={() => handleDemote(shop.id)}
                                                         className="inline-flex items-center justify-center rounded bg-orange-500 px-3 py-2 font-bold text-white hover:bg-orange-700"
@@ -241,7 +338,7 @@ export default function ShopList({ auth, shops }) {
                                                         Demote to Pending
                                                     </button>
                                                 )}
-                                                {shop.status === 'rejected' && (
+                                                {shopStatus === 'rejected' && (
                                                     <button
                                                         onClick={() => handleApprove(shop.id)}
                                                         className="inline-flex items-center justify-center rounded bg-green-600 px-3 py-2 font-bold text-white hover:bg-green-700"
@@ -252,7 +349,8 @@ export default function ShopList({ auth, shops }) {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                                 {filteredShops.length === 0 && (
                                     <tr>
                                         <td colSpan={7} className="px-6 py-8 text-center text-sm font-medium text-stone-500">
@@ -264,13 +362,85 @@ export default function ShopList({ auth, shops }) {
                         </table>
                         </div>
 
+                        <Modal show={!!reviewingDocument} maxWidth="lg" onClose={closeReviewModal}>
+                            <form onSubmit={submitReview} className="p-6">
+                                <div className="flex items-start justify-between gap-4 border-b border-stone-200 pb-4">
+                                    <div>
+                                        <h3 className="text-lg font-black text-stone-900">Review Document</h3>
+                                        <p className="mt-1 text-sm text-stone-600">
+                                            Update the document status and add a reason if it needs correction.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={closeReviewModal}
+                                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-bold text-stone-600 hover:bg-stone-50"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+
+                                <div className="mt-5 grid gap-4">
+                                    <div>
+                                        <label htmlFor="document_status" className="mb-2 block text-sm font-bold text-stone-700">
+                                            Review Status
+                                        </label>
+                                        <select
+                                            id="document_status"
+                                            value={reviewStatus}
+                                            onChange={(e) => setReviewStatus(e.target.value)}
+                                            className="block w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none"
+                                        >
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                            <option value="pending">Pending</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="rejection_reason" className="mb-2 block text-sm font-bold text-stone-700">
+                                            Rejection Reason
+                                        </label>
+                                        <textarea
+                                            id="rejection_reason"
+                                            rows={5}
+                                            value={reviewReason}
+                                            onChange={(e) => setReviewReason(e.target.value)}
+                                            disabled={reviewStatus !== 'rejected'}
+                                            placeholder="BIR document is expired"
+                                            className="block w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm shadow-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none disabled:bg-stone-100"
+                                        />
+                                    </div>
+
+                                    {reviewError && <p className="text-xs font-semibold text-rose-600">{reviewError}</p>}
+                                </div>
+
+                                <div className="mt-6 flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeReviewModal}
+                                        className="rounded-xl border border-stone-300 bg-white px-5 py-2.5 text-sm font-black text-stone-700 hover:bg-stone-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isReviewing}
+                                        className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {isReviewing ? 'Submitting...' : 'Save Review'}
+                                    </button>
+                                </div>
+                            </form>
+                        </Modal>
+
                         <Modal show={!!rejectingShop} maxWidth="lg" onClose={closeRejectModal}>
                             <form onSubmit={submitReject} className="p-6">
                                 <div className="flex items-start justify-between gap-4 border-b border-stone-200 pb-4">
                                     <div>
                                         <h3 className="text-lg font-black text-stone-900">Reject Shop</h3>
                                         <p className="mt-1 text-sm text-stone-600">
-                                            Add a clear reason so the shop owner knows what to fix.
+                                            Provide a reason for rejecting this shop application.
                                         </p>
                                     </div>
                                     <button
@@ -282,19 +452,22 @@ export default function ShopList({ auth, shops }) {
                                     </button>
                                 </div>
 
-                                <div className="mt-5">
-                                    <label htmlFor="rejection_reason" className="mb-2 block text-sm font-bold text-stone-700">
-                                        Rejection Reason
-                                    </label>
-                                    <textarea
-                                        id="rejection_reason"
-                                        rows={5}
-                                        value={rejectionReason}
-                                        onChange={(e) => setRejectionReason(e.target.value)}
-                                        placeholder="BIR document is expired"
-                                        className="block w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm shadow-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
-                                    />
-                                    {rejectionError && <p className="mt-2 text-xs font-semibold text-rose-600">{rejectionError}</p>}
+                                <div className="mt-5 grid gap-4">
+                                    <div>
+                                        <label htmlFor="reject_reason" className="mb-2 block text-sm font-bold text-stone-700">
+                                            Rejection Reason
+                                        </label>
+                                        <textarea
+                                            id="reject_reason"
+                                            rows={5}
+                                            value={rejectionReason}
+                                            onChange={(e) => setRejectionReason(e.target.value)}
+                                            placeholder="Please provide a detailed reason for rejection..."
+                                            className="block w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm shadow-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    {rejectionError && <p className="text-xs font-semibold text-rose-600">{rejectionError}</p>}
                                 </div>
 
                                 <div className="mt-6 flex justify-end gap-3">
@@ -310,7 +483,7 @@ export default function ShopList({ auth, shops }) {
                                         disabled={isRejecting}
                                         className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        {isRejecting ? 'Submitting...' : 'Reject Shop'}
+                                        {isRejecting ? 'Rejecting...' : 'Reject Shop'}
                                     </button>
                                 </div>
                             </form>

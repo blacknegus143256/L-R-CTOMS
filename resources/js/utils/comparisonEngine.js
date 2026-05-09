@@ -94,6 +94,7 @@ function createServiceRows(compareShops, uniqueServiceCategories) {
   const rows = [];
   const fallbackCategory = 'Uncategorized';
 
+
   const getServiceCategoryName = (service) => {
     const catName = service?.service_category?.name;
 
@@ -165,6 +166,8 @@ function createServiceRows(compareShops, uniqueServiceCategories) {
       label: category,
       cells: shopCells
     });
+
+    // (No separate Rush row here — rush availability is displayed inside the service cell)
   });
 
   return rows;

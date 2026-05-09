@@ -46,11 +46,24 @@ const TailorQuoteBuilder = ({
     const resolvedMeasurementLocked = isMeasurementLocked ?? (isLocked || isRequested || hasSubmittedMeasurements || measurementSuccess);
     const resolvedQuoteLocked = isQuoteLocked ?? isLocked;
     const isLaborLocked = isFixedPrice || resolvedQuoteLocked;
+    const initialLaborPrice = Number(currentOrder?.labor_price) 
+    || Number(currentOrder?.order_services?.[0]?.price) 
+    || Number(currentOrder?.orderServices?.[0]?.price) 
+    || Number(currentOrder?.service?.price)
+    || 0;
 
+const initialRushFee = currentOrder?.is_rush 
+    ? (Number(currentOrder?.rush_fee) || 0) 
+    : 0;
     useEffect(() => {
         setMaterials(tailorMaterials || []);
     }, [tailorMaterials]);
-
+    useEffect(() => {
+    if (currentOrder) {
+        setLaborPrice(initialLaborPrice);
+        setRushFee(initialRushFee);
+    }
+}, [currentOrder?.id]);
     const updateMaterial = (index, updateData) => {
         const newMaterials = [...materials];
         newMaterials[index] = { ...newMaterials[index], ...updateData };
@@ -75,20 +88,24 @@ const TailorQuoteBuilder = ({
     };
 
     const calculateSubtotal = () => {
-        return materials.reduce((total, mat) => {
+        const subtotal = materials.reduce((total, mat) => {
             const price = Number(mat.price || 0);
             const quantity = Number(mat.quantity || 1);
             return total + (price * quantity);
         }, 0);
+
+        return Number(subtotal) || 0;
     };
 
     const getInitialItemsTotal = () => {
         if (currentOrder?.items) {
-            return currentOrder.items.reduce((total, item) => {
+            const total = currentOrder.items.reduce((total, item) => {
                 const price = Number(item.price || item.pivot?.price || 0);
                 const qty = Number(item.quantity || item.pivot?.quantity || 1);
                 return total + (price * qty);
             }, 0);
+
+            return Number(total) || 0;
         }
         return Number(itemsTotal || 0);
     };
@@ -97,7 +114,7 @@ const TailorQuoteBuilder = ({
     const currentRushFee = Number(currentOrder?.rush_fee || 0);
     const effectiveLaborPrice = resolvedQuoteLocked && grandTotal > 0
         ? Math.max(0, grandTotal - calculateSubtotal() - getInitialItemsTotal() - currentRushFee)
-        : Number(laborPrice || 0);
+        : laborPrice;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

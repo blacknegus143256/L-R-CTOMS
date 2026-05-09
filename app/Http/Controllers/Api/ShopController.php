@@ -17,7 +17,9 @@ class ShopController extends Controller
     {
         $query = TailoringShop::query()
             ->where('is_active', true)
-            ->where('status', 'approved');
+            ->whereHas('shopStatus', function ($q) {
+                $q->where('name', 'Approved');
+            });
 
         if ($request->filled('search')) {
             $query->where('shop_name', 'like', '%' . $request->input('search') . '%');
@@ -85,7 +87,7 @@ class ShopController extends Controller
      */
     public function show(TailoringShop $shop): JsonResponse
     {
-        if (! $shop->is_active || $shop->status !== 'approved') {
+        if (! $shop->is_active || $shop->status !== 'Approved') {
             return response()->json(['message' => 'Shop not found.'], 404);
         }
 
@@ -121,7 +123,9 @@ class ShopController extends Controller
 
         $shops = TailoringShop::query()
             ->where('is_active', true)
-            ->where('status', 'approved')
+            ->whereHas('shopStatus', function ($q) {
+                $q->where('name', 'Approved');
+            })
             ->whereIn('id', [$id1, $id2])
             ->orderByRaw("FIELD(id, $id1, $id2)")
             ->with(['user.profile'])

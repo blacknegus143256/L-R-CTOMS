@@ -21,7 +21,7 @@ class AttributeType extends Model
     public function tailoringShops(): BelongsToMany
     {
         return $this->belongsToMany(TailoringShop::class, 'shop_attributes', 'attribute_type_id', 'tailoring_shop_id')
-            ->withPivot(['item_name', 'price', 'unit', 'notes', 'is_available'])
+            ->withPivot(['item_name', 'price', 'unit', 'notes', 'is_available', 'stock_quantity'])
             ->withTimestamps();
     }
 }

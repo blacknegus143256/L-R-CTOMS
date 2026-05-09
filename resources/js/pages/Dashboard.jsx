@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import StatCard from '@/Components/Dashboard/StatCard';
 import OrderProgress from '@/Components/Dashboard/OrderProgress';
@@ -14,6 +14,7 @@ const STATUS_COLORS = {
     'Ready for Production': 'bg-cyan-100/60 text-cyan-800',
     'In Progress': 'bg-purple-100/50 text-purple-800',
     'Ready': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    'Ready for Pickup': 'bg-emerald-100 text-emerald-800 border-emerald-200',
     'Completed': 'bg-stone-100 text-stone-800',
     'Rejected': 'bg-red-100/50 text-red-800',
     'Declined': 'bg-red-100/50 text-red-800',
@@ -22,9 +23,25 @@ const STATUS_COLORS = {
 
 export default function Dashboard() {
     const { props } = usePage();
-    const { auth, stats, recentOrders, measurements, recommendedShops, urgentReminders = [] } = props;
+    const {
+        auth,
+        stats,
+        activeOrdersCount,
+        readyForPickupCount,
+        totalSpent,
+        recentOrders,
+        measurements,
+        recommendedShops,
+        featuredShops,
+        urgentReminders = [],
+    } = props;
+    const shopsToShow = featuredShops?.length ? featuredShops : (recommendedShops || []);
+    const activeCount = Number(activeOrdersCount ?? stats?.active ?? 0);
+    const readyCount = Number(readyForPickupCount ?? stats?.ready ?? 0);
+    const spentTotal = Number(totalSpent ?? stats?.totalSpent ?? 0);
     
     const latestOrder = recentOrders?.[0];
+    const latestOrderStatus = latestOrder?.status?.name || latestOrder?.status || null;
 
     return (
         <AuthenticatedLayout
@@ -98,7 +115,7 @@ export default function Dashboard() {
                 >
                     <StatCard 
                         title="Active Orders" 
-                        value={stats?.active || 0}
+                        value={activeCount}
                         variant="pending"
                         icon={(props) => (
                             <FiZap {...props} />
@@ -106,7 +123,7 @@ export default function Dashboard() {
                     />
                     <StatCard 
                         title="Ready for Pickup" 
-                        value={stats?.ready || 0}
+                        value={readyCount}
                         variant="revenue"
                         icon={(props) => (
                             <FiCheck {...props} />
@@ -114,7 +131,7 @@ export default function Dashboard() {
                     />
                     <StatCard 
                         title="Total Spent" 
-                        value={`₱${Number(stats?.totalSpent || 0).toLocaleString('en-US')}`}
+                        value={`₱${spentTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                         variant="growth"
                         icon={(props) => (
                             <TbCurrencyPeso {...props} />
@@ -123,7 +140,7 @@ export default function Dashboard() {
                 </motion.div>
 
                 {/* Current Order Progress */}
-                {latestOrder && !['Completed', 'Cancelled', 'Rejected', 'Declined'].includes(latestOrder.status) && (
+                {latestOrder && !['Completed', 'Cancelled', 'Rejected', 'Declined'].includes(latestOrderStatus) && (
                     <motion.div 
                         variants={{ hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1 } }}
                         className="bg-white/40 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-8"
@@ -138,12 +155,12 @@ export default function Dashboard() {
                                     <p className="text-stone-600 font-medium">{latestOrder.tailoring_shop?.shop_name || 'Your tailor'}</p>
                                 </div>
                             </div>
-                            <span className={`px-4 py-2 rounded-2xl font-bold text-sm ${STATUS_COLORS[latestOrder.status]}`}>
-                                {latestOrder.status}
+                            <span className={`px-4 py-2 rounded-2xl font-bold text-sm ${STATUS_COLORS[latestOrderStatus]}`}>
+                                {latestOrderStatus}
                             </span>
                         </div>
 
-                        <OrderProgress status={latestOrder.status} />
+                        <OrderProgress status={latestOrderStatus} />
                     </motion.div>
                 )}
 
@@ -234,7 +251,7 @@ export default function Dashboard() {
                                 Recent Orders
                             </h3>
                             <Link href="/my-orders" className="text-lg font-bold bg-gradient-to-r from-orchid-purple to-orchid-blue bg-clip-text text-transparent hover:underline">
-                                View All →
+                                View All Orders
                             </Link>
                         </div>
                         
@@ -249,28 +266,44 @@ export default function Dashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100/50">
-                                    {recentOrders.slice(0, 4).map((order) => (
-                                        <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
-                                            <td className="px-6 py-5 font-bold text-stone-900">#{order.id}</td>
-                                            <td className="px-6 py-5 text-stone-700">{order.tailoring_shop?.shop_name || 'N/A'}</td>
-                                            <td className="px-6 py-5">
-                                                <span className={`px-3 py-1.5 rounded-full font-bold text-sm shadow-sm ${STATUS_COLORS[order.status] || 'bg-stone-100 text-stone-800'}`}>
-                                                    {order.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right font-bold text-xl bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent">
-                                                ₱{Number(order.total_price || 0).toLocaleString()}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {recentOrders.map((order) => {
+                                        const statusLabel = order.status?.name || order.status || 'Pending';
+                                        const fitMethodLabel = order.fitMethod?.name || order.fit_method?.name || 'Unknown';
+                                        const shopName = order.tailoring_shop?.shop_name || order.tailoringShop?.shop_name || 'N/A';
+
+                                        return (
+                                            <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
+                                                <td className="px-6 py-5 font-bold text-stone-900">#{order.id}</td>
+                                                <td className="px-6 py-5 text-stone-700">{shopName}</td>
+                                                <td className="px-6 py-5">
+                                                    <span className={`px-3 py-1.5 rounded-full font-bold text-sm shadow-sm ${STATUS_COLORS[statusLabel] || 'bg-stone-100 text-stone-800'}`}>
+                                                        {statusLabel}
+                                                    </span>
+                                                    <span className="sr-only">Fit Method: {fitMethodLabel}</span>
+                                                </td>
+                                                <td className="px-6 py-5 text-right font-bold text-xl bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent">
+                                                    ₱{Number(order.total_price || 0).toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     </motion.div>
                 )}
+                {(!recentOrders || recentOrders.length === 0) && (
+                    <motion.div
+                        variants={{ hidden: { opacity: 0, x: 30 }, visible: { opacity: 1, x: 0 } }}
+                        className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-stone-100/50 p-8"
+                    >
+                        <h3 className="text-2xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent mb-4">Recent Orders</h3>
+                        <p className="text-stone-500">No recent orders found.</p>
+                    </motion.div>
+                )}
 
                 {/* Recommended Shops Grid */}
-                {recommendedShops && recommendedShops.length > 0 && (
+                {shopsToShow.length > 0 && (
                     <motion.div 
                         variants={{ hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1 } }}
                         className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-stone-100/50 p-8"
@@ -281,12 +314,12 @@ export default function Dashboard() {
                                 Featured Tailors
                             </h3>
                             <Link href="/" className="text-lg font-bold bg-gradient-to-r from-orchid-purple to-orchid-blue bg-clip-text text-transparent hover:underline">
-                                See All →
+                                See All
                             </Link>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {recommendedShops.map((shop) => (
+                            {shopsToShow.map((shop) => (
                                 <motion.div 
                                     key={shop.id}
                                     whileHover={{ scale: 1.05, y: -5 }}
@@ -308,6 +341,9 @@ export default function Dashboard() {
                                                 }`}>
                                                     {shop.status === 'approved' ? 'Featured' : 'Rising'}
                                                 </span>
+                                                <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-100/80 text-amber-800 shadow-amber-200/50">
+                                                    ⭐ {Number(shop.orders_count ?? shop.completed_orders_count ?? 0)} Orders Completed
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -327,4 +363,6 @@ export default function Dashboard() {
         </AuthenticatedLayout>
     );
 }
+
+
 

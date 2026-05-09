@@ -12,7 +12,8 @@ class LogController extends Controller
     public function index()
     {
         $logs = OrderLog::with([
-            'order:id,status,payment_status,total_price,tailoring_shop_id,user_id,created_at',
+            'order:id,order_status_id,total_amount,tailoring_shop_id,user_id,created_at',
+            'order.payment',
             'user:id,name,role',
         ])
             ->latest('created_at')
@@ -31,6 +32,7 @@ class LogController extends Controller
             'customer:id,name,email',
             'service:id,service_name,price',
             'tailoringShop:id,shop_name',
+            'payment',
             'logs.user:id,name,role',
         ]);
 

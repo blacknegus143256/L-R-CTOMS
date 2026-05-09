@@ -112,6 +112,22 @@ export default function AddNewAttributeModal({
                             step="0.01"
                         />
                     </div>
+
+                    {/* STOCK QTY */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                            Stock Qty
+                        </label>
+                        <input
+                            type="number"
+                            className="w-full border-stone-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2.5 px-3 text-sm"
+                            value={data.stock_quantity === 0 ? '' : data.stock_quantity}
+                            onChange={e => setData('stock_quantity', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                            placeholder="0"
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
                 </div>
 
                 {/* ITEM NAME */}

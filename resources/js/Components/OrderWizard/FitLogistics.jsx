@@ -1,48 +1,77 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { format } from 'date-fns';
 import { debounce } from 'lodash';
 import axios from 'axios';
+import { router } from '@inertiajs/react';
+import MapLibrePicker from '../MapLibrePicker.jsx';
+import BarangaySelect from '@/Components/BarangaySelect';
+import { AlertCircle, Calendar, CheckCircle2, Home, MapPin, Ruler, Store, XCircle } from 'lucide-react';
 
-export default function FitLogistics({ 
+export default function FitLogistics({
   service,
   shop,
+  materialSource,
   measurementPreference,
   setMeasurementPreference,
   materialDropoffDate,
   materialDropoffTime,
+  setMaterialDropoffDate,
+  setMaterialDropoffTime,
   measurementDate,
   setMeasurementDate,
   measurementTime,
   setMeasurementTime,
+  auth,
   onNext,
-  onBack
+  onBack,
 }) {
   if (!service) return null;
 
   const categorySlug = service.service_category?.slug || '';
   const isRepair = categorySlug.includes('repairs') || categorySlug.includes('alterations');
-  const hasDropoffDate = !!materialDropoffDate;
-  
-  // Local state to track checkbox
-  const [useDropoffForFitting, setUseDropoffForFitting] = useState(hasDropoffDate);
-  const [needsMeasurements, setNeedsMeasurements] = useState(null); // true, false, or null
+  const hasDropoffDate = Boolean(materialDropoffDate);
+  const requiresAppointment = Boolean(service?.appointment_required);
 
-  // Availability API state
+  const [useDropoffForFitting, setUseDropoffForFitting] = useState(hasDropoffDate);
   const [availableDates, setAvailableDates] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [localPhone, setLocalPhone] = useState(auth?.user?.profile?.phone || '');
+  const [phoneSuccessMsg, setPhoneSuccessMsg] = useState(false);
+  const [locationSuccessMsg, setLocationSuccessMsg] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const [tempProfile, setTempProfile] = useState({
+    latitude: auth?.user?.profile?.latitude || '',
+    longitude: auth?.user?.profile?.longitude || '',
+    address: auth?.user?.profile?.address || '',
+    barangay: auth?.user?.profile?.barangay || '',
+    street: auth?.user?.profile?.street || '',
+    location_details: auth?.user?.profile?.location_details || '',
+    purok: auth?.user?.profile?.purok || '',
+  });
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
 
-  // Fetch availability from API
+  const isPhoneMissing = !auth?.user?.profile?.phone;
+  const isMapMissing = !auth?.user?.profile?.latitude;
+  const isProfileComplete = Boolean(
+    auth?.user?.profile?.phone
+    && auth?.user?.profile?.street
+    && auth?.user?.profile?.barangay
+    && auth?.user?.profile?.latitude
+  );
+
   const fetchAvailability = async (month, year) => {
     if (!shop?.id) return;
+
     try {
       setIsLoading(true);
       const response = await axios.get(`/api/shops/${shop.id}/availability`, {
-        params: { month, year }
+        params: { month, year },
       });
       setAvailableDates(response.data || {});
     } catch (error) {
@@ -53,21 +82,17 @@ export default function FitLogistics({
     }
   };
 
-  // Stable debounced fetch function
   const debouncedFetch = useMemo(
-    () => debounce((m, y) => fetchAvailability(m, y), 300),
-    []
+    () => debounce((month, year) => fetchAvailability(month, year), 300),
+    [shop?.id]
   );
 
-  // Fetch availability on mount for current month
   useEffect(() => {
     const now = new Date();
     fetchAvailability(now.getMonth() + 1, now.getFullYear());
   }, [shop?.id]);
 
-  useEffect(() => {
-    return () => debouncedFetch.cancel();
-  }, [debouncedFetch]);
+  useEffect(() => () => debouncedFetch.cancel(), [debouncedFetch]);
 
   useEffect(() => {
     const selectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
@@ -85,243 +110,481 @@ export default function FitLogistics({
     } else {
       setSelectedTime(null);
     }
-  }, [measurementDate, measurementTime, selectedDate]);
+  }, [measurementDate, measurementTime, selectedDate, setMeasurementDate]);
+
+  useEffect(() => {
+    if (requiresAppointment && measurementPreference === 'self_measure') {
+      setMeasurementPreference('in_shop');
+    }
+
+    if (!measurementPreference) {
+      setMeasurementPreference(requiresAppointment ? 'in_shop' : 'self_measure');
+    }
+  }, [measurementPreference, requiresAppointment, setMeasurementPreference]);
+
+  // 1. Reset checkbox only if switching away from in-shop/home-visit
+  useEffect(() => {
+    if (!['in_shop', 'home_visit'].includes(measurementPreference)) {
+      setUseDropoffForFitting(false);
+    }
+  }, [measurementPreference]);
+
+  // 2. Only sync the dates if the user actually has the checkbox checked
+  useEffect(() => {
+    if (useDropoffForFitting && hasDropoffDate) {
+      if (measurementDate !== materialDropoffDate) {
+        setMeasurementDate(materialDropoffDate);
+      }
+      if (measurementTime !== materialDropoffTime) {
+        setMeasurementTime(materialDropoffTime || '');
+      }
+    }
+  }, [useDropoffForFitting, hasDropoffDate, materialDropoffDate, materialDropoffTime, measurementDate, measurementTime, setMeasurementDate, setMeasurementTime]);
+
+
+  useEffect(() => {
+    setLocalPhone(auth?.user?.profile?.phone || '');
+    setTempProfile({
+      latitude: auth?.user?.profile?.latitude || '',
+      longitude: auth?.user?.profile?.longitude || '',
+      address: auth?.user?.profile?.address || '',
+      barangay: auth?.user?.profile?.barangay || '',
+      street: auth?.user?.profile?.street || '',
+      location_details: auth?.user?.profile?.location_details || '',
+      purok: auth?.user?.profile?.purok || '',
+    });
+  }, [auth?.user?.profile]);
+
+  const handleSetData = (field, value) => {
+    setTempProfile((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveLocation = async () => {
+    if (!tempProfile.latitude || !tempProfile.longitude) return;
+    setIsSavingLocation(true);
+
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      // Save in the background without triggering a page navigation
+      await axios.patch('/api/checkout/save-profile', {
+        latitude: tempProfile.latitude,
+        longitude: tempProfile.longitude,
+        address: tempProfile.address || '',
+        barangay: tempProfile.barangay || '',
+        street: tempProfile.street || '',
+        location_details: tempProfile.location_details || '',
+        purok: tempProfile.purok || '',
+      }, {
+        headers: {
+          'X-CSRF-TOKEN': csrfToken || '',
+          'X-Requested-With': 'XMLHttpRequest',
+          Accept: 'application/json',
+        },
+        withCredentials: true,
+      });
+
+      // Quietly refresh the auth props and close the modal
+      router.reload({ only: ['auth'] });
+      setLocationSuccessMsg(true);
+      setTimeout(() => setLocationSuccessMsg(false), 4000);
+      setShowMapModal(false);
+    } catch (error) {
+      console.error('Failed to save location:', error);
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
+  const handleSavePhone = async () => {
+    const digitsOnly = localPhone.replace(/\D/g, '');
+    if (digitsOnly.length !== 11) return;
+    setIsSavingPhone(true);
+
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      // Save in the background without triggering a page navigation
+      await axios.patch('/api/checkout/save-profile', { phone: digitsOnly }, {
+        headers: {
+          'X-CSRF-TOKEN': csrfToken || '',
+          'X-Requested-With': 'XMLHttpRequest',
+          Accept: 'application/json',
+        },
+        withCredentials: true,
+      });
+      // Quietly refresh the auth props on the current page so the UI updates
+      router.reload({ only: ['auth'] });
+      setPhoneSuccessMsg(true);
+      setTimeout(() => setPhoneSuccessMsg(false), 3000);
+    } catch (error) {
+      console.error('Failed to save phone:', error);
+    } finally {
+      setIsSavingPhone(false);
+    }
+  };
 
   const getDaySlots = (dateKey) => {
     const dayData = availableDates[dateKey];
     if (!dayData) return [];
-    
-    // Guard against empty or malformed objects
+
     if (typeof dayData === 'object' && !Array.isArray(dayData) && !dayData.slots) {
       return [];
     }
-    // If the API returns a direct array of objects (New API format)
+
     if (Array.isArray(dayData) && dayData.length > 0 && typeof dayData[0] === 'object') {
       return dayData;
     }
-    // If the API returns an array of strings (Legacy API format fallback)
+
     if (Array.isArray(dayData)) {
-      return dayData.map((time) => ({ time, booked_count: 0, slots_left: null, user_booking_count: 0, is_available: true }));
+      return dayData.map((time) => ({
+        time,
+        booked_count: 0,
+        slots_left: null,
+        user_booking_count: 0,
+        is_available: true,
+      }));
     }
-    // If the API returns { slots: [...] }
+
     if (dayData.slots && Array.isArray(dayData.slots)) {
       return dayData.slots;
     }
+
     return [];
   };
 
-  // Sync dates when checkbox is toggled
-  useEffect(() => {
-    if (measurementPreference === 'workshop_fitting') {
-      if (useDropoffForFitting && hasDropoffDate) {
-        if (measurementDate !== materialDropoffDate) {
-          setMeasurementDate(materialDropoffDate);
-        }
-        if ((measurementTime || '') !== (materialDropoffTime || '')) {
-          setMeasurementTime(materialDropoffTime || '');
-        }
-      }
-    }
-  }, [useDropoffForFitting, measurementPreference, hasDropoffDate, materialDropoffDate, materialDropoffTime, measurementDate, setMeasurementDate, setMeasurementTime]);
-
-  // NEW EFFECT: If it's a repair, aggressively default the gatekeeper to 'No'
-  useEffect(() => {
-    if (isRepair && needsMeasurements === null) {
-        
-        setNeedsMeasurements(false);
-        setMeasurementPreference('none'); // 👈 Changed from 'profile'
-    }
-  }, [isRepair, needsMeasurements]);
-
   const handleSelfMeasured = () => {
-    setMeasurementPreference('self_measured');
-    setMeasurementDate(''); // Erase date
+    if (requiresAppointment) return;
+    setMeasurementPreference('self_measure');
+    setMeasurementDate('');
     setMeasurementTime('');
+    setSelectedDate(null);
+    setSelectedTime(null);
+    setUseDropoffForFitting(false);
   };
 
-  const handleWorkshopFitting = () => {
-    setMeasurementPreference('workshop_fitting');
-    if (hasDropoffDate) setUseDropoffForFitting(true);
+  const handleInShopFitting = () => {
+    setMeasurementPreference('in_shop');
+    if (hasDropoffDate) {
+      setUseDropoffForFitting(true);
+      setMeasurementDate(materialDropoffDate);
+      setMeasurementTime(materialDropoffTime || '');
+      setSelectedDate(materialDropoffDate ? new Date(`${materialDropoffDate}T00:00:00`) : null);
+      setSelectedTime(materialDropoffTime || null);
+      return;
+    }
+
+    setUseDropoffForFitting(false);
+    setMeasurementDate('');
+    setMeasurementTime('');
+    setSelectedDate(null);
+    setSelectedTime(null);
   };
-  const handleNoneMeasured = () => {
+
+  const handleHomeVisit = () => {
+    setMeasurementPreference('home_visit');
+    if (hasDropoffDate) {
+      setUseDropoffForFitting(true);
+      setMeasurementDate(materialDropoffDate);
+      setMeasurementTime(materialDropoffTime || '');
+      setSelectedDate(materialDropoffDate ? new Date(`${materialDropoffDate}T00:00:00`) : null);
+      setSelectedTime(materialDropoffTime || null);
+      return;
+    }
+
+    setUseDropoffForFitting(false);
+    setMeasurementDate('');
+    setMeasurementTime('');
+    setSelectedDate(null);
+    setSelectedTime(null);
+  };
+
+  const handleNoMeasurement = () => {
     setMeasurementPreference('none');
-    setMeasurementDate(''); // Erase date
+    setUseDropoffForFitting(false);
+    setMeasurementDate('');
     setMeasurementTime('');
+    setSelectedDate(null);
+    setSelectedTime(null);
   };
 
-  // Determine if they can proceed
-  const effectiveCanNext = () => {
-    if (needsMeasurements !== null) {
-      if (needsMeasurements === false && measurementPreference === 'none') return true;
+  const isScheduledPreference = ['in_shop', 'home_visit', 'workshop_fitting'].includes(measurementPreference);
 
-      // If they said they need measurements, check if they've selected an option
-      if (measurementPreference === 'self_measured' || measurementPreference === 'profile') return true;
-      if (measurementPreference === 'workshop_fitting') {
-        // For workshop fitting, they must select a time slot
-        if (hasDropoffDate && useDropoffForFitting && materialDropoffTime) return true;
-        if (selectedDate && selectedTime) return true;
-      }
-      return false;
+  const effectiveCanNext = () => {
+    if (measurementPreference === 'none') return true;
+    if (measurementPreference === 'self_measured') return true;
+    if (measurementPreference === 'self_measure' && !requiresAppointment) return true;
+    if (measurementPreference === 'in_shop') {
+      if (hasDropoffDate && useDropoffForFitting && materialDropoffDate && materialDropoffTime) return true;
+      return Boolean(selectedDate && selectedTime);
+    }
+    if (measurementPreference === 'home_visit') {
+      return Boolean(selectedDate && selectedTime);
+    }
+    if (isScheduledPreference) {
+      return Boolean(selectedDate && selectedTime);
     }
     return false;
   };
 
   return (
     <div className="p-6">
-      <h3 className="text-lg font-semibold mb-6">Fit & Measurements</h3>
+      <h3 className="mb-6 text-lg font-semibold">Fit & Measurements</h3>
 
-        {/* Gatekeeper Question */}
-        <div className="mb-8">
-          <label className="block text-sm font-semibold text-stone-800 mb-4">
-            Does this project require specific body measurements?
-          </label>
-          <div className="flex flex-col md:flex-row gap-4">
-            <button 
-              type="button"
-              onClick={() => {
-                setNeedsMeasurements(true);
-                setMeasurementPreference('self_measured'); // Reset to default
-              }}
-              className={`flex-1 py-4 px-6 text-left rounded-2xl border-2 transition-all ${needsMeasurements === true ? 'border-indigo-600 bg-indigo-50 shadow-md' : 'border-stone-200 hover:border-indigo-300'}`}
-            >
-              <span className="block font-bold text-indigo-900 text-lg mb-1">Yes</span>
-              <span className="block text-sm text-indigo-700">Custom tailored fit from scratch</span>
-            </button>
-            <button 
-              type="button"
-              onClick={() => {
-                setNeedsMeasurements(false);
-                // Secretly pass 'profile' to bypass Laravel strict validation without triggering an appointment
-                setMeasurementPreference('none'); // 👈 Changed from 'profile'
-              }}
-              className={`flex-1 py-4 px-6 text-left rounded-2xl border-2 transition-all ${needsMeasurements === false ? 'border-emerald-600 bg-emerald-50 shadow-md' : 'border-stone-200 hover:border-emerald-300'}`}
-            >
-              <span className="block font-bold text-emerald-900 text-lg mb-1">No</span>
-              <span className="block text-sm text-emerald-700">Standard alteration / reference garment provided</span>
-            </button>
+      <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl mb-8 shadow-lg">
+        <h4 className="text-lg font-bold text-amber-900 mb-4">Pre-Order Checklist</h4>
+        <div className="space-y-3">
+          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${(isPhoneMissing && !phoneSuccessMsg) ? 'border-amber-400' : 'border-emerald-400'}`}>
+            {(isPhoneMissing && !phoneSuccessMsg) ? (
+              <XCircle className="h-5 w-5 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            )}
+            <span className="text-sm font-medium text-stone-800">
+              {phoneSuccessMsg ? 'Phone Successfully Saved!' : isPhoneMissing ? 'Missing Contact Number' : 'Phone Verified'}
+            </span>
+            {(isPhoneMissing && !phoneSuccessMsg) && (
+              <div className="ml-auto flex items-center gap-2">
+                <input
+                  type="tel"
+                  value={localPhone}
+                  onChange={(e) => {
+                    // Only allow numbers and limit to 11 characters
+                    const numericValue = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    setLocalPhone(numericValue);
+                  }}
+                  placeholder="09xxxxxxxxx"
+                  maxLength={11}
+                  className="w-32 rounded-lg border border-amber-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSavePhone}
+                  disabled={isSavingPhone || localPhone.length !== 11}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {isSavingPhone ? '...' : 'Save'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border-l-4 ${(isMapMissing && !locationSuccessMsg) ? 'border-amber-400' : 'border-emerald-400'}`}>
+            {(isMapMissing && !locationSuccessMsg) ? (
+              <MapPin className="h-5 w-5 text-amber-500" />
+            ) : (
+              <MapPin className="h-5 w-5 text-emerald-600" />
+            )}
+            <span className="text-sm font-medium text-stone-800">
+              {locationSuccessMsg ? 'Location Successfully Saved!' : isMapMissing ? 'Home Location not pinned' : 'Location Verified'}
+            </span>
+            {(isMapMissing && !locationSuccessMsg) && (
+              <button
+                type="button"
+                onClick={() => setShowMapModal(true)}
+                className="ml-auto rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700"
+              >
+                Pin Map
+              </button>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* ONLY show the original choices if they clicked YES */}
-        {needsMeasurements === true && (
-          <div className="animate-fade-in-up border-t border-stone-200 pt-8 mt-4">
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {/* Choice A: Self Measured */}
-                <label className="group cursor-pointer">
-                  <input
-                    type="radio"
-                    name="measurement_preference"
-                    value="self_measured"
-                    checked={measurementPreference === 'self_measured'}
-                    onChange={handleSelfMeasured}
-                    className="sr-only"
-                  />
-                  <motion.div whileHover={{ scale: 1.02 }} className={`h-56 border-2 rounded-2xl p-8 text-center transition-all ${measurementPreference === 'self_measured' ? 'border-emerald-400 bg-emerald-50 shadow-lg ring-2 ring-emerald-200' : 'border-stone-300 hover:border-emerald-400'}`}>
-                    <div className="w-16 h-16 mx-auto mb-4 bg-emerald-400 rounded-2xl flex items-center justify-center shadow-lg">
-                      <span className="text-3xl text-white">📏</span>
-                    </div>
-                    <h4 className="text-xl font-bold text-stone-900 mb-2">Self Measured</h4>
-                    <p className="text-stone-600 text-sm">Workshop will send the exact list needed for your design.</p>
-                  </motion.div>
-                </label>
+      {isProfileComplete ? (
+        <>
+          <div className="mb-8">
+            <label className="mb-4 block text-sm font-semibold text-stone-800">
+              Choose how the fitting will happen
+            </label>
 
-                {/* Choice B: Workshop Fitting */}
-                <label className="group cursor-pointer">
-                  <input
-                    type="radio"
-                    name="measurement_preference"
-                    value="workshop_fitting"
-                    checked={measurementPreference === 'workshop_fitting'}
-                    onChange={handleWorkshopFitting}
-                    className="sr-only"
-                  />
-                  <motion.div whileHover={{ scale: 1.02 }} className={`h-56 border-2 rounded-2xl p-6 text-center transition-all flex flex-col justify-center ${measurementPreference === 'workshop_fitting' ? 'border-blue-400 bg-blue-50 shadow-lg ring-2 ring-blue-200' : 'border-stone-300 hover:border-blue-400'}`}>
-                    <div className="w-16 h-16 mx-auto mb-2 bg-blue-500 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0">
-                      <span className="text-3xl text-white">📍</span>
-                    </div>
-                    <h4 className="text-xl font-bold text-stone-900 mb-1">Workshop Fitting</h4>
-                   
-                    {/* Checkbox only appears if they have a dropoff date */}
-                    {hasDropoffDate && measurementPreference === 'workshop_fitting' && (
-                      <div className="mt-2 p-2 bg-white/70 rounded-xl text-left border border-blue-200">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={useDropoffForFitting}
-                            onChange={(e) => setUseDropoffForFitting(e.target.checked)}
-                            className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-xs font-medium text-blue-900">Same as drop-off ({new Date(materialDropoffDate).toLocaleDateString()})</span>
-                        </label>
-                      </div>
-                    )}
-                  </motion.div>
-                </label>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <motion.button
+                type="button"
+                whileHover={requiresAppointment ? undefined : { scale: 1.01 }}
+                onClick={handleSelfMeasured}
+                disabled={requiresAppointment}
+                className={`relative rounded-2xl border-2 p-6 text-left transition-all ${
+                  requiresAppointment
+                    ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
+                    : measurementPreference === 'self_measure'
+                      ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                      : 'border-stone-200 bg-white hover:border-emerald-300'
+                }`}
+              >
+                {requiresAppointment && (
+                  <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700">
+                    <AlertCircle className="h-3 w-3" />
+                    Disabled
+                  </span>
+                )}
+                <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                  <Ruler className="h-5 w-5" />
+                </div>
+                <h4 className="mb-1 text-lg font-black text-slate-800">Self-Measurement</h4>
+                <p className="text-sm font-medium text-slate-600">Submit your own measurements online.</p>
+                {requiresAppointment && (
+                  <p className="mt-3 text-xs font-bold text-rose-600">
+                    This service requires an appointment, so self-measurement is unavailable.
+                  </p>
+                )}
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.01 }}
+                onClick={handleInShopFitting}
+                className={`rounded-2xl border-2 p-6 text-left transition-all ${
+                  measurementPreference === 'in_shop'
+                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                    : 'border-stone-200 bg-white hover:border-emerald-300'
+                }`}
+              >
+                <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                  <Store className="h-5 w-5" />
+                </div>
+                <h4 className="mb-1 text-lg font-black text-slate-800">Visit Shop</h4>
+                <p className="text-sm font-medium text-slate-600">Go to the tailor's shop for a professional fitting and material drop-off.</p>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.01 }}
+                onClick={handleHomeVisit}
+                className={`rounded-2xl border-2 p-6 text-left transition-all ${
+                  measurementPreference === 'home_visit'
+                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                    : 'border-stone-200 bg-white hover:border-emerald-300'
+                }`}
+              >
+                <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                  <Home className="h-5 w-5" />
+                </div>
+                <h4 className="mb-1 text-lg font-black text-slate-800">Home Visit</h4>
+                <p className="text-sm font-medium text-slate-600">A tailor visits your location for measurements and pickup.</p>
+              </motion.button>
+
+              {/* Option 4: No Measurement Needed */}
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.01 }}
+                onClick={handleNoMeasurement}
+                className={`relative rounded-2xl border-2 p-6 text-left transition-all ${
+                  measurementPreference === 'none'
+                    ? 'border-stone-500 bg-stone-100 shadow-md'
+                    : 'border-stone-200 bg-white hover:border-stone-300'
+                }`}
+              >
+                <div className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-200 text-stone-700">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h4 className="mb-1 text-lg font-black text-slate-800">Skip Measurements</h4>
+                <p className="text-sm font-medium text-slate-600">My order does not require body measurements.</p>
+              </motion.button>
+            </div>
+
+            {requiresAppointment && measurementPreference === 'self_measure' && (
+              <div className="mt-4 ml-2 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                <p>This service requires a fitting appointment, so self-measurement is disabled.</p>
+              </div>
+            )}
+          </div>
+
+          {materialSource === 'customer' && ['in_shop', 'home_visit'].includes(measurementPreference) && hasDropoffDate && (
+            <div className="mb-8 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={useDropoffForFitting}
+                  onChange={(e) => setUseDropoffForFitting(e.target.checked)}
+                  className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-semibold text-blue-900">
+                  Use the same schedule as material drop-off ({new Date(materialDropoffDate).toLocaleDateString()})
+                </span>
+              </label>
+            </div>
+          )}
+
+          {(
+            measurementPreference === 'in_shop'
+            || measurementPreference === 'home_visit'
+            || measurementPreference === 'workshop_fitting'
+          ) && (!hasDropoffDate || !useDropoffForFitting) && shop?.id && (
+            <div className="mb-8 rounded-3xl border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 animate-fade-in-up">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div>
+                  <label className="block text-sm font-black text-blue-900">
+                    {measurementPreference === 'home_visit'
+                      ? 'Select Date & Time for Home Visit (Fitting & Material Pickup)'
+                      : 'Pick fitting date & time:'}
+                  </label>
+                  <p className="mt-1 text-xs font-medium text-blue-700">
+                    {measurementPreference === 'home_visit'
+                      ? 'The tailor will travel to your location for measurements and material pickup.'
+                      : 'Choose a shop appointment that works for you.'}
+                  </p>
+                </div>
               </div>
 
-            {/* DatePicker & Time Slots */}
-            {measurementPreference === 'workshop_fitting' && (!hasDropoffDate || !useDropoffForFitting) && shop?.id && (
-              <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200 rounded-b-3xl mb-8 animate-fade-in-up">
-                <label className="block text-sm font-bold text-blue-900 mb-4">Pick fitting date & time:</label>
-                
-                {/* Calendar with date picker */}
-                <div className="mb-6 relative">
-                  {isLoading && (
-                    <div className="absolute inset-0 bg-white/50 rounded-lg flex items-center justify-center z-10">
-                      <div className="animate-spin h-6 w-6 border-2 border-blue-400 border-t-blue-600 rounded-full"></div>
-                    </div>
-                  )}
-                  <DatePicker
-                    selected={selectedDate}
-                    onChange={(date) => {
-                      setSelectedDate(date);
-                      setSelectedTime(null);
-                      setMeasurementTime('');
+              <div className="relative mb-6">
+                {isLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/50">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600" />
+                  </div>
+                )}
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(date) => {
+                    setSelectedDate(date);
+                    setSelectedTime(null);
+                    setMeasurementTime('');
 
-                      if (date) {
-                        setMeasurementDate(format(date, 'yyyy-MM-dd'));
-                      } else {
-                        setMeasurementDate('');
-                      }
-                    }}
-                    filterDate={(date) => {
-                      const key = format(date, 'yyyy-MM-dd');
-                      return getDaySlots(key).some((slot) => slot.is_available);
-                    }}
-                    onMonthChange={(date) => {
-                      const month = date.getMonth() + 1;
-                      const year = date.getFullYear();
-                      debouncedFetch(month, year);
-                    }}
-                    minDate={new Date()}
-                    inline
-                    className="w-full"
-                  />
-                </div>
+                    if (date) {
+                      setMeasurementDate(format(date, 'yyyy-MM-dd'));
+                    } else {
+                      setMeasurementDate('');
+                    }
+                  }}
+                  filterDate={(date) => {
+                    const key = format(date, 'yyyy-MM-dd');
+                    return getDaySlots(key).some((slot) => slot.is_available);
+                  }}
+                  onMonthChange={(date) => {
+                    debouncedFetch(date.getMonth() + 1, date.getFullYear());
+                  }}
+                  minDate={new Date()}
+                  inline
+                  className="w-full"
+                />
+              </div>
 
-                {/* Time Slots */}
-                {selectedDate && (
-                  <div className="animate-fade-in-up">
-                    <label className="block text-sm font-bold text-blue-900 mb-3">Available times:</label>
-                    {(() => {
-                      const dateKey = format(selectedDate, 'yyyy-MM-dd');
-                      const slots = getDaySlots(dateKey);
-                      
-                      if (slots.length === 0) {
-                        return <p className="text-blue-700 text-sm italic">No available slots for this date.</p>;
-                      }
+              {selectedDate && (
+                <div className="animate-fade-in-up">
+                  <label className="mb-3 block text-sm font-bold text-blue-900">Available times:</label>
+                  {(() => {
+                    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+                    const slots = getDaySlots(dateKey);
 
-                      return (
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                          {slots.map((slot) => {
-                            const time = slot.time;
-                            const isAvailable = slot.is_available;
-                            const userBookingCount = Number(slot.user_booking_count ?? 0);
-                            const maxUserBookings = Number(slot.max_user_bookings ?? 3);
-                            const slotsLeft = Number(slot.slots_left ?? 0);
-                            const isDisabled = !isAvailable || userBookingCount >= maxUserBookings;
+                    if (slots.length === 0) {
+                      return <p className="text-sm italic text-blue-700">No available slots for this date.</p>;
+                    }
 
-                            return (
+                    return (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {slots.map((slot) => {
+                          const time = slot.time;
+                          const isAvailable = slot.is_available;
+                          const userBookingCount = Number(slot.user_booking_count ?? 0);
+                          const maxUserBookings = Number(slot.max_user_bookings ?? 3);
+                          const slotsLeft = Number(slot.slots_left ?? 0);
+                          const isDisabled = !isAvailable || userBookingCount >= maxUserBookings;
+
+                          return (
                             <button
                               key={time}
                               type="button"
@@ -332,69 +595,144 @@ export default function FitLogistics({
                                 setMeasurementDate(dateKey);
                                 setMeasurementTime(time);
                               }}
-                              className={`py-2 px-3 rounded-lg border font-medium text-sm transition-all text-left ${
+                              className={`rounded-lg border px-3 py-2 text-left text-sm font-medium transition-all ${
                                 isDisabled
-                                  ? 'border-stone-200 bg-stone-100 cursor-not-allowed opacity-60 text-stone-400'
+                                  ? 'cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-60'
                                   : selectedTime === time
-                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-md'
-                                  : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-100'
+                                    ? 'border-emerald-500 bg-emerald-500 text-white shadow-md'
+                                    : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-100'
                               }`}
                             >
                               <span className="block">{time}</span>
                               {!isAvailable ? (
-                                <span className="inline-flex mt-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-500">
+                                <span className="mt-1 inline-flex rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-500">
                                   Fully Booked
                                 </span>
                               ) : userBookingCount >= maxUserBookings ? (
-                                <span className="inline-flex mt-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-500">
+                                <span className="mt-1 inline-flex rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-500">
                                   Your Limit Reached
                                 </span>
                               ) : userBookingCount > 0 ? (
-                                <span className="inline-flex mt-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                                <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
                                   You booked {userBookingCount} {userBookingCount > 1 ? 'times' : 'time'} • {slotsLeft} slots left
                                 </span>
                               ) : (
-                                <span className={`block text-[10px] mt-1 ${selectedTime === time ? 'text-emerald-100' : 'text-stone-500'}`}>
+                                <span className={`mt-1 block text-[10px] ${selectedTime === time ? 'text-emerald-100' : 'text-stone-500'}`}>
                                   {slotsLeft} slots left
                                 </span>
                               )}
                             </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        
-        {/* If NO, show a simple confirmation message */}
-        {needsMeasurements === false && (
-          <div className="animate-fade-in-up mt-8 p-6 bg-emerald-50 rounded-2xl border border-emerald-200 text-emerald-800 flex items-center gap-4">
-             <div className="w-12 h-12 bg-emerald-400 rounded-xl flex items-center justify-center text-white text-2xl flex-shrink-0">
-                 ✂️
-             </div>
-             <div>
-                <p className="font-bold text-lg">No Measurements Required</p>
-                <p className="text-sm mt-1 opacity-90">If you are providing a reference garment, please bring it during your material drop-off.</p>
-             </div>
-          </div>
-        )}
-
-
-      <div className="flex gap-3 pt-4 border-t border-stone-200">
-        <button type="button" onClick={onBack} className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50">← Back</button>
-        <div className="flex-1">
-          <button type="button" onClick={onNext} disabled={!effectiveCanNext()} className="w-full rounded-lg bg-emerald-600 px-6 py-3 font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Review Order →</button>
-          {needsMeasurements === false && measurementPreference === 'none' && (
-            <p className="mt-2 text-xs text-emerald-700 font-semibold">No measurements selected. You can proceed with reference garment flow.</p>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           )}
+
+          <div className="flex gap-3 border-t border-stone-200 pt-4">
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex-1 rounded-lg border border-stone-300 py-3 font-medium text-stone-700 hover:bg-stone-50"
+            >
+              Back
+            </button>
+            <div className="flex-1">
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={!effectiveCanNext()}
+                className="w-full rounded-lg bg-emerald-600 px-6 py-3 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Review Order
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="p-6 text-center text-stone-500 font-medium border-2 border-dashed border-stone-200 rounded-2xl">
+          Please complete your profile checklist above to unlock checkout options.
         </div>
-      </div>
+      )}
+
+      {showMapModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowMapModal(false); }}
+        >
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-stone-200 p-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-stone-900">Pin Your Home Location</h3>
+                <button
+                  onClick={() => setShowMapModal(false)}
+                  className="rounded-lg p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-900"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 mb-1">Barangay *</label>
+                  <BarangaySelect
+                    id="barangay"
+                    value={tempProfile.barangay}
+                    onChange={(val) => handleSetData('barangay', val)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 mb-1">Street / House No. *</label>
+                  <input
+                    type="text"
+                    value={tempProfile.street}
+                    onChange={(e) => handleSetData('street', e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    placeholder="House / unit / street"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-stone-700 mb-1">Landmark / Location Details (Optional)</label>
+                  <textarea
+                    value={tempProfile.location_details || ''}
+                    onChange={(e) => handleSetData('location_details', e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    placeholder="e.g., Near the blue gate, behind the bakery..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">Pin Exact Location on Map *</label>
+                <MapLibrePicker data={tempProfile} setData={handleSetData} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-stone-200 bg-stone-50 p-6">
+              <button
+                type="button"
+                onClick={() => setShowMapModal(false)}
+                className="rounded-xl border border-stone-300 px-6 py-3 font-medium text-stone-700 hover:bg-stone-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLocation}
+                disabled={isSavingLocation || !tempProfile.latitude || !tempProfile.longitude || !tempProfile.street || !tempProfile.barangay}
+                className="rounded-xl bg-emerald-600 px-8 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSavingLocation ? 'Saving Location...' : 'Save Location'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

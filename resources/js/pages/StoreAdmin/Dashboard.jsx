@@ -9,7 +9,8 @@ import { confirmDialog, promptDialog } from '@/utils/dialog';
 import { toast } from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { TbCurrencyDollar, TbCurrencyPeso } from 'react-icons/tb';
-import { FiArrowRight, FiBox, FiClipboard, FiClock, FiTrendingUp, FiUsers, FiLayers, FiX, FiCheck, FiCheckCircle, FiCalendar, FiPackage, FiDollarSign, FiEye, FiMapPin, FiTruck, FiLock } from 'react-icons/fi';
+import { FiArrowRight, FiBox, FiClipboard, FiClock, FiTrendingUp, FiUsers, FiLayers, FiX, FiCheck, FiCheckCircle, FiCalendar, FiPackage, FiDollarSign, FiEye, FiMapPin, FiTruck, FiLock, FiAlertTriangle } from 'react-icons/fi';
+import { ChevronRight } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -64,7 +65,7 @@ const getTimeColor = (deadline) => {
 
 export default function Dashboard() {
     const { props } = usePage();
-    const { shop, stats, topServices, topMaterials, weeklyOrders, recentActivity, dailyAgenda } = props;
+    const { shop, stats, topServices, topMaterials, lowStockItems = [], weeklyOrders, recentActivity, dailyAgenda } = props;
 
     const [description, setDescription] = useState(shop?.description || '');
     const [showCongratsModal, setShowCongratsModal] = useState(false);
@@ -83,8 +84,8 @@ export default function Dashboard() {
 
     const sortWeekOrders = (orders = []) => {
         return [...orders].sort((left, right) => {
-            const leftRush = left?.rush_order ? 1 : 0;
-            const rightRush = right?.rush_order ? 1 : 0;
+            const leftRush = Boolean(left?.is_rush ?? left?.rush_order) ? 1 : 0;
+            const rightRush = Boolean(right?.is_rush ?? right?.rush_order) ? 1 : 0;
 
             if (leftRush !== rightRush) {
                 return rightRush - leftRush;
@@ -233,7 +234,7 @@ export default function Dashboard() {
         const amount = await promptDialog({
             title: 'Record Cash Payment',
             message: 'Enter the cash amount received from the customer:',
-            defaultValue: String(order.amount_paid || order.total_price || 0),
+            defaultValue: String(order.amount_paid || (order.orderServices?.[0]?.price * (order.orderServices?.[0]?.quantity || 1)) || 0),
             placeholder: '0.00',
             confirmText: 'Record Payment',
             cancelText: 'Cancel',
@@ -368,7 +369,7 @@ export default function Dashboard() {
                                 Your fabric inventory is empty.
                             </p>
                             <Link
-                                href={route('store.inventory.index')}
+                                        href={route('store.inventory', { highlight: item.id })}
                                 className="inline-flex items-center rounded-xl bg-sky-600 px-4 py-2 text-xs font-black text-white transition-colors hover:bg-sky-700"
                             >
                                 Add Materials
@@ -684,7 +685,12 @@ export default function Dashboard() {
                         {topServices && topServices.length > 0 ? (
                             <div className={`grid gap-5 transition-all duration-500 ${isServicesExpanded ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
                                 {topServices.slice(0, isServicesExpanded ? 10 : 3).map((item, index) => (
-                                    <div key={item.service_id} className="group/item flex items-center gap-5 p-6 rounded-2xl bg-gradient-to-r from-slate-50/50 to-emerald-50/50 border border-emerald-200/50 hover:from-slate-100 hover:to-emerald-100 transition-all hover:shadow-md">
+                                    <Link
+                                        key={item.service_id}
+                                        href={route('store.services.index', { highlight: item.service_id || item.service?.id })}
+                                        title="Manage this service"
+                                        className="group group/item flex items-center gap-5 p-6 rounded-2xl bg-gradient-to-r from-slate-50/50 to-emerald-50/50 border border-emerald-200/50 hover:from-slate-100 hover:to-emerald-100 transition-colors hover:bg-emerald-50/50 cursor-pointer"
+                                    >
                                         <span className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl flex items-center justify-center font-black text-white text-xl shadow-lg flex-shrink-0 group-hover/item:scale-105 transition-all">
                                             {index + 1}
                                         </span>
@@ -695,19 +701,81 @@ export default function Dashboard() {
                                                     {item.total}
                                                 </span>
                                             </div>
-                                            <div className="h-4 bg-slate-200/60 rounded-full overflow-hidden shadow-inner backdrop-blur-sm">
-                                                <div 
-                                                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full"
-                                                    style={{ width: `${Math.min((item.total / maxServiceCount) * 100, 100)}%`, transition: 'width 1s ease-in-out' }}
-                                                />
+                                            <div className="flex items-center justify-between">
+                                                <div className="h-4 bg-slate-200/60 rounded-full overflow-hidden shadow-inner backdrop-blur-sm flex-1">
+                                                    <div 
+                                                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full"
+                                                        style={{ width: `${Math.min((item.total / maxServiceCount) * 100, 100)}%`, transition: 'width 1s ease-in-out' }}
+                                                    />
+                                                </div>
+                                                <ChevronRight className="w-5 h-5 ml-3 text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                                             </div>
                                         </div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         ) : (
                             <div className="h-40 flex items-center justify-center rounded-2xl bg-gradient-to-r from-slate-100/50 to-emerald-100/50">
                                 <p className="text-slate-500 font-bold">No data yet</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Low Stock Alerts Panel */}
+                    <div 
+                        className="bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border border-rose-200/60 group hover:shadow-rose-500/25 transition-all duration-500 cursor-pointer overflow-hidden"
+                    >
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-gradient-to-br from-rose-500 to-rose-600 rounded-2xl flex items-center justify-center shadow-xl">
+                                    <FiAlertTriangle className="w-8 h-8 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black bg-gradient-to-r from-rose-900 to-rose-700 bg-clip-text text-transparent">Low Stock Alerts</h3>
+                                    <p className="text-lg text-slate-600 font-medium">Items below 15 units</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {lowStockItems && lowStockItems.length > 0 ? (
+                            <div className="grid gap-4">
+                                {lowStockItems.map((item, index) => {
+                                    const stockQty = Number(item.stock_quantity || 0);
+                                    const clampedPct = Math.min(Math.max(stockQty, 0), 100);
+
+                                    return (
+                                        <Link
+                                            key={item.id}
+                                            href={route('store.inventory.index', { highlight: item.id })}
+                                            className="group group/item flex items-center gap-5 p-5 rounded-2xl bg-gradient-to-r from-rose-50/50 to-orange-50/50 border border-rose-200/50 hover:from-rose-100 hover:to-orange-100 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer"
+                                        >
+                                            <span className="w-12 h-12 bg-gradient-to-br from-rose-400 to-rose-500 rounded-xl flex items-center justify-center font-black text-white text-xl shadow-lg flex-shrink-0 group-hover/item:scale-105 transition-all">
+                                                {index + 1}
+                                            </span>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <span className="text-lg font-bold text-slate-900 truncate">{item.item_name || 'Unknown Item'}</span>
+                                                    <div className="flex items-center">
+                                                        <span className="text-2xl font-black text-rose-700 px-4 py-2 bg-rose-100/60 rounded-xl shadow-sm">
+                                                            {stockQty}
+                                                        </span>
+                                                        <FiArrowRight className="w-4 h-4 ml-3 text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                </div>
+                                                <div className="h-3 bg-slate-200/60 rounded-full overflow-hidden shadow-inner backdrop-blur-sm">
+                                                    <div 
+                                                        className="h-full bg-gradient-to-r from-rose-500 to-orange-500 rounded-full"
+                                                        style={{ width: `${clampedPct}%`, transition: 'width 1s ease-in-out' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="h-40 flex items-center justify-center rounded-2xl bg-gradient-to-r from-slate-100/50 to-emerald-100/50">
+                                <p className="text-slate-500 font-bold">All items well stocked!</p>
                             </div>
                         )}
                     </div>
@@ -846,7 +914,7 @@ export default function Dashboard() {
                                                         </div>
                                                         <div>
                                                             <h4 className="font-bold text-slate-900">{order.customer?.name || 'Customer'}</h4>
-                                                            <p className="text-sm text-slate-500">{order.service?.service_name || 'Custom Service'}</p>
+                                                            <p className="text-sm text-slate-500">{order.orderServices?.[0]?.service?.service_name || 'Custom Service'}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-6">
@@ -929,11 +997,11 @@ export default function Dashboard() {
                                                     </div>
                                                     <div>
                                                         <h4 className="font-bold text-slate-900">{order.customer?.name || 'Customer'}</h4>
-                                                        <p className="text-sm text-slate-500">{order.service?.service_name || 'Custom Service'}</p>
+                                                        <p className="text-sm text-slate-500">{order.orderServices?.[0]?.service?.service_name || 'Custom Service'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 md:gap-4">
-                                                    {order.rush_order && (
+                                                    {order.is_rush && (
                                                         <span className="px-3 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200">
                                                             Rush
                                                         </span>

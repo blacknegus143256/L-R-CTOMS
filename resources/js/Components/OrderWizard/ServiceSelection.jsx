@@ -1,4 +1,5 @@
 import React from 'react';
+import { Zap } from 'lucide-react';
 
 export default function ServiceSelection({ shop, onServiceSelect, disabled = false }) {
   return (
@@ -54,6 +55,32 @@ export default function ServiceSelection({ shop, onServiceSelect, disabled = fal
               </div>
             </div>
             <h4 className="text-xl font-bold text-stone-800 mb-2 text-center group-hover:text-amber-700 transition-colors">{service.service_name}</h4>
+            {service.rush_service_available && (
+              <div className="flex items-center justify-center gap-1.5 mb-3 text-amber-600 font-semibold text-sm">
+                <Zap className="w-4 h-4" />
+                <span>Rush Available</span>
+              </div>
+            )}
+            
+            {/* Measurement Preference Badge */}
+            <div className="flex justify-center mb-3">
+              {service.appointment_required ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-blue-200">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Appointment Required
+                  </span>
+              ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-amber-200">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                      </svg>
+                      Self-Measure Available
+                  </span>
+              )}
+            </div>
+            
             <div className="text-2xl font-black text-amber-600 mb-3 text-center">
               {service.checkout_type === 'fixed_price' ? `₱${Number(service.price || 0).toLocaleString()}` : `Starts at ₱${Number(service.price || 0).toLocaleString()}*`}
             </div>

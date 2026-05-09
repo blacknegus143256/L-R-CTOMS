@@ -34,7 +34,9 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $impersonationStatus = [];
         $pendingShopsCount = $user && $user->role === 'super_admin'
-            ? TailoringShop::where('status', 'pending')->count()
+            ? TailoringShop::whereHas('shopStatus', function ($query) {
+                $query->where('name', 'Pending');
+            })->count()
             : 0;
 
         // Get impersonation status

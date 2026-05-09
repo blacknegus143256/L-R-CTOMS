@@ -12,7 +12,7 @@ class OrderItem extends Model
 
     protected $fillable = [
         'order_id',
-        'attribute_type_id',
+        'shop_attribute_id',
         'price',
         'quantity', // CRITICAL FIX
     ];
@@ -30,9 +30,9 @@ class OrderItem extends Model
         return $this->belongsTo(Order::class);
     }
 
-    public function attribute(): BelongsTo
+    public function shopAttribute(): BelongsTo
     {
-        return $this->belongsTo(AttributeType::class, 'attribute_type_id');
+        return $this->belongsTo(ShopAttribute::class, 'shop_attribute_id');
     }
 }
 

@@ -6,6 +6,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\TailoringShop;
 use App\Models\UserProfile;
@@ -89,4 +90,21 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Appointment::class);
     }
 
+    /**
+     * Override to send custom OTP verification email instead of default Laravel verification email.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        // Generate a new 6-digit code
+        $code = (string) random_int(100000, 999999);
+        
+        // Hash and save the code with 15-minute expiry
+        $this->forceFill([
+            'email_verification_code' => Hash::make($code),
+            'email_verification_code_expires_at' => now()->addMinutes(15),
+        ])->save();
+
+        // Send custom OTP notification instead of default verification email
+        $this->notify(new \App\Notifications\VerifyEmailCodeNotification($code));
+    }
 }

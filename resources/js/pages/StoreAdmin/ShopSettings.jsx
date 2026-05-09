@@ -6,6 +6,62 @@ import { useEffect, useState } from 'react';
 import { getImageUploadError } from '@/utils/imageUpload';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MAX_SHIFT_MINUTES = 12 * 60;
+
+const toMinutes = (time) => {
+    if (!time) {
+        return null;
+    }
+
+    const [hours, minutes] = String(time).split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+        return null;
+    }
+
+    return (hours * 60) + minutes;
+};
+
+const addMinutes = (time, minutesToAdd) => {
+    const baseMinutes = toMinutes(time);
+    if (baseMinutes === null) {
+        return '';
+    }
+
+    const nextMinutes = baseMinutes + minutesToAdd;
+    if (nextMinutes >= 24 * 60) {
+        return '';
+    }
+
+    const hours = String(Math.floor(nextMinutes / 60)).padStart(2, '0');
+    const minutes = String(nextMinutes % 60).padStart(2, '0');
+
+    return `${hours}:${minutes}`;
+};
+
+const isOverTwelveHours = (open, close) => {
+    if (!open || !close) {
+        return false;
+    }
+
+    const duration = toMinutes(close) - toMinutes(open);
+    return duration > MAX_SHIFT_MINUTES;
+};
+
+const validateTime = (open, close) => {
+    if (!open || !close) {
+        return '';
+    }
+
+    if (close <= open) {
+        return 'Closing time must be after opening time.';
+    }
+
+    if (isOverTwelveHours(open, close)) {
+        return 'Shift cannot exceed 12 hours.';
+    }
+
+    return '';
+};
 
 export default function ShopSettings({ auth, shop }) {
     const [showReturnModal, setShowReturnModal] = useState(false);
@@ -33,12 +89,12 @@ export default function ShopSettings({ auth, shop }) {
         close_time: '',
     }));
 
-    const mergedSchedules = defaultWeek.map((defaultDay) => {
+    const mergedSchedules = defaultWeek.map((defaultDay, item) => {
         const existing = (shop?.schedules || []).find((item) => item.day_of_week === defaultDay.day_of_week);
 
         return {
             day_of_week: defaultDay.day_of_week,
-            is_open: Boolean(existing?.is_open),
+            is_open: Boolean( existing?.is_open),
             open_time: existing?.open_time ? String(existing.open_time).slice(0, 5) : '',
             close_time: existing?.close_time ? String(existing.close_time).slice(0, 5) : '',
         };
@@ -67,34 +123,101 @@ export default function ShopSettings({ auth, shop }) {
 
     const updateSchedule = (index, key, value) => {
         const next = [...data.schedules];
+        let newOpen = key === 'open_time' ? value : next[index].open_time;
+        let newClose = key === 'close_time' ? value : next[index].close_time;
+
+        if (key === 'is_open' && value === true) {
+            if (!newOpen) {
+                newOpen = '08:00';
+            }
+            if (!newClose) {
+                newClose = '17:00';
+            }
+        }
+
+        if (key === 'is_open' && !value) {
+            newOpen = '';
+            newClose = '';
+        }
+
+        if (key === 'open_time' && newClose && value >= newClose) {
+            const suggestedClose = addMinutes(value, 60);
+            newClose = suggestedClose && suggestedClose > value ? suggestedClose : '';
+        }
+
         next[index] = {
             ...next[index],
             [key]: value,
+            open_time: newOpen,
+            close_time: newClose,
         };
 
-        if (key === 'is_open' && !value) {
-            next[index].open_time = '';
-            next[index].close_time = '';
+        setData('schedules', next);
+    };
+
+    const applyMondayHoursToAllOpenDays = () => {
+        const mondaySchedule = data.schedules.find((schedule) => schedule.day_of_week === 1);
+
+        if (!mondaySchedule?.open_time || !mondaySchedule?.close_time) {
+            return;
         }
+
+        const next = data.schedules.map((schedule) => {
+            if (!schedule.is_open) {
+                return schedule;
+            }
+
+            return {
+                ...schedule,
+                open_time: mondaySchedule.open_time,
+                close_time: mondaySchedule.close_time,
+            };
+        });
 
         setData('schedules', next);
     };
 
     const updateException = (index, key, value) => {
         const next = [...data.exceptions];
+        let newOpen = key === 'open_time' ? value : next[index].open_time;
+        let newClose = key === 'close_time' ? value : next[index].close_time;
+
+        if (key === 'is_closed' && value) {
+            newOpen = '';
+            newClose = '';
+        }
+
+        if (key === 'open_time' && newClose && value >= newClose) {
+            const suggestedClose = addMinutes(value, 60);
+            newClose = suggestedClose && suggestedClose > value ? suggestedClose : '';
+        }
+
         next[index] = {
             ...next[index],
             [key]: value,
+            open_time: newOpen,
+            close_time: newClose,
         };
-
-        if (key === 'is_closed' && value) {
-            next[index].open_time = '';
-            next[index].close_time = '';
-        }
 
         setData('exceptions', next);
     };
 
+    const scheduleTimeErrors = data.schedules.map((schedule) => {
+        if (!schedule.is_open) {
+            return '';
+        }
+        return validateTime(schedule.open_time, schedule.close_time);
+    });
+
+    const exceptionTimeErrors = data.exceptions.map((item) => {
+        if (item.is_closed) {
+            return '';
+        }
+        return validateTime(item.open_time, item.close_time);
+    });
+
+    const hasAnyTimeValidationError = [...scheduleTimeErrors, ...exceptionTimeErrors].some(Boolean);
+    
     const addException = () => {
         setData('exceptions', [
             ...data.exceptions,
@@ -341,15 +464,27 @@ export default function ShopSettings({ auth, shop }) {
                                                     <span className="block text-sm font-black uppercase tracking-[0.2em] text-stone-500">Day</span>
                                                     <span className="mt-1 block text-lg font-black text-stone-800">{dayNames[schedule.day_of_week]}</span>
                                                 </div>
-                                                <label className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={schedule.is_open}
-                                                        onChange={(e) => updateSchedule(index, 'is_open', e.target.checked)}
-                                                        disabled={processing}
-                                                    />
-                                                    Open
-                                                </label>
+                                                <div className="flex items-center gap-2">
+                                                    <label className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={schedule.is_open}
+                                                            onChange={(e) => updateSchedule(index, 'is_open', e.target.checked)}
+                                                            disabled={processing}
+                                                        />
+                                                        Open
+                                                    </label>
+                                                    {schedule.day_of_week === 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={applyMondayHoursToAllOpenDays}
+                                                            disabled={processing || !schedule.open_time || !schedule.close_time}
+                                                            className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            Apply Monday's Hours to All Open Days
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="block text-xs font-black uppercase tracking-[0.2em] text-stone-500">Opening Time</label>
@@ -370,8 +505,15 @@ export default function ShopSettings({ auth, shop }) {
                                                     disabled={!schedule.is_open || processing}
                                                     className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
                                                 />
-                                                <p className="text-xs leading-5 text-stone-500">
-                                                    Click the clock icon inside the box to select a time easily.
+                                                {scheduleTimeErrors[index] && (
+                                                    <p className="text-xs font-semibold text-rose-600">{scheduleTimeErrors[index]}</p>
+                                                )}
+                                                <p
+                                                    className={`text-xs leading-5 ${isOverTwelveHours(schedule.open_time, schedule.close_time) ? 'text-rose-500 font-semibold' : 'text-stone-500'}`}
+                                                >
+                                                    {isOverTwelveHours(schedule.open_time, schedule.close_time)
+                                                        ? 'This shift exceeds 12 hours. Please shorten the duration.'
+                                                        : 'Click the clock icon inside the box to select a time easily.'}
                                                 </p>
                                             </div>
                                         </div>
@@ -452,6 +594,16 @@ export default function ShopSettings({ auth, shop }) {
                                                             className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
                                                             disabled={processing}
                                                         />
+                                                        {exceptionTimeErrors[index] && (
+                                                            <p className="mt-2 text-xs font-semibold text-rose-600">{exceptionTimeErrors[index]}</p>
+                                                        )}
+                                                        <p
+                                                            className={`mt-2 text-xs leading-5 ${isOverTwelveHours(item.open_time, item.close_time) ? 'text-rose-500 font-semibold' : 'text-stone-500'}`}
+                                                        >
+                                                            {isOverTwelveHours(item.open_time, item.close_time)
+                                                                ? 'This exception shift exceeds 12 hours. Please shorten the duration.'
+                                                                : 'Use these hours only when this date differs from your weekly schedule.'}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             )}
@@ -475,7 +627,7 @@ export default function ShopSettings({ auth, shop }) {
                             <div className="pt-2 flex justify-end">
                                 <button
                                     type="submit"
-                                    disabled={processing || Boolean(logoError) || Boolean(qrError)}
+                                    disabled={processing || Boolean(logoError) || Boolean(qrError) || hasAnyTimeValidationError}
                                     className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black hover:bg-emerald-700 disabled:opacity-60"
                                 >
                                     {processing ? 'Saving Settings...' : 'Save Settings'}
@@ -496,7 +648,7 @@ export default function ShopSettings({ auth, shop }) {
                         Your setup is saved. Would you like to return to the Onboarding Wizard to complete your remaining steps?
                     </p>
                     <div className="flex flex-col gap-3">
-                        <Link href={route('store.onboarding')} className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800">
+<Link href={route('store.onboarding', { startStep: 5 })} className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800">
                             Yes, Return to Wizard
                         </Link>
                         <button type="button" onClick={() => setShowReturnModal(false)} className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50">

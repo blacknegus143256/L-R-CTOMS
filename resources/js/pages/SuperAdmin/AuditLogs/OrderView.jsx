@@ -36,7 +36,7 @@ export default function AuditLogOrderView({ auth, order }) {
                 <div className="grid md:grid-cols-4 gap-3">
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                         <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Status</p>
-                        <p className="text-sm font-bold text-stone-900 mt-1">{order?.status || 'N/A'}</p>
+                        <p className="text-sm font-bold text-stone-900 mt-1">{order_statuses?.name || 'N/A'}</p>
                     </div>
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                         <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Payment</p>

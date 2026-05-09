@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\TailoringShop;
 use App\Models\ServiceCategory;
+use App\Models\ShopStatus;
 use Illuminate\Database\Seeder;
 use App\Models\User;
 
@@ -12,6 +13,7 @@ class TailoringShopSeeder extends Seeder
     public function run(): void
     {
         $owner = User::where('role', 'store_admin')->first();
+        $approvedStatusId = ShopStatus::where('name', 'Approved')->value('id');
         
         // Get service category IDs
         $customSewingCat = ServiceCategory::where('slug', 'custom-sewing')->first();
@@ -27,7 +29,7 @@ class TailoringShopSeeder extends Seeder
             'contact_role' => 'Owner',
             
             'is_active' => true,
-            'status' => 'approved',
+            'shop_status_id' => $approvedStatusId,
         ]);
 
         $shop1->services()->createMany([
@@ -71,7 +73,7 @@ class TailoringShopSeeder extends Seeder
             'contact_person' => 'Juan Dela Cruz',
             'contact_role' => 'Owner',
             'is_active' => true,
-            'status' => 'approved',
+            'shop_status_id' => $approvedStatusId,
         ]);
 
         $shop2->services()->createMany([
@@ -108,7 +110,7 @@ class TailoringShopSeeder extends Seeder
             'contact_person' => 'Arvinidos De Nigga',
             'contact_role' => 'Owner',
             'is_active' => true,
-            'status' => 'approved',
+            'shop_status_id' => $approvedStatusId,
         ]);
 
         $shop3->services()->createMany([

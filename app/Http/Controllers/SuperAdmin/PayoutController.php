@@ -19,12 +19,15 @@ class PayoutController extends Controller
                 OrderStatus::COMPLETED->value,
                 OrderStatus::READY->value,
             ])
-            ->where(function ($query) {
-                $query->whereNull('payment_type')
-                    ->orWhere('payment_type', '!=', 'cash');
+            ->whereHas('payment', function ($query) {
+                $query->where('amount', '>', 0)
+                    ->where(function ($nestedQuery) {
+                        $nestedQuery->whereNull('payment_type')
+                            ->orWhere('payment_type', '!=', 'cash');
+                    });
             })
-            ->where('amount_paid', '>', 0)
             ->with([
+                'payment',
                 'tailoringShop:id,user_id,shop_name,payout_method,payout_account',
                 'user:id,name',
             ])
@@ -32,9 +35,9 @@ class PayoutController extends Controller
             ->get([
                 'id',
                 'tailoring_shop_id',
+
                 'user_id',
-                'status',
-                'amount_paid',
+                'order_status_id',
                 'payout_status',
                 'updated_at',
             ]);

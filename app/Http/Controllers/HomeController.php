@@ -15,9 +15,11 @@ class HomeController extends Controller
         return Inertia::render('Home', [
             'categories' => AttributeCategory::with('attributeTypes')->get(),
             'services' => Service::with('serviceCategory')->get(),
-            'shops' => TailoringShop::where('status', 'approved')
+            'shops' => TailoringShop::whereHas('shopStatus', function ($query) {
+                    $query->where('name', 'Approved');
+                })
                 ->where('is_active', true)
-->with(['services.serviceCategory', 'attributes', 'user.profile'])
+                ->with(['services.serviceCategory', 'attributes', 'user.profile'])
                 ->get(),
             'uniqueServiceCategories' => Service::with('serviceCategory')
                 ->get()

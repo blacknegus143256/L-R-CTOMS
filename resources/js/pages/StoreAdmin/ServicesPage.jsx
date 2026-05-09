@@ -46,7 +46,7 @@ export default function ServicesPage({ auth, shop, services, serviceCategories =
                         Your setup is saved. Would you like to return to the Onboarding Wizard to complete your remaining steps?
                     </p>
                     <div className="flex flex-col gap-3">
-                        <Link href={route('store.onboarding')} className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800">
+<Link href={route('store.onboarding', { startStep: 3 })} className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800">
                             Yes, Return to Wizard
                         </Link>
                         <button type="button" onClick={() => setShowReturnModal(false)} className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50">

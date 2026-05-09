@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Store;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Holiday;
+use App\Models\OrderMeasurement;
 use App\Models\ShopException;
 use App\Models\TailoringShop;
 use App\Models\Order;
@@ -83,12 +84,18 @@ class StoreDashboardController extends Controller
             ]);
         }
 
-        $totalRevenue = Order::where('tailoring_shop_id', $shop->id)
-            ->where('status', 'Completed')
-            ->sum('total_price');
+        $totalRevenue = DB::table('order_services')
+            ->join('orders', 'order_services.order_id', '=', 'orders.id')
+            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
+            ->where('orders.tailoring_shop_id', $shop->id)
+            ->where('order_statuses.name', 'Completed')
+            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
+            ->value('total');
 
 $pendingOrders = Order::where('tailoring_shop_id', $shop->id)
-    ->whereIn('status', ['Requested', 'Quoted'])
+    ->whereHas('status', function ($query) {
+        $query->whereIn('name', ['Requested', 'Quoted']);
+    })
     ->count();
 
         $thisMonth = Order::where('tailoring_shop_id', $shop->id)
@@ -112,22 +119,33 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
         $currentMonth = now()->startOfMonth();
         $lastMonthStart = now()->subMonth()->startOfMonth();
         $lastMonthEnd = $currentMonth->copy()->subSecond();
-        $currentRevenue = Order::where('tailoring_shop_id', $shop->id)
-            ->where('status', 'Completed')
-            ->where('created_at', '>=', $currentMonth)
-            ->sum('total_price');
-        $lastRevenue = Order::where('tailoring_shop_id', $shop->id)
-            ->where('status', 'Completed')
-            ->where('created_at', '>=', $lastMonthStart)
-            ->where('created_at', '<', $lastMonthEnd)
-            ->sum('total_price');
+        $currentRevenue = DB::table('order_services')
+            ->join('orders', 'order_services.order_id', '=', 'orders.id')
+            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
+            ->where('orders.tailoring_shop_id', $shop->id)
+            ->where('order_statuses.name', 'Completed')
+            ->where('orders.created_at', '>=', $currentMonth)
+            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
+            ->value('total');
+
+        $lastRevenue = DB::table('order_services')
+            ->join('orders', 'order_services.order_id', '=', 'orders.id')
+            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
+            ->where('orders.tailoring_shop_id', $shop->id)
+            ->where('order_statuses.name', 'Completed')
+            ->where('orders.created_at', '>=', $lastMonthStart)
+            ->where('orders.created_at', '<', $lastMonthEnd)
+            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
+            ->value('total');
         $revenueGrowth = $lastRevenue > 0 ? round((($currentRevenue - $lastRevenue) / $lastRevenue) * 100, 1) : 100;
 
         $todayStart = now()->startOfDay();
         $nextSevenDaysEnd = now()->addDays(7)->endOfDay();
 
         $overdueOrders = Order::where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', $activeStatuses)
+            ->whereHas('status', function ($query) use ($activeStatuses) {
+                $query->whereIn('name', $activeStatuses);
+            })
             ->whereNotNull('expected_completion_date')
             ->where('expected_completion_date', '<', $todayStart)
             ->with('customer:id,name,email,phone_number')
@@ -135,7 +153,9 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
             ->get();
 
         $upcomingDeadlines = Order::where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', $activeStatuses)
+            ->whereHas('status', function ($query) use ($activeStatuses) {
+                $query->whereIn('name', $activeStatuses);
+            })
             ->whereNotNull('expected_completion_date')
             ->whereBetween('expected_completion_date', [$todayStart, $nextSevenDaysEnd])
             ->with('customer:id,name,email,phone_number')
@@ -143,10 +163,12 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
             ->get();
 
         $heatmapData = Order::where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', $activeStatuses)
+            ->whereHas('status', function ($query) use ($activeStatuses) {
+                $query->whereIn('name', $activeStatuses);
+            })
             ->whereNotNull('expected_completion_date')
             ->whereBetween('expected_completion_date', [now()->startOfWeek(), now()->endOfWeek()])
-            ->selectRaw('DATE(expected_completion_date) as date, COUNT(*) as total, SUM(is_rush) as rush_count')
+            ->selectRaw('DATE(expected_completion_date) as date, COUNT(*) as total, SUM(CASE WHEN COALESCE(is_rush, 0) <> 0 THEN 1 ELSE 0 END) as rush')
             ->groupByRaw('DATE(expected_completion_date)')
             ->orderByRaw('DATE(expected_completion_date) ASC')
             ->get();
@@ -156,13 +178,17 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
 
         $weeklyOrders = Order::where('tailoring_shop_id', $shop->id)
             ->whereBetween('expected_completion_date', [$weekStart, $weekEnd])
-            ->whereNotIn('status', ['Completed', 'Cancelled', 'Rejected', 'Declined'])
+            ->whereHas('status', function ($query) {
+                $query->whereNotIn('name', ['Completed', 'Cancelled', 'Rejected', 'Declined']);
+            })
             ->with('customer:id,name,email,phone_number')
-            ->orderByRaw('rush_order DESC')
+            ->orderByRaw('is_rush DESC')
             ->orderBy('expected_completion_date', 'asc')
             ->get();
 
-        $topServices = Order::where('tailoring_shop_id', $shop->id)
+        $topServices = \App\Models\OrderService::whereHas('order', function($q) use ($shop) {
+                $q->where('tailoring_shop_id', $shop->id);
+            })
             ->select('service_id', DB::raw('count(*) as total'))
             ->with('service:id,service_name')
             ->groupBy('service_id')
@@ -173,15 +199,17 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
         $topMaterials = OrderItem::whereHas('order', function($query) use ($shop) {
                 $query->where('tailoring_shop_id', $shop->id);
             })
-            ->select('attribute_type_id', DB::raw('count(*) as total'))
-            ->with('attribute:id,name')
-            ->groupBy('attribute_type_id')
+            ->select('shop_attribute_id', DB::raw('count(*) as total'))
+            ->with('shopAttribute:shop_attributes.id,shop_attributes.item_name')
+            ->groupBy('shop_attribute_id')
             ->orderByDesc('total')
             ->take(5)
             ->get();
 
         $urgentOrders = Order::where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', ['Accepted', 'Ready for Production', 'In Progress', 'Appointment Scheduled'])
+            ->whereHas('status', function ($query) {
+                $query->whereIn('name', ['Accepted', 'Ready for Production', 'In Progress', 'Appointment Scheduled']);
+            })
             ->whereNotNull('expected_completion_date')
             ->where('expected_completion_date', '<=', now()->addHours(48))
             ->with('customer:id,name,email,phone_number')
@@ -190,8 +218,10 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
             ->get();
 
         $rushOrders = Order::where('tailoring_shop_id', $shop->id)
-            ->where('rush_order', true)
-            ->whereIn('status', ['Requested', 'Quoted', 'Accepted', 'Ready for Production', 'In Progress', 'Appointment Scheduled'])
+            ->where('is_rush', true)
+            ->whereHas('status', function ($query) {
+                $query->whereIn('name', ['Requested', 'Quoted', 'Accepted', 'Ready for Production', 'In Progress', 'Appointment Scheduled']);
+            })
             ->whereNotNull('expected_completion_date')
             ->whereBetween('expected_completion_date', [now()->startOfDay(), now()->addDays(7)->endOfDay()])
             ->with('customer:id,name,email,phone_number')
@@ -200,10 +230,11 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
 
         $today = now()->toDateString();
         $dailyAgenda = Order::where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', ['Confirmed', 'Ready for Production'])
-            ->where(function ($query) use ($today) {
-                $query->whereDate('material_dropoff_date', $today)
-                    ->orWhereDate('measurement_date', $today);
+            ->whereHas('status', function ($query) {
+                $query->whereIn('name', ['Confirmed', 'Ready for Production']);
+            })
+            ->whereHas('appointments', function ($query) use ($today) {
+                $query->whereDate('date', $today);
             })
             ->with([
                 'user:id,name',
@@ -212,18 +243,10 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
                     $query->whereDate('date', $today)->orderBy('time_start');
                 },
             ])
-            ->orderByRaw('COALESCE(material_dropoff_date, measurement_date) ASC')
+            ->orderBy('id')
             ->get()
             ->map(function (Order $order) use ($today) {
-                $hasDropOff = optional($order->material_dropoff_date)->isSameDay(Carbon::parse($today));
-                $hasFitting = optional($order->measurement_date)->isSameDay(Carbon::parse($today));
-
-                $agendaType = match (true) {
-                    $hasDropOff && $hasFitting => 'Drop-off & Fitting',
-                    $hasDropOff => 'Drop-off',
-                    $hasFitting => 'Fitting',
-                    default => 'Agenda',
-                };
+                $agendaType = 'Appointment';
 
                 $agendaTime = $order->appointments
                     ->pluck('time_start')
@@ -246,11 +269,18 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             ->map(function ($order) {
                 return [
                     'id' => $order->id,
-                    'message' => "Order #{$order->id} updated to {$order->status->value}",
+                    'message' => "Order #{$order->id} updated to {$order->status}",
                     'time' => $order->updated_at->diffForHumans(),
                     'type' => 'Order Update'
                 ];
             });
+
+        $lowStockItems = $shop->attributes()
+            ->select('shop_attributes.id', 'shop_attributes.item_name', 'shop_attributes.stock_quantity')
+            ->where('stock_quantity', '<', 15)
+            ->orderBy('stock_quantity', 'asc')
+            ->take(5)
+            ->get();
 
         return Inertia::render('StoreAdmin/Dashboard', [
             'shop' => $shop,
@@ -264,6 +294,7 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             ],
             'topServices' => $topServices,
             'topMaterials' => $topMaterials,
+            'lowStockItems' => $lowStockItems,
             'urgentOrders' => $urgentOrders,
             'rushOrders' => $rushOrders,
             'dailyAgenda' => $dailyAgenda,
@@ -321,7 +352,9 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
 
         $pendingOrders = \App\Models\Order::with(['customer', 'user', 'service'])
             ->where('tailoring_shop_id', $shop->id)
-            ->whereIn('status', ['Requested', 'Quoted'])
+            ->whereHas('status', function ($query) {
+                $query->whereIn('name', ['Requested', 'Quoted']);
+            })
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($order) {
@@ -349,7 +382,9 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         $granularity = in_array($granularity, ['daily', 'monthly', 'yearly'], true) ? $granularity : 'daily';
 
         $baseQuery = Order::where('tailoring_shop_id', $shop->id)
-            ->where('status', 'Completed');
+            ->whereHas('status', function ($query) {
+                $query->where('name', 'Completed');
+            });
 
         if ($granularity === 'monthly') {
             $data = (clone $baseQuery)
@@ -420,14 +455,41 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
 
         $validated = $validator->validated();
 
-        $snapshot = $order->measurement_snapshot ?? [];
+        $requestedMeasurements = collect($validated['measurement_fields'])
+            ->map(function ($field) {
+                return [
+                    'name' => trim((string) ($field['name'] ?? $field['part'] ?? '')),
+                    'instruction' => $field['instruction'] ?? null,
+                ];
+            })
+            ->filter(fn ($field) => $field['name'] !== '')
+            ->values();
 
-        $snapshot['requested'] = $validated['measurement_fields'];
-        $snapshot['unit'] = $validated['measurement_unit'] ?? ($snapshot['unit'] ?? 'inches');
+        $requestedNames = $requestedMeasurements->pluck('name')->all();
 
-        $order->update([
-            'measurement_snapshot' => $snapshot
-        ]);
+        if (!empty($requestedNames)) {
+            $order->order_measurements()
+                ->whereNull('measurement_value')
+                ->whereNotIn('measurement_name', $requestedNames)
+                ->delete();
+        }
+
+        foreach ($requestedMeasurements as $measurement) {
+            $orderMeasurement = OrderMeasurement::firstOrNew([
+                'order_id' => $order->id,
+                'measurement_name' => $measurement['name'],
+            ]);
+
+            $orderMeasurement->unit = $validated['measurement_unit'];
+
+            if (! $orderMeasurement->exists) {
+                $orderMeasurement->measurement_value = null;
+            }
+
+            $orderMeasurement->save();
+        }
+
+        $order->load('order_measurements');
 
         $requiresInShopMeasurements = Order::requiresInShopMeasurements($order->measurement_type);
 

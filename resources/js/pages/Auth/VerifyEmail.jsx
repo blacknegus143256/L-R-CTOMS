@@ -1,14 +1,22 @@
 import PrimaryButton from '@/Components/PrimaryButton';
+import InputError from '@/Components/InputError';
+import InputLabel from '@/Components/InputLabel';
+import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 
-export default function VerifyEmail({ status }) {
-    const { post, processing } = useForm({});
+export default function VerifyEmail({ auth, status }) {
+    const { user } = auth;
+    const { data, setData, post, processing, errors, reset } = useForm({
+        code: '',
+    });
 
     const submit = (e) => {
         e.preventDefault();
 
-        post(route('verification.send'));
+        post(route('verification.code'), {
+            onSuccess: () => reset('code'),
+        });
     };
 
     return (
@@ -16,33 +24,59 @@ export default function VerifyEmail({ status }) {
             <Head title="Email Verification" />
 
             <div className="mb-4 text-sm text-gray-600">
-                Thanks for signing up! Before getting started, could you verify
-                your email address by clicking on the link we just emailed to
-                you? If you didn't receive the email, we will gladly send you
-                another.
+                Thanks for signing up! We've sent a 6-digit code to{' '}
+                <strong className="text-orchid-purple font-semibold">{user.email}</strong>
+                . Enter it below to verify your account.
             </div>
 
-            {status === 'verification-link-sent' && (
+            {status === 'verification-code-sent' && (
                 <div className="mb-4 text-sm font-medium text-green-600">
-                    A new verification link has been sent to the email address
-                    you provided during registration.
+                    A new verification code has been sent to the email address you provided during registration.
                 </div>
             )}
 
             <form onSubmit={submit}>
-                <div className="mt-4 flex items-center justify-between">
+                <div>
+                    <InputLabel htmlFor="code" value="Verification Code" />
+
+                    <TextInput
+                        id="code"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                        className="mt-1 block w-full tracking-[0.35em] text-center text-lg font-bold"
+                        value={data.code}
+                        onChange={(e) => setData('code', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+
+                    <InputError message={errors.code} className="mt-2" />
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
                     <PrimaryButton disabled={processing}>
-                        {processing ? 'Sending...' : 'Resend Verification Email'}
+                        {processing ? 'Verifying...' : 'Verify Code'}
                     </PrimaryButton>
 
-                    <Link
-                        href={route('logout')}
-                        method="post"
-                        as="button"
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Log Out
-                    </Link>
+                    <div className="flex items-center gap-3">
+                        <Link
+                            href={route('verification.code.send')}
+                            method="post"
+                            as="button"
+                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        >
+                            Resend Code
+                        </Link>
+
+                        <Link
+                            href={route('logout')}
+                            method="post"
+                            as="button"
+                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        >
+                            Log Out
+                        </Link>
+                    </div>
                 </div>
             </form>
         </GuestLayout>

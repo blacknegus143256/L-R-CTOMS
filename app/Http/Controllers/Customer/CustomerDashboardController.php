@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\TailoringShop;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -13,7 +14,7 @@ class CustomerDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $user = $request->user();
+        $user = Auth::user();
 
         if ($user->role === 'super_admin') {
             return redirect()->route('super.dashboard');
@@ -23,21 +24,38 @@ class CustomerDashboardController extends Controller
             return redirect()->route('store.dashboard');
         }
 
-        $orders = Order::where('user_id', $user->id)->get();
+        $activeOrdersCount = Order::where('user_id', $user->id)
+            ->whereHas('status', function ($query) {
+                $query->whereNotIn('name', ['Completed', 'Cancelled', 'Declined', 'Rejected']);
+            })
+            ->count();
 
-        $activeCount = $orders->whereIn('status', ['Pending', 'Accepted', 'In Progress', 'Appointment Scheduled'])->count();
-        $readyCount = $orders->where('status', 'Ready')->count();
-        $totalSpent = $orders->where('status', 'Completed')->sum('total_price');
+        $readyForPickupCount = Order::where('user_id', $user->id)
+            ->whereHas('status', function ($query) {
+                $query->where('name', 'Ready for Pickup');
+            })
+            ->count();
+
+        $totalSpent = (float) Order::where('user_id', $user->id)
+            ->whereHas('status', function ($query) {
+                $query->where('name', 'Completed');
+            })
+            ->sum('total_amount');
 
         $recentOrders = Order::where('user_id', $user->id)
-            ->with(['tailoringShop', 'service'])
+            ->with(['status', 'tailoringShop', 'orderServices.service'])
             ->latest()
             ->take(5)
             ->get();
 
         $today = Carbon::today();
         $confirmedOrders = Order::where('user_id', $user->id)
-            ->where('status', 'Confirmed')
+            ->whereHas('status', function ($query) {
+                $query->where('name', 'Confirmed');
+            })
+            ->whereHas('appointments', function ($query) use ($today) {
+                $query->whereDate('date', $today);
+            })
             ->with([
                 'tailoringShop:id,shop_name',
                 'appointments' => fn ($query) => $query
@@ -59,17 +77,10 @@ class CustomerDashboardController extends Controller
                     ];
                 }
 
-                $dropoffToday = $order->material_dropoff_date
-                    ? Carbon::parse($order->material_dropoff_date)->isSameDay($today)
-                    : false;
-                $fittingToday = $order->measurement_date
-                    ? Carbon::parse($order->measurement_date)->isSameDay($today)
-                    : false;
+                $hasAppointmentToday = $order->appointments->isNotEmpty();
 
-                if ($dropoffToday || $fittingToday) {
-                    $appointmentType = $dropoffToday && $fittingToday
-                        ? 'Drop-off and Fitting'
-                        : ($dropoffToday ? 'Drop-off' : 'Fitting');
+                if ($hasAppointmentToday) {
+                    $appointmentType = 'Appointment';
 
                     $times = $order->appointments
                         ->pluck('time_start')
@@ -99,21 +110,33 @@ class CustomerDashboardController extends Controller
 
         $measurements = $user->profile;
 
-        $recommendedShops = TailoringShop::where('status', 'approved')
+        $featuredShops = TailoringShop::whereHas('shopStatus', function ($query) {
+                $query->where('name', 'Approved');
+            })
             ->where('is_active', true)
-            ->inRandomOrder()
+            ->withCount(['orders as completed_orders_count' => function ($query) {
+                $query->whereHas('status', function ($q) {
+                    $q->where('name', 'Completed');
+                });
+            }])
+            ->orderByDesc('completed_orders_count')
             ->take(3)
             ->get();
 
         return Inertia::render('Dashboard', [
+            'activeOrdersCount' => $activeOrdersCount,
+            'readyForPickupCount' => $readyForPickupCount,
+            'totalSpent' => $totalSpent,
             'stats' => [
-                'active' => $activeCount,
-                'ready' => $readyCount,
+                'active' => $activeOrdersCount,
+                'ready' => $readyForPickupCount,
                 'totalSpent' => $totalSpent,
             ],
             'recentOrders' => $recentOrders,
             'measurements' => $measurements,
-            'recommendedShops' => $recommendedShops,
+            'featuredShops' => $featuredShops,
+            // Backward-compatible alias for existing UI consumers.
+            'recommendedShops' => $featuredShops,
             'urgentReminders' => $urgentReminders,
         ]);
     }

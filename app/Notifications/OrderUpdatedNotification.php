@@ -31,12 +31,18 @@ class OrderUpdatedNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
+        $baseUrl = "/store/order/{$this->order->id}";
+        $actionUrl = $this->type === 'measurement_submitted'
+            ? $baseUrl . '?action=view_measurements'
+            : $baseUrl;
+
         return [
             'order_id' => $this->order->id,
             'message' => $this->message,
             'type' => $this->type,
             'reason' => $this->reason,
             'actor' => $this->actor,
+            'url' => $actionUrl,
             'order_status' => $this->order->status instanceof \App\Enums\OrderStatus
                 ? $this->order->status->value
                 : (string) $this->order->status,

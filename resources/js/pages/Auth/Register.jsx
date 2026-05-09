@@ -5,9 +5,11 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { showAlert } from '@/utils/alert';
-import React, { useEffect } from 'react';
-
+import React, { useEffect, useState } from 'react';
+import DocumentModal from '@/Components/DocumentModal';
 export default function Register() {
+    const redirectUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null;
+    const [activeDoc, setActiveDoc] = useState(null);
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
@@ -15,6 +17,7 @@ export default function Register() {
         password_confirmation: '',
         role: 'customer',
         shop_name: '',
+        terms: false,
     });
 
     const submit = (e) => {
@@ -25,15 +28,22 @@ if (data.role !== 'store_admin') {
         delete payload.shop_name;
     }
     console.log("Cleaned Payload being sent:", payload);
-        post(route('register'), {
+        const target = redirectUrl ? `${route('register')}?redirect=${encodeURIComponent(redirectUrl)}` : route('register');
+
+        post(target, {
             onBefore: () => console.log("Request starting..."),
         onSuccess: (page) => console.log("Success! Redirecting...", page),
         onError: (errors) => {
             console.error("Validation/Server Errors:", errors);
-            // This will alert you if the server sends an error
+
+            const errorMessage = Object.values(errors || {})
+                .flatMap((v) => (Array.isArray(v) ? v : [v]))
+                .join(' ');
+
+            // Show a clearer registration error message to the user
             showAlert({
                 title: 'Registration Error',
-                message: 'Registration failed! Check console.',
+                message: errorMessage || 'Registration failed. Please check your input.',
                 type: 'error',
             });
         },
@@ -166,18 +176,108 @@ if (data.role !== 'store_admin') {
                         className="mt-2"
                     />
                 </div>
+                {/* <div className="space-y-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
+                                <p className="text-sm font-black text-stone-900">Legal Agreements</p>
 
-                <div className="flex items-center gap-4 mt-6">
-                    <p className="text-sm text-orchid-blue">
-                        Already have an account? <Link href="/login" className="font-medium text-orchid-purple hover:text-orchid-blue hover:underline transition-colors">Sign in</Link>
-                    </p>
-                </div>
+                                <label className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={data.terms_accepted}
+                                        onChange={(e) => setData('terms_accepted', e.target.checked)}
+                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-medium text-stone-700">
+                                        I agree to the{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDoc({ key: 'terms_accepted', title: 'Terms of Service', url: '/documents/terms-and-condition.pdf' })}
+                                            className="font-bold text-blue-600 hover:underline"
+                                        >
+                                            Terms of Service
+                                        </button>
+                                    </span>
+                                </label>
+
+                                <label className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={data.dpa_accepted}
+                                        onChange={(e) => setData('dpa_accepted', e.target.checked)}
+                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-medium text-stone-700">
+                                        I agree to the{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDoc({ key: 'dpa_accepted', title: 'Data Processing Agreement', url: '/documents/privacy-policy.pdf' })}
+                                            className="font-bold text-blue-600 hover:underline"
+                                        >
+                                            Data Processing Agreement
+                                        </button>
+                                    </span>
+                                </label>
+
+                                <label className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={data.nda_accepted}
+                                        onChange={(e) => setData('nda_accepted', e.target.checked)}
+                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-medium text-stone-700">
+                                        I agree to the{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDoc({ key: 'nda_accepted', title: 'Mutual NDA', url: '/documents/mutual-nda.pdf' })}
+                                            className="font-bold text-blue-600 hover:underline"
+                                        >
+                                            Mutual NDA
+                                        </button>
+                                    </span>
+                                </label>
+                            </div>
+                            {errors.terms_accepted && <p className="text-xs font-semibold text-rose-600">{errors.terms_accepted}</p>}
+                            {errors.dpa_accepted && <p className="text-xs font-semibold text-rose-600">{errors.dpa_accepted}</p>}
+                            {errors.nda_accepted && <p className="text-xs font-semibold text-rose-600">{errors.nda_accepted}</p>} */}
 
                 <div className="mt-6">
-                    <PrimaryButton 
-                    className="w-full"
-                    type="submit"
-                    disabled={processing}>
+                    <div className="space-y-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
+                        <label className="flex items-start gap-3">
+                            <input
+                                type="checkbox"
+                                checked={data.terms}
+                                onChange={(e) => setData('terms', e.target.checked)}
+                                className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span className="text-sm font-medium text-stone-700">
+                                I agree to the{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveDoc({ key: 'terms', title: 'Terms & Conditions', url: '/documents/terms-and-condition.pdf' })}
+                                    className="font-bold text-blue-600 hover:underline"
+                                >
+                                    Terms & Conditions
+                                </button>{' '}
+                                and{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveDoc({ key: 'privacy', title: 'Privacy Policy', url: '/documents/privacy-policy.pdf' })}
+                                    className="font-bold text-blue-600 hover:underline"
+                                >
+                                    Privacy Policy
+                                </button>
+                                .
+                            </span>
+                        </label>
+
+                        {errors.terms && <p className="text-xs font-semibold text-rose-600">{errors.terms}</p>}
+                    </div>
+
+                    <PrimaryButton
+                        className="w-full"
+                        type="submit"
+                        disabled={processing || !data.terms}
+                    >
                         {processing ? 'Creating account…' : 'Register'}
                     </PrimaryButton>
                 </div>
@@ -186,7 +286,7 @@ if (data.role !== 'store_admin') {
                     <p className="text-sm text-stone-500">
                         Already a member?{' '}
                         <Link
-                            href={route('login')}
+                            href={redirectUrl ? `${route('login')}?redirect=${encodeURIComponent(redirectUrl)}` : route('login')}
                             className="font-bold text-orchid-purple hover:text-orchid-blue transition-colors duration-200 underline underline-offset-4"
                         >
                             Sign In Here
@@ -194,6 +294,18 @@ if (data.role !== 'store_admin') {
                     </p>
                 </div>
             </form>
+            <DocumentModal
+                            isOpen={!!activeDoc}
+                            onClose={() => setActiveDoc(null)}
+                            title={activeDoc?.title || 'Legal Document'}
+                            pdfUrl={activeDoc?.url || ''}
+                            onAgree={() => {
+                                if (activeDoc?.key) {
+                                    setData(activeDoc.key, true);
+                                    setActiveDoc(null);
+                                }
+                            }}
+                        />
         </GuestLayout>
     );
 }

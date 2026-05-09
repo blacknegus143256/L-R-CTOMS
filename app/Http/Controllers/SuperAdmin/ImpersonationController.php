@@ -8,6 +8,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class ImpersonationController extends Controller
@@ -19,24 +20,26 @@ class ImpersonationController extends Controller
      */
     public function impersonate(User $user)
     {
-        // Verify the current user is a super_admin
         if (!Auth::check() || Auth::user()->role !== 'super_admin') {
             throw new AuthorizationException('Only super admins can impersonate users.');
         }
-
-        // Prevent impersonating other admins (security check)
         if (in_array($user->role, ['super_admin'])) {
             throw new AuthorizationException('Cannot impersonate admin users.');
         }
 
-        // Store the original admin ID in session
-        session()->put('impersonator_id', Auth::id());
-        session()->put('impersonating_user_name', $user->name);
+        // Grab the admin ID before switching
+        $adminId = Auth::id();
 
-        // Log in as the target user
+        // Log in as the target user (This regenerates the session)
         Auth::login($user, remember: true);
 
-        // Redirect to the target user's dashboard
+        // Store in session AFTER login so it binds to the new secure session
+        session()->put('impersonator_id', $adminId);
+        session()->put('impersonating_user_name', $user->name);
+        session()->save(); // Force save to guarantee persistence
+
+        Log::info("AUDIT: Super Admin [ID: {$adminId}] initiated impersonation of User [ID: {$user->id}, Name: {$user->name}] at " . now());
+
         return redirect()->intended('/dashboard')->with('success', "Impersonating {$user->name}");
     }
 
@@ -45,26 +48,31 @@ class ImpersonationController extends Controller
      */
     public function leaveImpersonation()
     {
-        // Retrieve the original admin ID from session
-        $impersonator_id = session()->pull('impersonator_id');
-        session()->pull('impersonating_user_name');
-
-        if (!$impersonator_id) {
-            return redirect('/super-admin/users')->with('error', 'Not currently impersonating a user.');
+        // 1. Security Check: Only proceed if they are actually impersonating someone
+        if (!session()->has('impersonator_id')) {
+            abort(403, 'You are not currently impersonating anyone.');
         }
 
-        // Find the original admin user
+        $impersonator_id = session()->pull('impersonator_id');
+        $impersonated_name = session()->pull('impersonating_user_name');
+
         $originalAdmin = User::find($impersonator_id);
 
         if (!$originalAdmin) {
             Auth::logout();
+            Log::warning("AUDIT: Failed impersonation exit. Original admin ID {$impersonator_id} not found.");
             return redirect('/login')->with('error', 'Original admin user not found.');
         }
 
+        $impersonatedId = Auth::id(); // Get the ID of the user they were just impersonating
+
         // Log back in as the admin
         Auth::login($originalAdmin, remember: true);
+        session()->save();
 
-        return redirect('/super-admin/users')->with('success', 'Returned to Super Admin view.');
+        Log::info("AUDIT: Super Admin [ID: {$originalAdmin->id}] successfully exited impersonation of User [ID: {$impersonatedId}, Name: {$impersonated_name}] at " . now());
+
+        return redirect()->route('super.users.index')->with('success', 'Returned to Super Admin view.');
     }
 
     /**

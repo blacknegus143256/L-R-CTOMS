@@ -96,9 +96,9 @@ export default function MapLibrePicker({ data, setData, initialLat, initialLng, 
             }
         } catch (error) {
             console.error("Reverse geocoding error:", error);
-            setLandmark("Location detected");
+            setLandmark("");
             setData("apiBarangay", "");
-            setData("street", "Location detected");
+            setData("", "");
             setData("latitude", Number(lat));
             setData("longitude", Number(lng));
         } finally {

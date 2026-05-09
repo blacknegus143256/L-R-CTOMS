@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { createComparisonData } from '@/utils/comparisonEngine';
-import { usePage } from '@inertiajs/react';
+import { usePage, router } from '@inertiajs/react';
+import PrimaryButton from '@/Components/PrimaryButton';
 import { 
   SectionHeader, 
   ContentRow,
   HeaderCell 
 } from './RowComponents';
-import { MapPin, X } from 'lucide-react';
+import { MapPin, X, Zap } from 'lucide-react';
 
 /**
  * Dumb ComparisonTable - Pure UI layer over pre-computed engine data
@@ -293,8 +294,7 @@ const groupedRows = useMemo(() => {
                   const isAvailable = cell && cell.isAvailable;
                   const isService = selectedRow.section === 'services';
                   const isLocation = selectedRow.section === 'location';
-                  
-                  // NEW: Grab all items if available, otherwise fallback to the single raw item
+                  // Grab all items if available, otherwise fallback to the single raw item
                   const itemsToRender = cell?.meta?.allItems || (cell?.meta?.raw ? [cell.meta.raw] : []);
 
                   return (
@@ -305,116 +305,132 @@ const groupedRows = useMemo(() => {
                         {shop.shop_name}
                       </h4>
 
-                      {!isAvailable || (itemsToRender.length === 0 && !isLocation) ? (
-                        <div className="h-40 flex flex-col items-center justify-center text-stone-400 bg-stone-50 rounded-xl border border-stone-100 border-dashed">
-                          <span className="text-lg font-bold">N/A</span>
-                          <span className="text-xs">Not offered by this shop</span>
-                        </div>
-                      ) : isLocation ? (
-                        <div className="space-y-4">
-                          <div className="bg-stone-50 border border-stone-200 rounded-2xl p-6 text-center flex flex-col items-center justify-center min-h-[200px]">
-                            <MapPin className="w-12 h-12 text-orchid-blue mb-4" />
-                            <h5 className="font-bold text-stone-800 text-lg mb-2">{cell?.displayValue || 'Location not set'}</h5>
-                            <div className="text-sm text-stone-500 font-medium mb-4">
-                              {shop.shop_name}
-                            </div>
-
-                            {getShopDistanceKm(cell?.meta?.coordinates) ? (
-                              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-black border border-emerald-200 text-base">
-                                🚗 {getShopDistanceKm(cell?.meta?.coordinates)} km away
-                              </div>
-                            ) : (
-                              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">Distance Unavailable</span>
-                            )}
-                          </div>
+                      {!isAvailable ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center bg-stone-50 rounded-xl border border-dashed border-stone-200">
+                          <span className="text-lg font-bold text-stone-400">N/A</span>
+                          <span className="text-xs text-stone-400 mt-1">Not offered by this shop</span>
                         </div>
                       ) : (
-                        <div className="space-y-8">
-                          {/* Loop through all variations of this item */}
-                          {itemsToRender.map((itemData, itemIdx) => {
-                            // Safely extract data for this specific variation
-                            const rawImage = itemData?.image_url || itemData?.pivot?.image_url;
-                            const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
-                            const itemPrice = itemData?.pivot?.price ?? itemData?.price ?? itemData?.starting_price ?? 0;
-                            const itemName = itemData?.pivot?.item_name || itemData?.service_name || itemData?.name || selectedRow.label;
-                            const isOutOfStock = itemData?.is_available === 0 || itemData?.is_available === false || itemData?.status === 'out_of_stock';
-
-                            return (
-                              <div key={itemIdx} className={itemIdx > 0 ? 'pt-6 border-t-2 border-stone-100' : ''}>
-                                {/* Image Display */}
-                                {imageUrl && (
-                                  <div className="w-full h-48 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 mb-4">
-                                    <img src={imageUrl} alt="Item" className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-
-                                {/* Primary Details */}
-                                <div>
-                                  <div className="text-2xl font-black text-emerald-600 mb-1">
-                                    {itemPrice > 0 ? `₱${Number(itemPrice).toLocaleString(undefined, {minimumFractionDigits: 2})}` : 'Requires Quote'}
-                                  </div>
-                                  <div className="text-sm font-bold text-stone-800">
-                                    {itemName}
-                                  </div>
-
-                                  {/* Service Badges */}
-                                  {isService && (itemData?.is_rush || itemData?.requires_appointment || itemData?.is_appointment_required) && (
-                                    <div className="flex flex-wrap gap-2 mt-3">
-                                      {itemData?.is_rush && (
-                                        <span className="px-2 py-1 bg-amber-50 text-amber-600 text-[10px] font-black uppercase tracking-wider rounded-md border border-amber-200/60">
-                                          Rush
-                                        </span>
-                                      )}
-                                      {(itemData?.requires_appointment || itemData?.is_appointment_required) && (
-                                        <span className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wider rounded-md border border-indigo-200/60">
-                                          Appt Required
-                                        </span>
-                                      )}
+                        <div className="space-y-4">
+                          {isService && itemsToRender.map((item, idx) => (
+                            <div key={idx} className="space-y-4 flex flex-col h-full">
+                              {item.image ? (
+                                <img
+                                  src={item.image.startsWith('http') ? item.image : `/storage/${item.image}`}
+                                  alt={item.service_name || 'Service'}
+                                  className="w-full h-48 object-cover rounded-xl bg-stone-100"
+                                />
+                              ) : (
+                                <div className="w-full h-48 rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm font-medium">
+                                  No Image
+                                </div>
+                              )}
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-2xl font-black text-emerald-600">₱{Number(item.price || 0).toFixed(2)}</p>
+                                  {(item.rush_service_available || item.is_rush || item.rush_service_available === 1) && (
+                                    <div className="flex items-center gap-1 text-xs font-semibold text-amber-500 bg-amber-50 px-2 py-1 rounded-full w-fit">
+                                      <Zap size={12} fill="currentColor" /> Rush Available
                                     </div>
                                   )}
                                 </div>
-
-                                {/* Specifics Grid */}
-                                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100 mt-4">
-                                  {isService ? (
-                                    <>
-                                      <div>
-                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Duration</span>
-                                        <span className="text-sm font-semibold text-stone-700">{itemData?.duration || itemData?.duration_days || 'Standard'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Checkout</span>
-                                        <span className="text-sm font-semibold text-stone-700">{itemData?.checkout_type === 'fixed_price' ? 'Fixed Price' : 'Requires Quote'}</span>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div>
-                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Unit</span>
-                                        <span className="text-sm font-semibold text-stone-700">{itemData?.pivot?.unit || itemData?.unit || 'Item'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Status</span>
-                                        <span className={`text-sm font-bold ${isOutOfStock ? 'text-rose-500' : 'text-emerald-600'}`}>
-                                          {isOutOfStock ? 'Out of Stock' : (itemData?.status || 'In Stock')}
-                                        </span>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-
-                                {/* Notes Section */}
-                                {(itemData?.notes || itemData?.pivot?.notes || itemData?.service_description) && (
-                                  <div className="pt-4 border-t border-stone-100 mt-4">
-                                    <span className="block text-[10px] font-bold text-stone-400 uppercase mb-1">Notes / Description</span>
-                                    <p className="text-sm text-stone-600 italic">
-                                      {itemData?.notes || itemData?.pivot?.notes || itemData?.service_description}
-                                    </p>
-                                  </div>
-                                )}
+                                <p className="font-bold text-stone-800 mt-1">{item.service_name || item.item_name}</p>
                               </div>
-                            );
-                          })}
+                              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100">
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Duration</p>
+                                  <p className="text-sm font-semibold text-stone-700 mt-1">{item.duration_days || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Checkout</p>
+                                  <p className="text-sm font-semibold text-stone-700 mt-1 capitalize">{item.checkout_type?.replace('_', ' ') || 'N/A'}</p>
+                                </div>
+                              </div>
+                              {item.notes && (
+                                <div className="pt-4 border-t border-stone-100">
+                                  <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Notes</p>
+                                  <p className="text-sm text-stone-600 mt-1">{item.notes}</p>
+                                </div>
+                              )}
+                              <div className="pt-6 mt-auto">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (callbacks.onPlaceOrder) {
+                                      // Pass shop and service ID (not entire item object)
+                                      callbacks.onPlaceOrder(shop, item.id);
+                                    }
+                                  }}
+                                  className="w-full py-3 px-4 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white font-bold rounded-xl shadow-sm hover:opacity-90 hover:shadow-md transition-all active:scale-[0.98]"
+                                >
+                                  Order This
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {!isService && (
+                            <div className="space-y-4">
+                              {itemsToRender.map((item, idx) => {
+                                // Prefer pivot values (shop-specific) for attributes, fall back to raw
+                                const pivot = item?.pivot || item?.meta?.pivot || null;
+                                const rawFromCell = cell?.meta?.raw || {};
+
+                                const rawImage = pivot?.image_url || item?.image || item?.image_url || rawFromCell.image_url || rawFromCell.pivot?.image_url || rawFromCell.attribute?.image_url;
+                                const imageUrl = rawImage ? (String(rawImage).startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
+
+                                const itemPrice = Number(pivot?.price ?? item?.price ?? cell?.meta?.price ?? rawFromCell.pivot?.price ?? 0);
+                                const title = pivot?.item_name || item?.item_name || item?.name || cell?.meta?.itemName || rawFromCell.pivot?.item_name || rawFromCell.name || cell.displayValue;
+                                const notes = pivot?.notes || item?.notes || rawFromCell.notes || rawFromCell.pivot?.notes;
+
+                                return (
+                                  <div key={`${shop.id}-mat-${idx}`} className="space-y-4 flex flex-col h-full relative">
+                                    <div className="absolute top-6 right-6">
+                                      <p className="text-2xl font-black text-emerald-600 bg-white/90 px-3 py-1 rounded-xl shadow">₱{Number(pivot?.price || item?.price || cell?.meta?.price || rawFromCell.pivot?.price || itemPrice || 0).toFixed(2)}</p>
+                                    </div>
+
+                                    {imageUrl ? (
+                                      <img
+                                        src={imageUrl}
+                                        alt={title || 'Material'}
+                                        className="w-full h-48 object-cover rounded-xl bg-stone-100"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-48 rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm font-medium">
+                                        No Image
+                                      </div>
+                                    )}
+
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-base font-bold text-stone-800 truncate">{title}</p>
+                                      </div>
+                                      <p className="text-sm text-stone-600 mt-1">{cell.displayValue}</p>
+
+                                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100">
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Unit</p>
+                                          <p className="text-sm font-semibold text-stone-700 mt-1">{pivot?.unit_name || pivot?.unit || item?.unit || item?.unit_name || rawFromCell.pivot?.unit_name || rawFromCell.unit || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Availability</p>
+                                          <p className="text-sm font-semibold text-stone-700 mt-1">{(pivot?.is_available ?? item?.is_available ?? rawFromCell.pivot?.is_available ?? rawFromCell.is_available) ? 'Available' : 'Unavailable'}</p>
+                                          {((pivot?.stock_quantity ?? pivot?.stock_qty ?? item?.stock_quantity ?? rawFromCell.pivot?.stock_quantity ?? rawFromCell.stock_quantity) !== undefined) && (
+                                            <p className="text-xs text-stone-500 mt-1">Stock: {pivot?.stock_quantity ?? pivot?.stock_qty ?? item?.stock_quantity ?? rawFromCell.pivot?.stock_quantity ?? rawFromCell.stock_quantity}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {notes && (
+                                        <div className="pt-4 border-t border-stone-100">
+                                          <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Notes</p>
+                                          <p className="text-sm text-stone-600 mt-1">{notes}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

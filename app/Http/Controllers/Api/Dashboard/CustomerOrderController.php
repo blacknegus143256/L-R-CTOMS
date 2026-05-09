@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\OrderMeasurement;
+use App\Models\OrderStatus as OrderStatusLookup;
 use App\Models\TailoringShop;
 use App\Notifications\OrderUpdatedNotification;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +17,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
+use App\Models\OrderService;
 
 class CustomerOrderController extends Controller
 {
@@ -23,6 +26,40 @@ class CustomerOrderController extends Controller
     private function authorizeCustomerAccess($user, $order)
     {
         return $user->id === $order->user_id;
+    }
+
+    private function syncOrderMeasurements(Order $order, array $measurements): void
+    {
+        $requestUnit = request()?->input('unit');
+
+        // Remove any measurements that the customer did not submit in this update
+        $submittedNames = array_map(function ($m) {
+            return $m['name'];
+        }, $measurements);
+
+        if (!empty($submittedNames)) {
+            $order->measurements()->whereNotIn('measurement_name', $submittedNames)->delete();
+        } else {
+            // If none submitted, clear all
+            $order->measurements()->delete();
+        }
+
+        foreach ($measurements as $measurement) {
+            $unit = $measurement['unit'] ?? $requestUnit ?? $measurement['measurement_unit'] ?? $measurement['uom'] ?? null;
+
+            if (is_string($unit)) {
+                $unit = trim($unit);
+                $unit = $unit !== '' ? $unit : null;
+            }
+
+            OrderMeasurement::updateOrCreate([
+                'order_id' => $order->id,
+                'measurement_name' => $measurement['name'],
+            ], [
+                'measurement_value' => (string) $measurement['value'],
+                'unit' => $unit,
+            ]);
+        }
     }
 
     /**
@@ -47,22 +84,24 @@ class CustomerOrderController extends Controller
 
         $valid = $request->validate([
             'service_id' => 'required|integer|exists:services,id',
-            'style_tag' => 'nullable|string|max:255',
             'material_source' => 'required|in:customer,shop',
+            'is_rush' => 'nullable|boolean',
+            'rush_fee' => 'nullable|numeric|min:0',
             'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
-            'measurement_type' => ['required', 'string', 'in:profile,scheduled,none'],
-            'material_dropoff_date' => 'required|date|after_or_equal:today',
             'attributes' => 'nullable|array',
 
             'attributes.*' => 'integer|exists:attribute_types,id',
             'notes' => 'nullable|string',
         ]);
 
-        $valid['measurement_type'] = Order::normalizeMeasurementType($valid['measurement_type'] ?? null);
-
-        if (!in_array($valid['measurement_type'], [Order::MEASUREMENT_TYPE_PROFILE, Order::MEASUREMENT_TYPE_SCHEDULED, Order::MEASUREMENT_TYPE_NONE], true)) {
-            return response()->json(['message' => 'Invalid measurement type selected.'], 422);
-        }
+        $measurementType = $request->input('measurement_type') ?? $request->input('measurement_preference');
+            $fitMethodName = match (strtolower((string) $measurementType)) {
+                'profile', 'self_measured', 'self_measure' => 'Self-Measured',
+                'scheduled', 'workshop_fitting', 'in_shop' => 'In-Shop Fitting',
+                'home_visit' => 'Home Visit',
+            default => 'No Measurement Required',
+        };
+        $fitMethodId = \App\Models\FitMethod::where('name', $fitMethodName)->value('id');
 
         // Handle image upload
         if ($request->hasFile('design_image')) {
@@ -86,8 +125,10 @@ class CustomerOrderController extends Controller
             ], 422);
         }
 
-        // Calculate total price: service price + attribute prices
+        $isRush = $request->boolean('is_rush');
+        $rushFee = $isRush ? (float) $request->input('rush_fee', 0) : 0.0;
         $totalPrice = $service->price;
+
         $attributesData = [];
 
         if (!empty($valid['attributes'])) {
@@ -102,8 +143,12 @@ class CustomerOrderController extends Controller
                 $attrPrice = $shopAttr ? $shopAttr->pivot->price : 0;
                 $totalPrice += $attrPrice;
 
+                if (! $shopAttr) {
+                    continue;
+                }
+
                 $attributesData[] = [
-                    'attribute_type_id' => $attributeId,
+                    'shop_attribute_id' => $shopAttr->pivot->id,
                     'price' => $attrPrice,
                 ];
             }
@@ -113,34 +158,46 @@ class CustomerOrderController extends Controller
         $orderData = [
             'tailoring_shop_id' => $shop->id,
             'customer_id' => $customer->id,
-            'service_id' => $valid['service_id'],
-            'style_tag' => $valid['style_tag'] ?? null,
+            'fit_method_id' => $fitMethodId,
             'material_source' => $valid['material_source'],
             'design_image' => $valid['design_image'] ?? null,
-            'measurement_type' => $valid['measurement_type'],
-            'material_dropoff_date' => $valid['material_dropoff_date'],
         ];
 
-        // Legacy snapshot removed - using new JSON measurement system
-        $orderData['measurement_preference'] = $valid['measurement_preference'] ?? null;
+        $initialStatusName = ($valid['material_source'] === 'customer') ? 'Awaiting Materials' : 'Pending';
+        $orderData['order_status_id'] = OrderStatusLookup::idByName($initialStatusName)
+            ?? OrderStatusLookup::idByName('Requested');
+        $orderData['is_rush'] = $isRush;
+        $orderData['rush_fee'] = $rushFee;
+        $orderData['total_amount'] = (float) $totalPrice + $rushFee;
 
-        $orderData['status'] = ($valid['material_source'] === 'customer') ? 'Awaiting Materials' : 'Pending';
-
-        $orderData['total_price'] = $totalPrice;
+        // total_price moved to order_services; do not store on orders table
         $orderData['notes'] = $valid['notes'] ?? null;
 
         $order = Order::create($orderData);
+
+        // Ensure total_amount is saved even if not mass-assignable in model fillable.
+        $order->forceFill([
+            'total_amount' => (float) $totalPrice + $rushFee,
+        ])->save();
 
         // Create order items
         foreach ($attributesData as $attrData) {
             OrderItem::create([
                 'order_id' => $order->id,
-                'attribute_type_id' => $attrData['attribute_type_id'],
+                'shop_attribute_id' => $attrData['shop_attribute_id'],
                 'price' => $attrData['price'],
             ]);
         }
 
-        $order->load(['customer:id,name,phone,email', 'service:id,service_name,price', 'items.attribute']);
+        // Attach service as order service to lock in price and quantity
+        OrderService::create([
+            'order_id' => $order->id,
+            'service_id' => $valid['service_id'],
+            'quantity' => (int) $request->input('quantity', 1),
+            'price' => $service->price,
+        ]);
+
+        $order->load(['customer:id,name,phone,email', 'appointments', 'orderServices.service:id,service_name,price', 'items.shopAttribute.attributeType']);
 
         if ($shop->user) {
             $shop->user->notify(new OrderUpdatedNotification(
@@ -212,8 +269,14 @@ class CustomerOrderController extends Controller
         $orders = Order::with([
             'customer:id,name,phone,email',
             'service:id,service_name,price',
+            'fitMethod',
             'tailoringShop:id,shop_name',
-            'items.attribute'
+            'appointments',
+            'payment.status',
+            'status',
+            'measurements',
+            'items.shopAttribute',
+            'items.shopAttribute.attributeType.attributeCategory',
         ])
         ->whereIn('customer_id', $customerIds)
         ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
@@ -245,12 +308,17 @@ class CustomerOrderController extends Controller
             'customer:id,name,phone,email,address',
             'service:id,service_name,price,service_description',
             'service.serviceCategory:id,name',
+            'fitMethod',
+            'appointments',
+            'payment.status',
+            'status',
+            'measurements',
             'attributes' => function ($q) {
                 $q->with('attributeCategory:id,name')
                   ->withPivot('price', 'unit', 'notes');
             },
             'tailoringShop',
-            'items.attribute.attributeCategory:id,name',
+            'items.shopAttribute.attributeType.attributeCategory',
             'images'
         ]);
 
@@ -301,27 +369,14 @@ class CustomerOrderController extends Controller
         'submitted_measurements' => 'required|array',
         'submitted_measurements.*.name' => 'required|string',
         'submitted_measurements.*.value' => 'required|numeric|min:0',
+        'submitted_measurements.*.unit' => 'nullable|string|max:50',
+        'measurements_taken' => 'sometimes|boolean',
     ]);
 
-    $snapshot = $order->measurement_snapshot ?? [];
+    $this->syncOrderMeasurements($order, $validated['submitted_measurements']);
 
-    // ✅ Ensure requested exists
-    if (!isset($snapshot['requested']) || !is_array($snapshot['requested'])) {
-        abort(422, 'No measurements were requested for this order.');
-    }
-
-    // ✅ Map cleanly (name => value)
-    $submitted = [];
-
-    foreach ($validated['submitted_measurements'] as $measure) {
-        $submitted[$measure['name']] = $measure['value'];
-    }
-
-    $snapshot['submitted'] = $submitted;
-
-    $order->update([
-        'measurement_snapshot' => $snapshot
-    ]);
+    // Reload persisted measurements so subsequent responses include the latest values
+    $order->load('order_measurements');
 
     if ($order->tailoringShop?->user) {
         // Anti-spam throttle: Check for duplicate notifications within 5 minutes
@@ -387,15 +442,13 @@ class CustomerOrderController extends Controller
             'submitted_measurements' => 'nullable|array',
             'submitted_measurements.*.name' => 'required_with:submitted_measurements|string',
             'submitted_measurements.*.value' => 'required_with:submitted_measurements|numeric|min:0',
+            'submitted_measurements.*.unit' => 'nullable|string|max:50',
             'status' => 'sometimes|in:Confirmed'
         ]);
 
-        $snapshot = $order->measurement_snapshot ?? [];
-
         $measurementType = strtolower((string) ($order->measurement_type ?? ''));
         $requiresCustomerMeasurements = in_array($measurementType, ['profile', 'self_measured'], true);
-        $requestedMeasurements = is_array($snapshot['requested'] ?? null) ? $snapshot['requested'] : [];
-        $alreadySubmitted = is_array($snapshot['submitted'] ?? null) && count($snapshot['submitted']) > 0;
+        $alreadySubmitted = $order->measurements()->exists();
 
         if ($requiresCustomerMeasurements && !$alreadySubmitted) {
             if (!isset($validated['submitted_measurements']) || count($validated['submitted_measurements']) === 0) {
@@ -406,32 +459,8 @@ class CustomerOrderController extends Controller
         }
 
         if (!empty($validated['submitted_measurements'])) {
-            $submittedByName = [];
-            foreach ($validated['submitted_measurements'] as $measurement) {
-                $submittedByName[$measurement['name']] = $measurement['value'];
-            }
-
-            if ($requiresCustomerMeasurements && !empty($requestedMeasurements)) {
-                $requestedNames = collect($requestedMeasurements)
-                    ->map(fn ($item) => is_array($item) ? ($item['name'] ?? null) : null)
-                    ->filter()
-                    ->values()
-                    ->all();
-
-                    $missing = array_values(array_diff($requestedNames, array_keys($submittedByName)));
-                    if (!empty($missing)) {
-                        return response()->json([
-                            'message' => 'Unable to confirm this quote yet.'
-                        ], 422);
-                    }
-            }
-
-            $snapshot['submitted'] = $submittedByName;
+            $this->syncOrderMeasurements($order, $validated['submitted_measurements']);
         }
-
-        $order->update([
-            'measurement_snapshot' => $snapshot
-        ]);
 
         $shopUser = $order->tailoringShop?->user;
         if ($shopUser) {
@@ -474,7 +503,7 @@ class CustomerOrderController extends Controller
         $combinedNotes = $existingNotes !== '' ? ($declineNote . "\n\n" . $existingNotes) : $declineNote;
 
         $order->update([
-            'status' => 'Declined',
+            'order_status_id' => OrderStatusLookup::idByName('Declined'),
             'notes' => $combinedNotes,
         ]);
 
@@ -552,10 +581,12 @@ class CustomerOrderController extends Controller
             'customer:id,name,phone,email,address',
             'service:id,service_name,price,service_description',
             'service.serviceCategory:id,name',
+            'fitMethod',
+            'appointments',
             'tailoringShop.user.profile',
             'tailoringShop.attributes',
-            'items.attribute',
-            'items.attribute.attributeCategory:id,name',
+            'items.shopAttribute',
+            'items.shopAttribute.attributeType.attributeCategory',
             'images',
             'reworkRequest',
             'logs.user:id,name,role'

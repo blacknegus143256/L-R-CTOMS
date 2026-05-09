@@ -19,8 +19,8 @@ const OrderHeatmap = ({ weeklyOrders = [], onDayFilter = () => {}, selectedDay =
             return orderDayIndex === day.index;
         });
 
-        const rushOrders = orders.filter(order => Boolean(order.rush_order));
-        const regularOrders = orders.filter(order => !order.rush_order);
+        const rushOrders = orders.filter(order => Boolean(order.is_rush ?? order.rush_order));
+        const regularOrders = orders.filter(order => !Boolean(order.is_rush ?? order.rush_order));
 
         return {
             ...day,

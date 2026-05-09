@@ -11,14 +11,13 @@ import { FiX, FiAlertCircle } from 'react-icons/fi';
 import Logistics from './OrderWizard/Logistics.jsx';
 import OrderSummary from './OrderWizard/OrderSummary.jsx';
 
-export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
+export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onSuccess }) {
   const { data, setData, post, processing, errors, reset } = useForm({
     service_id: '',
     style_tag: '',
     material_source: 'tailor_choice',
     design_image: null,
     measurement_preference: 'none',
-    measurement_date: '', // for workshop_fitting date
     attributes: [],
     notes: '',
   });
@@ -36,7 +35,8 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   const [measurementPreference, setMeasurementPreference] = useState('none');
   const [measurementDate, setMeasurementDate] = useState('');
   const [measurementTime, setMeasurementTime] = useState('');
-  const [rushOrder, setRushOrder] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [isRush, setIsRush] = useState(false);
   const [designImagePreview, setDesignImagePreview] = useState(null);
   const [designImageFile, setDesignImageFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -87,18 +87,25 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
 
   // Calculate total price
   const totalPrice = useMemo(() => {
-    let total = Number(service?.price) || 0;
-    
-    selectedAttributes.forEach(attrId => {
+    const normalizedQuantity = Math.max(1, Number(quantity) || 1);
+    const baseServicePrice = Number(service?.price) || 0;
+    const addonsSubtotal = selectedAttributes.reduce((sum, attrId) => {
       const attr = shop?.attributes?.find(a => a.pivot?.id == attrId);
-      const qty = attributeQuantities[attrId] || 1;
-      if (attr?.pivot?.price) {
-        total += Number(attr.pivot.price) * qty;
+      const qty = Number(attributeQuantities[attrId] || 1);
+
+      if (!attr?.pivot?.price) {
+        return sum;
       }
-    });
+
+      return sum + (Number(attr.pivot.price) * qty);
+    }, 0);
+
+    // Keep flat fees additive after multiplying per-order costs.
+    const flatFees = 0;
+    const total = ((baseServicePrice + addonsSubtotal) * normalizedQuantity) + flatFees;
     
     return total;
-  }, [service?.price, selectedAttributes, attributeQuantities, shop?.attributes]);
+  }, [service?.price, quantity, selectedAttributes, attributeQuantities, shop?.attributes]);
 
   // Check user profile on mount
   useEffect(() => {
@@ -136,6 +143,7 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
   useEffect(() => {
     if (selectedServiceId) {
       setSelectedAttributes([]);
+      setQuantity(1);
       setNotes(''); // Clear notes for the NEW service
       setError(null);
     }
@@ -150,7 +158,6 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
     setData('style_tag', styleTag);
     setData('material_source', materialSource);
     setData('measurement_preference', measurementPreference);
-    setData('material_dropoff_date', materialDropoffDate);
     setData('notes', notes);
     setData('attributes', selectedAttributes);
     if (designImageFile) {
@@ -191,7 +198,8 @@ export default function OrderModal({ shop, isOpen, onClose, onSuccess }) {
       setMeasurementPreference('none');
       setMeasurementDate('');
       setMeasurementTime('');
-      setRushOrder(false);
+      setQuantity(1);
+      setIsRush(false);
       setMaterialDropoffDate('');
       setMaterialDropoffTime('');
       setSelectedAttributes([]);
@@ -291,11 +299,23 @@ const toggleAttribute = (attrId) => {
     setError(null);
     setLoading(true);
 
-    const scheduledDate = measurementPreference === 'workshop_fitting'
+    const isScheduledFitting = ['in_shop', 'home_visit', 'workshop_fitting'].includes(measurementPreference);
+    const fitMethodNameMap = {
+      self_measure: 'Self-Measured',
+      in_shop: 'In-Shop Fitting',
+      home_visit: 'Home Visit',
+      none: 'No Measurement Required',
+    };
+    const targetFitMethodName = fitMethodNameMap[measurementPreference];
+    const selectedFitMethod = targetFitMethodName
+      ? fitMethods.find((method) => method.name === targetFitMethodName)
+      : null;
+
+    const scheduledDate = isScheduledFitting
       ? (measurementDate || materialDropoffDate)
       : '';
 
-    const scheduledTime = measurementPreference === 'workshop_fitting'
+    const scheduledTime = isScheduledFitting
       ? (measurementTime || materialDropoffTime)
       : '';
 
@@ -304,17 +324,24 @@ const toggleAttribute = (attrId) => {
         ? `${scheduledDate} ${scheduledTime}:00`
         : null;
 
-    const payloadDate = measurementPreference === 'workshop_fitting'
+    const payloadDate = isScheduledFitting
       ? scheduledDate
       : materialSource === 'customer'
         ? materialDropoffDate
         : null;
 
-    const payloadTimeStart = measurementPreference === 'workshop_fitting'
+    const payloadTimeStart = isScheduledFitting
       ? scheduledTime
       : materialSource === 'customer'
         ? materialDropoffTime
         : null;
+
+    const normalizedQuantity = Math.max(1, Number(quantity) || 1);
+    const multipliedAttributeQuantities = selectedAttributes.reduce((acc, attrId) => {
+      const baseAddonQty = Number(attributeQuantities[attrId] || 1);
+      acc[attrId] = baseAddonQty * normalizedQuantity;
+      return acc;
+    }, {});
 
     // --- 2. PREPARE MULTIPART DATA ---
     const submissionData = {
@@ -323,23 +350,31 @@ const toggleAttribute = (attrId) => {
       style_tag: styleTag,
       material_source: materialSource,
       measurement_preference: measurementPreference,
-      
+      fit_method_id: selectedFitMethod ? selectedFitMethod.id : null,
+
       // PERFECTLY MATCH THE LARAVEL DATABASE ENUM:
-      measurement_type: measurementPreference === 'workshop_fitting' ? 'scheduled' : (measurementPreference === 'none' ? 'none' : 'profile'),
-      
+      measurement_type:
+        measurementPreference === 'self_measure'
+          ? 'profile'
+          : (isScheduledFitting ? 'scheduled' : 'none'),
+
       measurement_date: formattedMeasurementDate,
-      
+
       // EXPLICITLY ADD THIS LINE:
       material_dropoff_date: materialDropoffDate,
       material_dropoff_time: materialDropoffTime,
       measurement_time: measurementTime,
       date: payloadDate,
       time_start: payloadTimeStart,
-      
+
       notes: notes,
-      rush_order: rushOrder,
+
+      // Ensure backend receives a real boolean for rush.
+      is_rush: Boolean(isRush), // send both keys to match controller expectations
+
+      quantity: normalizedQuantity,
       attributes: selectedAttributes,
-      attribute_quantities: attributeQuantities,
+      attribute_quantities: multipliedAttributeQuantities,
       design_image: designImageFile,
     };
 
@@ -385,8 +420,11 @@ const toggleAttribute = (attrId) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-auto rounded-xl bg-white shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-auto rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between border-b border-stone-200 p-6">
           <div>
@@ -395,9 +433,21 @@ const toggleAttribute = (attrId) => {
             </h2>
             <div className="flex gap-2 mt-1 flex-wrap">
               {['Service', 'Design', 'Material', 'Logistics', 'Fit', 'Review'].map((label, index) => (
-                <span key={index} className={`px-2 py-1 rounded-full text-xs ${step === index ? 'bg-amber-100 text-amber-800 font-semibold' : 'bg-stone-100 text-stone-500'}`}>
+                <button
+                  key={index}
+                  onClick={() => index <= step && setStep(index)}
+                  disabled={index > step}
+                  className={`px-3.5 py-2 rounded-full text-xs font-medium transition-all ${
+                    step === index 
+                      ? 'bg-amber-100 text-amber-800 font-semibold shadow-md' 
+                      : index < step
+                        ? 'bg-stone-100 text-stone-600 cursor-pointer hover:bg-stone-200 hover:scale-105 active:scale-95'
+                        : 'bg-stone-100 text-stone-400 cursor-not-allowed opacity-60'
+                  }`}
+                  title={index < step ? `Jump to ${label}` : index > step ? 'Complete previous steps first' : 'Current step'}
+                >
                   {label}
-                </span>
+                </button>
               ))}
             </div>
 
@@ -447,8 +497,8 @@ const toggleAttribute = (attrId) => {
                       service={service}
                       styleTag={styleTag} 
                       setStyleTag={setStyleTag}
-                      rushOrder={rushOrder}
-                      setRushOrder={setRushOrder}
+                      isRush={isRush}
+                      setIsRush={setIsRush}
                       designImagePreview={designImagePreview}
                       setDesignImageFile={setDesignImageFile}
                       handleDesignImage={handleDesignImage}
@@ -497,10 +547,14 @@ const toggleAttribute = (attrId) => {
                 4: <FitLogistics 
                       service={service}
                       shop={shop}
+                      auth={auth}
+                      materialSource={materialSource}
+                      materialDropoffDate={materialDropoffDate}
+                      setMaterialDropoffDate={setMaterialDropoffDate}
+                      materialDropoffTime={materialDropoffTime}
+                      setMaterialDropoffTime={setMaterialDropoffTime}
                       measurementPreference={measurementPreference}
                       setMeasurementPreference={setMeasurementPreference}
-                      materialDropoffDate={materialDropoffDate}
-                      materialDropoffTime={materialDropoffTime}
                       measurementDate={measurementDate}
                       setMeasurementDate={setMeasurementDate}
                       measurementTime={measurementTime}
@@ -520,10 +574,12 @@ const toggleAttribute = (attrId) => {
                       materialDropoffDate={materialDropoffDate}
                       materialDropoffTime={materialDropoffTime}
                       notes={notes}
-                      rushOrder={rushOrder}
+                      isRush={isRush}
                       selectedAttributes={selectedAttributes}
                       attributeQuantities={attributeQuantities}
                       designImagePreview={designImagePreview}
+                      quantity={quantity}
+                      setQuantity={setQuantity}
                       totalPrice={totalPrice}
                       onSubmit={handleSubmit}
                       loading={loading}
