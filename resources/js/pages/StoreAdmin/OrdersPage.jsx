@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { usePage, router, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import StatusBadge from '@/Components/Orders/StatusBadge';
@@ -31,7 +31,9 @@ const getOrderTotal = (order) => {
 export default function OrdersPage() {
 const { props } = usePage();
     const shop = props.shop;
-    const orders = props.orders || []; // Directly use fresh Inertia data
+    const rawOrders = props.orders || [];
+    // Safely extract the array whether backend sends a paginator object or a raw array
+    const ordersList = Array.isArray(rawOrders) ? rawOrders : (rawOrders?.data || []);
 
     
     const [showAppointmentModal, setShowAppointmentModal] = useState(false);
@@ -41,8 +43,69 @@ const { props } = usePage();
     const [showMeasurementRequestModal, setShowMeasurementRequestModal] = useState(false);
     const [measurementFields, setMeasurementFields] = useState(['']);
 
-    const [filterStatus, setFilterStatus] = useState('All');
-    const [sortBy, setSortBy] = useState('newest');
+    // Prevent Laravel empty arrays [] from exposing Array.prototype.sort to useState
+    const filters = (props.filters && !Array.isArray(props.filters)) ? props.filters : {};
+
+    const [filterStatus, setFilterStatus] = useState(typeof filters.status === 'string' ? filters.status : 'All');
+    const [sortBy, setSortBy] = useState(typeof filters.sort === 'string' ? filters.sort : 'newest');
+
+    const [searchTerm, setSearchTerm] = useState(typeof filters.search === 'string' ? filters.search : '');
+
+    const escapeRegExp = (s = '') => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const highlightMatch = (text, term) => {
+        if (!term) return text;
+        const t = String(term).trim();
+        if (t === '') return text;
+        const escaped = escapeRegExp(t);
+        const parts = String(text).split(new RegExp(`(${escaped})`, 'ig'));
+        return parts.map((part, i) => {
+            if (part.toLowerCase() === t.toLowerCase()) {
+                return (
+                    <span key={i} className="bg-amber-100 text-amber-800 px-1 rounded">{part}</span>
+                );
+            }
+            return <span key={i}>{part}</span>;
+        });
+    };
+
+    // Keep local state in sync when server-provided filters change
+    React.useEffect(() => {
+        setFilterStatus(filters?.status || 'All');
+        setSortBy(filters?.sort || 'newest');
+        setSearchTerm(filters?.search || '');
+    }, [JSON.stringify(filters)]);
+
+    const applyFilters = (newFilters = {}) => {
+        const merged = Object.assign({}, filters, newFilters);
+        // reset to first page when applying new filters unless page provided
+        if (!Object.prototype.hasOwnProperty.call(merged, 'page')) {
+            merged.page = 1;
+        }
+        router.get(
+            route('store.orders.page', props.shopId),
+            merged,
+            { preserveState: true, preserveScroll: true, replace: true }
+        );
+    };
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+    };
+
+    const executeSearch = () => {
+        router.get(
+            route('store.orders.page', props.shopId),
+            { ...filters, search: searchTerm, page: 1 },
+            { preserveState: true, preserveScroll: true, replace: true }
+        );
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            executeSearch();
+        }
+    };
 
     const isRecentlyUpdated = (order) => {
         if (!order?.updated_at || !order?.created_at) return false;
@@ -52,51 +115,18 @@ const { props } = usePage();
         );
     };
     
-        const filteredOrders = orders.filter(o => {
-            const paymentStatus = normalizePaymentStatus(o.payment_status);
-            if (filterStatus === 'All') return true;
-            if (filterStatus === 'Requested') return ['Requested'].includes(o.status);
-            if (filterStatus === 'Quoted') return ['Quoted'].includes(o.status);
-            if (filterStatus === 'Confirmed') return ['Confirmed'].includes(o.status);
-            if (filterStatus === 'Pending Payment') return o.status === 'Confirmed' && paymentStatus === 'Pending';
-            if (filterStatus === 'Ready for Production') return o.status === 'Ready for Production';
-            if (filterStatus === 'Ready to Pick Up') return ['Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status);
-            if (filterStatus === 'Rush') return !!o.is_rush;
-            if (filterStatus === 'In Progress') return ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status);
-            if (filterStatus === 'Completed') return o.status === 'Completed';
-            return true;
-        });
-
-        const sortedOrders = [...filteredOrders].sort((a, b) => {
-            if (sortBy === 'oldest') {
-                return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-            }
-            if (sortBy === 'due-soon') {
-                const aDue = a.expected_completion_date ? new Date(a.expected_completion_date).getTime() : Number.MAX_SAFE_INTEGER;
-                const bDue = b.expected_completion_date ? new Date(b.expected_completion_date).getTime() : Number.MAX_SAFE_INTEGER;
-                return aDue - bDue;
-            }
-            if (sortBy === 'price-high') {
-                return Number(getOrderTotal(b)) - Number(getOrderTotal(a));
-            }
-            if (sortBy === 'price-low') {
-                return Number(getOrderTotal(a)) - Number(getOrderTotal(b));
-            }
-
-            return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-        });
     
         const stats = {
-            all: orders.length,
-            requested: orders.filter(o => o.status === 'Requested').length,
-            quoted: orders.filter(o => o.status === 'Quoted').length,
-            confirmed: orders.filter(o => o.status === 'Confirmed').length,
-            pendingPayment: orders.filter(o => o.status === 'Confirmed' && normalizePaymentStatus(o.payment_status) === 'Pending').length,
-            readyForProduction: orders.filter(o => o.status === 'Ready for Production').length,
-            readyToPickUp: orders.filter(o => ['Ready forPickup', 'Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status)).length,
-            rush: orders.filter(o => o.is_rush).length,
-            inProgress: orders.filter(o => ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status)).length,
-            completed: orders.filter(o => o.status === 'Completed').length,
+            all: ordersList.length,
+            requested: ordersList.filter(o => o.status === 'Requested').length,
+            quoted: ordersList.filter(o => o.status === 'Quoted').length,
+            confirmed: ordersList.filter(o => o.status === 'Confirmed').length,
+            pendingPayment: ordersList.filter(o => o.status === 'Confirmed' && normalizePaymentStatus(o.payment_status) === 'Pending').length,
+            readyForProduction: ordersList.filter(o => o.status === 'Ready for Production').length,
+            readyToPickUp: ordersList.filter(o => ['Ready forPickup', 'Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status)).length,
+            rush: ordersList.filter(o => o.is_rush).length,
+            inProgress: ordersList.filter(o => ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status)).length,
+            completed: ordersList.filter(o => o.status === 'Completed').length,
         };
     
         const tabs = [
@@ -198,7 +228,7 @@ const { props } = usePage();
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
-                                onClick={() => setFilterStatus(tab.id)}
+                                onClick={() => { setFilterStatus(tab.id); applyFilters({ status: tab.id, page: 1 }); }}
                                 className={`flex items-center gap-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                                     filterStatus === tab.id ? 'border-indigo-500 text-indigo-600 bg-indigo-50' : 'border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50'
                                 }`}
@@ -211,35 +241,89 @@ const { props } = usePage();
                         ))}
                     </div>
 
-                    <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-end">
-                        <label className="text-xs font-bold text-stone-500 mr-2">Sort by</label>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="text-xs font-bold border border-stone-200 rounded-lg px-2.5 py-1.5 bg-white text-stone-700"
-                        >
-                            <option value="newest">Newest</option>
-                            <option value="oldest">Oldest</option>
-                            <option value="due-soon">Due Soon</option>
-                            <option value="price-high">Price: High to Low</option>
-                            <option value="price-low">Price: Low to High</option>
-                        </select>
+                    <div className="px-4 py-3 border-b border-stone-200">
+                        <div className="flex flex-col sm:flex-row justify-between items-center mb-0 gap-4">
+                            <div className="relative w-full sm:w-80 flex gap-2">
+                                <div className="relative flex-1">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg className="h-5 w-5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Search Order ID or Customer..."
+                                        value={searchTerm}
+                                        onChange={handleSearchChange}
+                                        onKeyDown={handleKeyDown}
+                                        className="block w-full pl-10 pr-10 py-2 border border-stone-300 rounded-xl text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    />
+                                    {searchTerm ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSearchTerm('');
+                                                router.get(route('store.orders.page', props.shopId), { ...filters, search: '', page: 1 }, { preserveState: true, preserveScroll: true, replace: true });
+                                            }}
+                                            className="absolute inset-y-0 right-0 pr-2 flex items-center text-stone-400 hover:text-stone-600"
+                                            title="Clear search"
+                                        >
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    ) : null}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={executeSearch}
+                                    className="px-4 py-2 bg-stone-800 text-white text-sm font-bold rounded-xl hover:bg-stone-900 transition-colors"
+                                >
+                                    Search
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-stone-500">Sort by</span>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => { setSortBy(e.target.value); applyFilters({ sort: e.target.value, page: 1 }); }}
+                                    className={`text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white ${sortBy !== 'newest' ? 'border border-indigo-200 text-indigo-600' : 'border border-stone-200 text-stone-700'}`}
+                                >
+                                    <option value="newest">Newest</option>
+                                    <option value="oldest">Oldest</option>
+                                    <option value="due-soon">Due Soon</option>
+                                    <option value="price-high">Price: High to Low</option>
+                                    <option value="price-low">Price: Low to High</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Orders List */}
                     <div className="p-6">
-                        {filteredOrders.length === 0 ? (
+                        {ordersList.length === 0 ? (
                             <div className="rounded-xl border border-stone-200 bg-stone-50 p-12 text-center">
                                 <p className="text-stone-500">No orders found.</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {sortedOrders.map(order => {
+                                {ordersList.map(order => {
     const paymentStatus = normalizePaymentStatus(order.payment_status);
     const isFullyCleared = order.status === 'Confirmed' && paymentStatus === 'Paid';
     const latestLog = order.latest_log || order.latestLog || null;
     const latestActor = latestLog?.user?.name || 'System';
     const latestTime = latestLog?.created_at ? dayjs(latestLog.created_at).fromNow() : '';
+
+    const isExactMatch = (() => {
+        if (!searchTerm) return false;
+        const s = String(searchTerm).trim().toLowerCase();
+        if (!s) return false;
+        if (String(order.id) === s) return true;
+        const name = (order.user?.name || order.customer?.name || '').toLowerCase();
+        if (name === s) return true;
+        return false;
+    })();
 
     return (
 <div 
@@ -248,7 +332,7 @@ const { props } = usePage();
             isFullyCleared
                 ? 'border-emerald-300 bg-gradient-to-r from-emerald-50/70 to-white ring-1 ring-emerald-200'
                 : 'border-stone-200 hover:border-indigo-300'
-        }`}
+        } ${isExactMatch ? 'ring-2 ring-amber-300' : ''}`}
     >
         {/* 1. Left Section: Thumbnail & Core Info */}
         <div className="flex items-center gap-4 w-full lg:w-auto flex-1 min-w-0">
@@ -271,7 +355,7 @@ const { props } = usePage();
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
                     <span className="px-2.5 py-0.5 bg-stone-100 text-stone-600 font-black text-[10px] uppercase tracking-widest rounded-md">
-                        Order #{order.id}
+                        Order #{highlightMatch(order.id, searchTerm)}
                     </span>
                     <span className="text-[10px] font-bold text-stone-400">
                         {order.created_at ? new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
@@ -299,7 +383,7 @@ const { props } = usePage();
                 </h3>
                 <p className="text-xs font-bold text-stone-500 truncate flex items-center gap-1">
                     <span className="w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-[10px] shrink-0">👤</span>
-                    {order.customer?.name || order.user?.name || 'Unknown Customer'}
+                    {order.customer?.name ? highlightMatch(order.customer.name, searchTerm) : (order.user?.name ? highlightMatch(order.user.name, searchTerm) : 'Unknown Customer')}
                 </p>
                 {latestLog && (
                     <p className="mt-1 text-[11px] text-stone-500 truncate">
@@ -386,6 +470,32 @@ const { props } = usePage();
                         )}
                     </div>
                 </div>
+
+                {/* Pagination Controls */}
+                {rawOrders?.links && (rawOrders.data?.length > 0) && (
+                    <div className="mt-8 flex items-center justify-between border-t border-stone-200 pt-6">
+                        <div className="text-sm text-stone-600 font-medium">
+                            Showing <span className="font-bold text-stone-900">{rawOrders.from || 0}</span> to <span className="font-bold text-stone-900">{rawOrders.to || 0}</span> of <span className="font-bold text-stone-900">{rawOrders.total}</span> orders
+                        </div>
+                        <div className="flex gap-2">
+                            {rawOrders.links.map((link, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => link.url && router.get(link.url, {}, { preserveScroll: true, preserveState: true })}
+                                    disabled={!link.url}
+                                    className={`px-4 py-2 text-sm font-bold rounded-lg border transition-colors ${
+                                        link.active
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                            : link.url
+                                                ? 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50'
+                                                : 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                                    }`}
+                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Modals */}
                 {/* ViewDetailsModal removed - using dedicated workspace page */}

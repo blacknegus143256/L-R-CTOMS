@@ -945,7 +945,7 @@ class OrderController extends Controller
             $order,
             $user?->id,
             'quote_submitted',
-            'Tailor submitted quote for order #' . $order->id . '. Total: G�' . number_format((float) $updateData['total_amount'], 2)
+            'Tailor submitted quote for order #' . $order->id . '. Total: ₱' . number_format((float) $updateData['total_amount'], 2)
         );
 
         // Notify the customer that quote has been sent

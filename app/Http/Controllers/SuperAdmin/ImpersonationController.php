@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -18,7 +18,7 @@ class ImpersonationController extends Controller
     /**
      * Impersonate a user (only super_admin can do this)
      */
-    public function impersonate(User $user)
+    public function impersonate(Request $request, User $user)
     {
         if (!Auth::check() || Auth::user()->role !== 'super_admin') {
             throw new AuthorizationException('Only super admins can impersonate users.');
@@ -40,7 +40,16 @@ class ImpersonationController extends Controller
 
         Log::info("AUDIT: Super Admin [ID: {$adminId}] initiated impersonation of User [ID: {$user->id}, Name: {$user->name}] at " . now());
 
-        return redirect()->intended('/dashboard')->with('success', "Impersonating {$user->name}");
+        $redirectTo = $request->input('redirect_to', '/dashboard');
+        if (!is_string($redirectTo)) {
+            $redirectTo = '/dashboard';
+        } elseif (!str_starts_with($redirectTo, '/')) {
+            $redirectTo = '/dashboard';
+        } elseif (str_starts_with($redirectTo, '//')) {
+            $redirectTo = '/dashboard';
+        }
+
+        return redirect()->intended($redirectTo)->with('success', "Impersonating {$user->name}");
     }
 
     /**

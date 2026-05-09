@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AlertModal from '@/Components/AlertModal.jsx';
+import ReportModal from '@/Components/ReportModal';
 import { buildMapUrl } from '@/utils/map';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
@@ -71,7 +72,9 @@ export default function OrderWorkspace({ auth, order }) {
         setCustomerMeasurements(pendingMeasures);
     }, [currentOrder, setCustomerMeasurements]);
     const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' });
+    const reportInitialDetails = `Regarding Order #${currentOrder.id}: `;
 
     useEffect(() => {
         if (requestedTab === 'rework') {
@@ -312,6 +315,12 @@ const handleAcceptQuote = (e) => {
                             >
                                 Visit Shop →
                             </Link>
+                            <button
+                                onClick={() => setIsReportModalOpen(true)}
+                                className="text-xs font-bold text-rose-600 hover:text-rose-800 underline ml-2"
+                            >
+                                Report Issue with Order
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -563,6 +572,15 @@ const handleAcceptQuote = (e) => {
                 />
             </div>
             </div>
+
+            <ReportModal
+                isOpen={isReportModalOpen}
+                onClose={() => setIsReportModalOpen(false)}
+                reportedId={currentOrder.shop?.user?.id || currentOrder.tailoringShop?.user?.id}
+                shopId={currentOrder.shop?.id || currentOrder.tailoringShop?.id}
+                orderId={currentOrder.id}
+                initialDetails={reportInitialDetails}
+            />
         </AuthenticatedLayout>
     );
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Info, UserRound, ShoppingBag, CheckCircle2, ImageOff, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function MaterialSourcing({ 
   service, 
@@ -15,16 +16,23 @@ export default function MaterialSourcing({
 }) {
   if (!service) return null;
 
+  const [expandedCategories, setExpandedCategories] = React.useState({});
+
+  const toggleCategory = (categoryName) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [categoryName]: !prev[categoryName],
+    }));
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 md:p-8">
       <h3 className="text-xl font-bold text-stone-800 mb-6">Material Selection</h3>
 
       {/* Move 1: The Handshake Info Card */}
       <div className="mb-8 p-6 bg-stone-900/5 border border-stone-200 rounded-3xl backdrop-blur-md">
           <h4 className="font-bold text-stone-900 mb-2 flex items-center gap-2">
-            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <Info className="w-5 h-5 text-emerald-600" />
             How it works
           </h4>
           <p className="text-stone-600 text-sm leading-relaxed">
@@ -50,9 +58,7 @@ export default function MaterialSourcing({
             : 'border-stone-200 hover:border-emerald-400 bg-white'
           }`}>
             <div className="w-16 h-16 mb-4 bg-stone-100 rounded-2xl flex items-center justify-center">
-              <svg className="w-8 h-8 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+              <UserRound className="w-8 h-8 text-stone-600" />
             </div>
             <h4 className="font-bold text-stone-800">I have my own items</h4>
             <p className="text-xs text-stone-500 mt-2">Bring your own fabric or repair items to the shop</p>
@@ -75,9 +81,7 @@ export default function MaterialSourcing({
             : 'border-stone-200 hover:border-emerald-400 bg-white'
           }`}>
             <div className="w-16 h-16 mb-4 bg-emerald-100 rounded-2xl flex items-center justify-center">
-              <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+              <ShoppingBag className="w-8 h-8 text-emerald-600" />
             </div>
             <h4 className="font-bold text-stone-800">Avail from the Shop</h4>
 <p className="text-xs text-stone-500 mt-2">Purchase from our premium fabrics and stock (Added to total cost)</p>
@@ -114,45 +118,83 @@ export default function MaterialSourcing({
             <div className="space-y-8">
               {Object.entries(groupedMaterials).map(([categoryName, items]) => (
                 <div key={categoryName} className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                  <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-4">
-                    {categoryName}
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(categoryName)}
+                    className="w-full flex items-center justify-between gap-3 mb-4 text-left"
+                  >
+                    <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest">
+                      {categoryName}
+                    </h4>
+                    <span className="text-[10px] font-black uppercase text-stone-500 flex items-center gap-1">
+                      <ChevronRight className={`w-3 h-3 transition-transform ${expandedCategories[categoryName] ? 'rotate-90' : ''}`} />
+                      {expandedCategories[categoryName] ? 'Hide' : 'Show'}
+                    </span>
+                  </button>
+
+                  {expandedCategories[categoryName] && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     {items.map(attr => {
                       const uniqueId = attr.pivot?.id;
                       const isSelected = selectedAttributes.includes(uniqueId);
+
+                      let displayName = attr.pivot?.item_name || attr.name || 'Shop Item';
+                      const price = Number(attr.pivot?.price || attr.price || 0);
+                      const unit = attr.pivot?.unit || attr.unit || 'unit';
+                      const categoryName = attr.attributeCategory?.name || attr.attribute_category?.name || 'Option';
+
+                      if (displayName.includes(' - ')) {
+                        const parts = displayName.split(' - ');
+                        if (parts[0].trim() === parts[1].trim()) displayName = parts[0].trim();
+                      }
+
+                      const imageSource = attr.pivot?.image_url || attr.image_url;
+
                       return (
                         <div key={uniqueId} className="flex flex-col gap-2 p-2">
-<button
-    type="button"
-    onClick={() => toggleAttribute(uniqueId)}
-    className={`p-4 text-left rounded-2xl border-2 transition-all w-full flex items-center gap-4 ${
-        isSelected 
-        ? 'border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100' 
-        : 'border-stone-100 hover:border-indigo-200 bg-white'
-    }`}
->
-    {attr.pivot?.image_url ? (
-        <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-stone-200 shadow-sm bg-white">
-            <img src={`/storage/${attr.pivot.image_url}`} alt={attr.pivot?.item_name || attr.name} className="w-full h-full object-cover" />
-        </div>
-    ) : (
-        <div className="w-20 h-20 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center flex-shrink-0 text-xs font-black text-stone-400">
-            N/A
-        </div>
-    )}
-    <div className="flex-1">
-        <span className="block font-black text-stone-800 text-lg leading-tight mb-1">
-            {attr.pivot?.item_name || attr.name}
-        </span>
-        <span className="block text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2">
-            {attr.name}
-        </span>
-        <span className="block text-sm font-black text-stone-700 bg-white inline-block px-2 py-1 rounded-lg border border-stone-100">
-            +₱{attr.pivot?.price || 0} <span className="text-stone-400 font-bold text-xs">per {attr.pivot?.unit || 'unit'}</span>
-        </span>
-    </div>
-</button>
+                          <button
+                            type="button"
+                            onClick={() => toggleAttribute(uniqueId)}
+                            className={`p-3 rounded-2xl border-2 transition-all w-full flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 ${
+                              isSelected
+                                ? 'border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100'
+                                : 'border-stone-100 hover:border-indigo-200 bg-white'
+                            }`}
+                          >
+                            {imageSource ? (
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden flex-shrink-0 border border-stone-200 shadow-sm bg-white">
+                                <img src={`/storage/${imageSource}`} alt={displayName} className="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center flex-shrink-0 text-[10px] font-black uppercase text-stone-400">
+                                <ImageOff className="w-5 h-5" />
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0 text-left">
+                              <span className="block text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1">
+                                {categoryName}
+                              </span>
+                              <span className="block font-black text-stone-800 text-base sm:text-lg leading-tight mb-2 truncate">
+                                {displayName}
+                              </span>
+                              {price > 0 ? (
+                                <span className="inline-flex text-sm font-black text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-100 shadow-sm">
+                                  +₱{price.toLocaleString(undefined, { minimumFractionDigits: 2 })}{' '}
+                                  <span className="text-emerald-600/70 font-bold text-xs">per {unit}</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex text-xs font-bold text-stone-500 bg-stone-100 px-2.5 py-1 rounded-lg">
+                                  Included
+                                </span>
+                              )}
+                            </div>
+
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-indigo-500 bg-indigo-500' : 'border-stone-300'}`}>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                            </div>
+                          </button>
+
                           {isSelected && (
                             <input
                               type="number"
@@ -170,13 +212,13 @@ export default function MaterialSourcing({
                                 }
                               }}
                               className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm font-bold"
-/>
-
+                            />
                           )}
                         </div>
                       );
                     })}
                   </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -187,7 +229,7 @@ export default function MaterialSourcing({
       {/* Success Message for "Own Material" */}
       {materialSource === 'customer' && (
         <div className="mb-8 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
-          <span className="text-xl">✅</span>
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
           <p className="text-sm text-emerald-800 font-medium">
             Great! On the next page, you will pick the date you'll bring your items to the shop.
           </p>
@@ -201,7 +243,7 @@ export default function MaterialSourcing({
           onClick={onBack}
           className="flex-1 rounded-2xl border border-stone-300 py-4 font-bold text-stone-600 hover:bg-stone-50 transition-all"
         >
-          ← Back
+          <span className="inline-flex items-center justify-center gap-2"><ChevronLeft className="w-4 h-4" /> Back</span>
         </button>
         <button
           type="button"
@@ -209,7 +251,7 @@ export default function MaterialSourcing({
           disabled={!canNext}
           className="flex-1 rounded-2xl bg-emerald-600 py-4 font-bold text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50 transition-all"
         >
-          Next: Drop-off Date →
+          <span className="inline-flex items-center justify-center gap-2">Next: Drop-off Date <ChevronRight className="w-4 h-4" /></span>
         </button>
       </div>
     </div>

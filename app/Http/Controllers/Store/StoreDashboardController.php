@@ -520,6 +520,118 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             ->with('success', 'Measurement request updated successfully.');
     }
 
+    /**
+     * Display all orders for the authenticated shop with search, status, and sort filtering.
+     */
+    public function ordersIndex(Request $request, $shopId = null)
+    {
+        $userId = Auth::id();
+        
+        // If no shopId provided, redirect to the shop's orders page
+        if (!$shopId) {
+            $shop = TailoringShop::where('user_id', $userId)->first();
+            if ($shop) {
+                return redirect()->route('store.orders.page', ['shopId' => $shop->id]);
+            }
+            return redirect()->route('store.dashboard');
+        }
+
+        // Verify the shop belongs to the authenticated user
+        $shop = TailoringShop::with(['attributes.attributeCategory'])->findOrFail($shopId);
+        if ($shop->user_id !== $userId) {
+            abort(403, 'Unauthorized. You can only view orders for your own shop.');
+        }
+
+        // Build the base query
+        $query = Order::where('tailoring_shop_id', $shopId)
+            ->with([
+                'user.profile',
+                'customer',
+                'service.serviceCategory',
+                'items.shopAttribute.attributeType.attributeCategory',
+                'tailoringShop',
+                'latestLog.user:id,name,role',
+            ]);
+
+        // Apply Status Filter if provided
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Apply Search Filter (Searching Order ID or User Name)
+        if ($request->filled('search')) {
+            $searchTerm = '%' . $request->search . '%';
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('id', 'like', $searchTerm)
+                  ->orWhereHas('user', function ($subQ) use ($searchTerm) {
+                      $subQ->where('name', 'like', $searchTerm);
+                  });
+            });
+        }
+
+        // --- SMART SEARCH RELEVANCE RANKING ---
+        // If searching, prioritize exact matches first, then "starts with", then everything else.
+        if ($request->filled('search')) {
+            $cleanSearch = trim((string) $request->search);
+            $startsWith = $cleanSearch . '%';
+
+            $query->orderByRaw(
+                "
+                    CASE
+                        WHEN orders.id = ? THEN 1
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM users
+                            WHERE users.id = orders.user_id
+                              AND users.name = ?
+                        ) THEN 2
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM users
+                            WHERE users.id = orders.user_id
+                              AND users.name LIKE ?
+                        ) THEN 3
+                        WHEN orders.id LIKE ? THEN 4
+                        ELSE 5
+                    END ASC
+                ",
+                [$cleanSearch, $cleanSearch, $startsWith, $startsWith]
+            );
+        }
+
+        // Apply Sorting (server-side only)
+        $sort = $request->input('sort', 'newest');
+
+        // Only apply default Rush priority if they specifically want "Newest" and aren't searching
+        if ($sort === 'newest' && ! $request->filled('search')) {
+            $query->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
+                  ->latest();
+        } elseif ($sort === 'oldest') {
+            $query->oldest();
+        } elseif ($sort === 'due-soon') {
+            // Put null dates at the bottom, sort closest dates to the top
+            $query->orderByRaw('expected_completion_date IS NULL ASC')
+                  ->orderBy('expected_completion_date', 'asc');
+        } elseif ($sort === 'price-high') {
+            $query->orderBy('total_price', 'desc');
+        } elseif ($sort === 'price-low') {
+            $query->orderByRaw('total_price IS NULL ASC')
+                  ->orderBy('total_price', 'asc');
+        } else {
+            $query->latest(); // Fallback
+        }
+
+        // Paginate with query string parameters preserved
+        $orders = $query->paginate(10)->withQueryString();
+
+        return Inertia::render('StoreAdmin/OrdersPage', [
+            'shopId' => $shopId,
+            'shop' => $shop,
+            'orders' => $orders,
+            'filters' => $request->only(['search', 'status', 'sort']),
+        ]);
+    }
+
     private function checkReadyForProduction(Order $order): void
     {
         $currentStatus = $order->status instanceof \BackedEnum

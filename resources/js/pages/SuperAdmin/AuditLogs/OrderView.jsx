@@ -1,9 +1,25 @@
 import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+
+const order_statuses = {
+    requested: { label: 'Requested', color: 'bg-stone-100 text-stone-800' },
+    quoted: { label: 'Quoted', color: 'bg-amber-100 text-amber-800' },
+    confirmed: { label: 'Confirmed', color: 'bg-blue-100 text-blue-800' },
+    in_progress: { label: 'In Progress', color: 'bg-indigo-100 text-indigo-800' },
+    ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-emerald-100 text-emerald-800' },
+    completed: { label: 'Completed', color: 'bg-green-100 text-green-800' },
+    cancelled: { label: 'Cancelled', color: 'bg-rose-100 text-rose-800' },
+};
 
 export default function AuditLogOrderView({ auth, order }) {
     const logs = Array.isArray(order?.logs) ? order.logs : [];
+
+    const handleDeepImpersonate = (userId, destinationUrl) => {
+        if (!confirm('Impersonate this user and jump to their view of this order?')) return;
+
+        router.post(route('super.impersonate', userId), { redirect_to: destinationUrl });
+    };
 
     const formatTimestamp = (value) => {
         if (!value) return 'N/A';
@@ -33,22 +49,53 @@ export default function AuditLogOrderView({ auth, order }) {
                     <span className="text-sm font-black text-stone-800">Order #{order?.id}</span>
                 </div>
 
-                <div className="grid md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                         <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Status</p>
-                        <p className="text-sm font-bold text-stone-900 mt-1">{order_statuses?.name || 'N/A'}</p>
+                        <p className="text-sm font-bold text-stone-900 mt-1">
+                            {order_statuses[order?.status]?.label || order?.status || 'N/A'}
+                        </p>
                     </div>
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                         <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Payment</p>
                         <p className="text-sm font-bold text-stone-900 mt-1">{order?.payment_status || 'N/A'}</p>
                     </div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                        <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Customer</p>
-                        <p className="text-sm font-bold text-stone-900 mt-1">{order?.customer?.name || order?.user?.name || 'N/A'}</p>
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col items-start">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-1">Customer</span>
+                        <span className="font-bold text-stone-900">{order.customer?.name || order.user?.name || 'Customer Juan'}</span>
+                        {(order.customer?.user_id || order.user_id) && (
+                            <button
+                                onClick={() => handleDeepImpersonate(order.customer?.user_id || order.user_id, `/my-orders/${order.id}`)}
+                                className="mt-2 text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                            >
+                                <span>👁️</span> View as Customer
+                            </button>
+                        )}
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col items-start">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-1">Tailoring Shop</span>
+                        <span className="font-bold text-stone-900">{order.shop?.shop_name || 'N/A'}</span>
+                        <span className="text-xs text-stone-500">{order.shop?.user?.name || ''}</span>
+                        {order.shop?.user_id && (
+                            <button
+                                onClick={() => handleDeepImpersonate(order.shop.user_id, `/store/order/${order.id}`)}
+                                className="mt-2 text-[10px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                            >
+                                <span>👁️</span> View as Shop
+                            </button>
+                        )}
                     </div>
                     <div className="rounded-xl border border-stone-200 bg-white p-4">
                         <p className="text-[11px] uppercase tracking-wider text-stone-500 font-black">Service</p>
-                        <p className="text-sm font-bold text-stone-900 mt-1">{order?.service?.service_name || 'N/A'}</p>
+                        <p className="text-sm font-bold text-stone-900 mt-1 truncate" title={order?.orderServices?.[0]?.service?.service_name}>
+                            {order?.orderServices?.[0]?.service?.service_name || 'Custom Service'}
+                        </p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-1">Total Price</span>
+                        <span className="font-bold text-stone-900">
+                            {order?.total_price ? `₱${parseFloat(order.total_price).toLocaleString('en-US', {minimumFractionDigits: 2})}` : 'Pending Quote'}
+                        </span>
                     </div>
                 </div>
 

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { Zap } from 'lucide-react';
+import { Zap, Flag, ChevronRight, CalendarDays, Ruler, ImageOff, ArrowLeft, MapPin, Phone, Package } from 'lucide-react';
+import ReportModal from '@/Components/ReportModal';
 import { buildMapUrl } from '@/utils/map';
 import { Link, usePage, router } from "@inertiajs/react";
 import { Head } from '@inertiajs/react';
@@ -14,6 +15,30 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
     const [showOrderForm, setShowOrderForm] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isMobileLibraryOpen, setIsMobileLibraryOpen] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState({});
+
+    const formatCurrency = (value) => `₱${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+    const normalizeDisplayName = (value, fallback = 'Shop Item') => {
+        let displayName = value || fallback;
+
+        if (displayName.includes(' - ')) {
+            const parts = displayName.split(' - ');
+            if (parts[0].trim() === parts[1].trim()) {
+                displayName = parts[0].trim();
+            }
+        }
+
+        return displayName;
+    };
+
+    const toggleCategory = (category) => {
+        setExpandedCategories((prev) => ({
+            ...prev,
+            [category]: !prev[category],
+        }));
+    };
 
     useEffect(() => {
         if (url.includes('order=true')) setShowOrderForm(true);
@@ -40,12 +65,12 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                 
                 <div className="max-w-7xl mx-auto relative z-10">
                     <Link href="/" className="inline-flex items-center gap-2 text-orchid-blue font-bold text-sm mb-8 hover:text-orchid-purple transition-all">
-                        <span className="text-lg">←</span> Back to Discovery
+                        <ArrowLeft className="w-4 h-4" /> Back to Discovery
                     </Link>
                     
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                         <div>
-<div className="flex items-center gap-4 mb-4">
+    <div className="flex items-center gap-4 mb-4">
     <div className="w-16 h-16 rounded-2xl overflow-hidden bg-stone-100 shrink-0 border border-stone-200 shadow-inner flex items-center justify-center">
 {(shop.logo_url || shop.user?.profile?.avatar_url) ? (
             <img src={`/storage/${shop.logo_url || shop.user?.profile?.avatar_url}`} alt={shop.shop_name} className="w-full h-full object-cover" />
@@ -53,14 +78,25 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
             <span className="text-2xl font-black text-stone-300 uppercase">{(shop.user?.name || shop.shop_name)?.charAt(0) || 'S'}</span>
         )}
     </div>
-    <h1 className="text-5xl font-black text-white tracking-tighter">{shop.shop_name}</h1>
+    <div className="flex items-center gap-3">
+        <h1 className="text-5xl font-black text-white tracking-tighter">{shop.shop_name}</h1>
+        {auth?.user && auth.user.id !== shop.user?.id && (
+            <button
+                onClick={() => setShowReportModal(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white/6 hover:bg-white/10 text-white/90 text-sm font-semibold border border-white/10"
+            >
+                <Flag className="w-4 h-4" />
+                Report
+            </button>
+        )}
+    </div>
 </div>
                             
                             {/* New Contact & Location Info */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-6">
                                 {/* Location */}
                                 <div className="flex items-center gap-2 text-orchid-blue/90 font-medium">
-                                    <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                        <MapPin className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                                     {(() => {
                                         const mapUrl = buildMapUrl(shop.user?.profile?.latitude, shop.user?.profile?.longitude);
                                         return mapUrl ? (
@@ -82,7 +118,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                                 
                                 {/* Phone */}
                                 <div className="flex items-center gap-2 text-orchid-blue/90 font-medium">
-                                    <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                                    <Phone className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                                     <span>{shop.user?.profile?.phone || "No phone provided"}</span>
                                 </div>
                             </div>
@@ -134,6 +170,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
         const category = s.service_category || s.serviceCategory;
         const isRepair = category?.slug?.includes('repairs') || category?.slug?.includes('alterations');
         const categoryName = category?.name || 'Custom';
+    const displayName = normalizeDisplayName(s.service_name, 'Service');
         // Normalize image source: support full URLs, already-prefixed '/storage/...', or raw filenames
         const rawImage = s.image || s.image_url || s.service_image;
         let imageSrc;
@@ -156,7 +193,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
             <div className="h-48 w-full relative overflow-hidden bg-stone-100 shrink-0">
                     <img
                         src={imageSrc}
-                        alt={s.service_name}
+                        alt={displayName}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         onError={(e) => {
                             e.target.onerror = null;
@@ -177,10 +214,10 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
             <div className="p-6 flex flex-col flex-1">
                     <div className="flex justify-between items-start mb-2 gap-4">
                         <h4 className="text-xl font-bold text-stone-900 group-hover:text-orchid-blue transition-colors leading-tight line-clamp-2">
-                            {s.service_name}
+                            {displayName}
                         </h4>
                     <span className="text-2xl font-black text-emerald-600 shrink-0">
-                            ₱{Number(s.price).toFixed(0)}
+                            {formatCurrency(s.price)}
                         </span>
                 </div>
                 {s.rush_service_available && (
@@ -193,16 +230,12 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                 {/* Measurement Preference Badge */}
                 {s.appointment_required ? (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-blue-200">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+                        <CalendarDays className="w-3 h-3" />
                         Appointment Required
                     </span>
                 ) : (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-amber-200">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
-                        </svg>
+                        <Ruler className="w-3 h-3" />
                         Self-Measure Available
                     </span>
                 )}
@@ -226,7 +259,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                     className="w-full py-3.5 bg-stone-50 hover:bg-orchid-50 text-stone-600 hover:text-orchid-700 font-bold rounded-xl transition-colors flex justify-center items-center gap-2 border border-stone-200 hover:border-orchid-200 mt-auto"
                 >
                         Create Order
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                        <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
             
@@ -241,30 +274,50 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                     <h2 className="text-3xl font-black text-stone-900 mb-8 pl-2">Customization Library</h2>
                     {shop.attributes && shop.attributes.length > 0 ? (
                         <div className="space-y-16">
-                            {Object.entries(
+                                {Object.entries(
                                 shop.attributes.reduce((acc, attr) => {
                                     const catName = attr.attribute_category?.name || attr.attributeCategory?.name || 'Uncategorized';
-                                    const typeName = attr.name || 'Generic';
+                                    let typeName = attr.name || 'Generic';
+                                    if (typeName.includes(' - ')) {
+                                        const parts = typeName.split(' - ');
+                                        if (parts[0].trim() === parts[1].trim()) {
+                                            typeName = parts[0].trim();
+                                        }
+                                    }
                                     if (!acc[catName]) acc[catName] = {};
                                     if (!acc[catName][typeName]) acc[catName][typeName] = [];
                                     acc[catName][typeName].push(attr);
                                     return acc;
                                 }, {})
-                            ).map(([category, types]) => (
+                            ).map(([category, types]) => {
+                                const isExpanded = expandedCategories[category];
+
+                                return (
                                 <div key={category} className="space-y-8 bg-white/40 p-6 sm:p-8 rounded-3xl border border-stone-200/60 shadow-sm">
                                     {/* Category Header */}
-                                    <h4 className="text-3xl font-black text-stone-800 border-b-2 border-stone-200/50 pb-4 flex items-center gap-4">
-                                        <span className="w-3 h-10 bg-emerald-400 rounded-full shadow-sm"></span>
-                                        {category}
-                                    </h4>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCategory(category)}
+                                        className="w-full flex items-center justify-between gap-4 pb-4 border-b-2 border-stone-200/50"
+                                    >
+                                        <span className="text-3xl font-black text-stone-800 flex items-center gap-4 text-left">
+                                            <span className="w-3 h-10 bg-emerald-400 rounded-full shadow-sm"></span>
+                                            {category}
+                                        </span>
+                                        <span className="text-stone-500 text-[10px] font-black uppercase flex items-center gap-1">
+                                            <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                            {isExpanded ? 'Hide' : 'Show'}
+                                        </span>
+                                    </button>
                                     
                                     {/* Types Wrapper */}
+                                    {isExpanded && (
                                     <div className="space-y-10 pl-2 sm:pl-6">
                                         {Object.entries(types).map(([typeName, attrs]) => (
                                             <div key={typeName} className="space-y-6">
                                                 {/* Type Sub-Header */}
                                                 <h5 className="text-xl font-bold text-stone-700 flex items-center gap-3">
-                                                    <svg className="w-5 h-5 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
+                                                    <ChevronRight className="w-5 h-5 text-stone-400" />
                                                     {typeName}
                                                     <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200 ml-2 shadow-sm">
                                                         {attrs.length} ITEM{attrs.length !== 1 ? 'S' : ''}
@@ -273,51 +326,67 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
 
                                                 {/* Items Grid */}
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-                                                    {attrs.map((attr, idx) => (
-                                                        <div key={attr.pivot?.id || `${attr.id}-${idx}`} className="group bg-white border-2 border-stone-100 rounded-[1.5rem] overflow-hidden hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col hover:-translate-y-1">
-                                                            {/* Image */}
-                                                            <div className="h-40 bg-stone-100 relative overflow-hidden flex-shrink-0">
-                                                                {attr.pivot?.image_url ? (
-                                                                    <img 
-                                                                        src={`/storage/${attr.pivot.image_url}`} 
-                                                                        alt={attr.pivot?.item_name || attr.name} 
-                                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                                                                        onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
-                                                                    />
-                                                                ) : (
-                                                                    <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 bg-stone-100/50">
-                                                                        <span className="text-3xl mb-2 opacity-50">📷</span>
-                                                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">No Image</span>
+                                                    {attrs.map((attr, idx) => {
+                                                        let displayName = attr.pivot?.item_name || attr.name || 'Shop Item';
+                                                        if (displayName.includes(' - ')) {
+                                                            const parts = displayName.split(' - ');
+                                                            if (parts[0].trim() === parts[1].trim()) {
+                                                                displayName = parts[0].trim();
+                                                            }
+                                                        }
+
+                                                        const price = Number(attr.pivot?.price || attr.price || 0);
+                                                        const unit = attr.pivot?.unit || attr.unit || 'unit';
+                                                        const imageUrl = attr.pivot?.image_url || attr.image_url;
+
+                                                        return (
+                                                            <div key={attr.pivot?.id || `${attr.id}-${idx}`} className="group bg-white border-2 border-stone-100 rounded-[1.5rem] overflow-hidden hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col hover:-translate-y-1">
+                                                                {/* Image */}
+                                                                <div className="h-40 bg-stone-100 relative overflow-hidden flex-shrink-0">
+                                                                    {imageUrl ? (
+                                                                        <img 
+                                                                            src={`/storage/${imageUrl}`} 
+                                                                            alt={displayName} 
+                                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                                                                            onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 bg-stone-100/50">
+                                                                            <ImageOff className="w-8 h-8 mb-2 opacity-50" />
+                                                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">No Image</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {!attr.pivot?.is_available && (
+                                                                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+                                                                            <span className="px-3 py-1 bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full">Out of Stock</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                {/* Details Container */}
+                                                                <div className="p-4 bg-white flex-1 flex flex-col">
+                                                                    <h6 className="font-bold text-stone-900 text-sm mb-2 leading-tight line-clamp-2" title={displayName}>
+                                                                        {displayName}
+                                                                    </h6>
+                                                                    <div className="flex items-baseline gap-1 mt-auto pt-2">
+                                                                        <span className="font-black text-emerald-700">{formatCurrency(price)}</span>
+                                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">/ {unit}</span>
                                                                     </div>
-                                                                )}
-                                                                {!attr.pivot?.is_available && (
-                                                                    <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center">
-                                                                        <span className="px-4 py-1.5 bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">Out of Stock</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            {/* Details */}
-                                                            <div className="p-5 flex-1 flex flex-col">
-                                                                <h6 className="font-bold text-stone-900 text-base mb-3 leading-tight line-clamp-2">
-                                                                    {attr.pivot?.item_name || attr.name}
-                                                                </h6>
-                                                                <div className="flex items-end justify-between mt-auto pt-2 border-t border-stone-50">
-                                                                    <span className="font-black text-emerald-600 text-lg">₱{Number(attr.pivot?.price || 0).toFixed(2)}</span>
-                                                                    <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">/ {attr.pivot?.unit || 'unit'}</span>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
+                                    )}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="bg-white border-2 border-dashed border-stone-200 rounded-3xl p-12 flex flex-col items-center justify-center text-center">
-                            <span className="text-4xl mb-4 opacity-50">📦</span>
+                            <Package className="w-10 h-10 mb-4 opacity-50 text-stone-400" />
                             <h3 className="text-lg font-bold text-stone-700 mb-2">No Customization Items</h3>
                             <p className="text-stone-500">This shop hasn't added any fabrics or materials yet.</p>
                         </div>
@@ -347,6 +416,12 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                 fitMethods={fitMethods}
                 isOpen={showOrderForm}
                 onClose={() => setShowOrderForm(false)}
+            />
+            <ReportModal
+                isOpen={showReportModal}
+                onClose={() => setShowReportModal(false)}
+                reportedId={shop.user?.id}
+                shopId={shop.id}
             />
         </div>
     );

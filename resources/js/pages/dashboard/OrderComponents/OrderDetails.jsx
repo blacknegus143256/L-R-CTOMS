@@ -286,71 +286,61 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                             <div className="flex flex-col gap-3">
                                 {currentOrder.items && currentOrder.items.length > 0 ? (
                                     currentOrder.items.map((item, idx) => {
+                                        // 1. Identify the core Shop Attribute ID
+                                        const shopAttrId = item.pivot?.shop_attribute_id || item.shop_attribute_id || item.id;
+
+                                        // 2. Cross-reference the live catalog to get the real names
+                                        const catalogItem = availableShopAttributes?.find(a => a.pivot?.id === shopAttrId || a.id === shopAttrId);
+
+                                        // 3. Extract the math
                                         const qty = Number(item.quantity || item.pivot?.quantity || 1);
-                                        const shopAttribute = item.shopAttribute;
-                                        const unitPrice = Number(item.price || shopAttribute?.price || item.pivot?.price || 0);
-                                        const lineTotal = unitPrice * qty;
-                                        
-                                        // Complex material matching logic (preserved exactly)
-                                        const targetAttrId = parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id);
-                                        const targetPrice = Number(item.price || item.pivot?.price || 0);
-                                        
-                                        let exactShopItem = shopAttribute || availableShopAttributes.find(a => 
-                                            parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId && 
-                                            Number(a.price || a.pivot?.price || 0) === targetPrice
-                                        );
-                                        
-                                        if (!exactShopItem) {
-                                            exactShopItem = availableShopAttributes.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId);
+                                        const unitPrice = Number(item.price || item.pivot?.price || catalogItem?.pivot?.price || catalogItem?.price || 0);
+                                        const totalPrice = qty * unitPrice;
+
+                                        // 4. Extract the display names
+                                        let displayName = catalogItem?.pivot?.item_name || catalogItem?.item_name || item.shopAttribute?.item_name || catalogItem?.name || item.shopAttribute?.attribute?.name || 'Shop Item';
+                                        let categoryName = catalogItem?.attributeCategory?.name || catalogItem?.attribute_category?.name || item.shopAttribute?.attribute?.attributeCategory?.name || 'Add-on';
+                                        const unit = catalogItem?.pivot?.unit || catalogItem?.unit || item.unit || item.pivot?.unit || 'unit';
+
+                                        // 5. Clean up redundant double-names
+                                        if (displayName.includes(' - ')) {
+                                            const parts = displayName.split(' - ');
+                                            if (parts[0].trim() === parts[1].trim()) displayName = parts[0].trim();
                                         }
 
-                                        const customName = exactShopItem?.item_name || exactShopItem?.name;
-                                        const displayName = customName || item.attribute_name || 'Custom Add-on';
-                                        const notes = exactShopItem?.notes || '';
-                                        const unit = exactShopItem?.unit || 'unit';
-
-                                        const rawImage = exactShopItem?.image_url || item.image_path || item.image_url || null;
-                                        const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
+                                        if (displayName === categoryName) {
+                                            categoryName = 'Add-on';
+                                        }
 
                                         return (
-                                            <div key={idx} className="flex justify-between items-center p-4 bg-white border border-stone-200 rounded-2xl shadow-sm gap-4">
-                                                <div className="flex items-center gap-4">
-                                                    {imageUrl ? (
-                                                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-stone-100 flex-shrink-0 border border-stone-200">
-                                                            <img src={imageUrl} alt={displayName} className="w-full h-full object-cover" />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-16 h-16 rounded-xl bg-stone-50 flex items-center justify-center border border-stone-100 flex-shrink-0 text-stone-300 text-xs font-black">
-                                                            N/A
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                                                            {shopAttribute?.attributeType?.attributeCategory?.name || 'Specification'}
-                                                        </span>
-                                                        <span className="text-sm font-bold text-stone-800 block mb-1">
-                                                            {shopAttribute?.item_name || item.attribute_name || shopAttribute?.attributeType?.name || 'Custom Add-on'} - {displayName}
-                                                        </span>
-                                                        {notes && (
-                                                            <span className="text-[10px] font-medium text-stone-500 block mb-1 italic">
-                                                                Note: {notes}
-                                                            </span>
-                                                        )}
+                                            <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 p-5 bg-gradient-to-r from-emerald-50/40 to-white border border-emerald-100 rounded-2xl shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-150">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-1.5 block">
+                                                        {categoryName}
+                                                    </div>
+                                                    <div className="font-bold text-slate-900 text-base leading-tight mb-1.5 truncate">
+                                                        {displayName}
+                                                    </div>
+                                                    <div className="text-xs font-semibold tracking-wider leading-relaxed">
                                                         {unitPrice > 0 ? (
-                                                            <span className="text-xs text-stone-600 font-bold">
-                                                                ₱{unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2})} / {unit} <span className="text-stone-400 font-medium">× {qty}</span>
-                                                            </span>
+                                                            <div className="text-emerald-700">
+                                                                ₱{unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2})} per {unit} × {qty}
+                                                            </div>
                                                         ) : (
-                                                            <span className="text-xs font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100 inline-block">
+                                                            <div className="text-amber-700 font-bold bg-amber-50/70 px-2.5 py-1 rounded-lg border border-amber-200/50 inline-block">
                                                                 Pending Quote
-                                                            </span>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
+                                                
                                                 {unitPrice > 0 && (
-                                                    <span className="text-base font-black text-emerald-600 flex-shrink-0">
-                                                        ₱{lineTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                                                    </span>
+                                                    <div className="flex items-baseline gap-2 sm:justify-end">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Total</span>
+                                                        <span className="font-black text-emerald-700 text-2xl leading-none">
+                                                            ₱{totalPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
                                         );

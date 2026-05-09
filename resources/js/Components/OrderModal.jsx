@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { toast } from 'react-hot-toast';
@@ -44,6 +44,9 @@ export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onS
   const [profileCheckLoading, setProfileCheckLoading] = useState(true);
   const [profileComplete, setProfileComplete] = useState(true);
   const [selectedServiceId, setSelectedServiceId] = useState('');
+
+  // Scroll container ref: used to reset scroll when the modal step changes
+  const scrollContainerRef = useRef(null);
 
   const isDroppingOff = materialSource === 'customer';
   const { auth } = usePage().props; // Get auth data from Inertia
@@ -209,6 +212,18 @@ export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onS
       setError(null);
     }
   }, [isOpen]);
+
+  // Scroll to top whenever the step changes to ensure the user sees the top of the new step
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      try {
+        scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        // Fallback for environments that may not support smooth behavior
+        scrollContainerRef.current.scrollTop = 0;
+      }
+    }
+  }, [step]);
 
 const toggleAttribute = (attrId) => {
     setSelectedAttributes(prev => {
@@ -424,7 +439,7 @@ const toggleAttribute = (attrId) => {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-auto rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div ref={scrollContainerRef} className="mx-4 max-h-[90vh] w-full max-w-6xl overflow-auto rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between border-b border-stone-200 p-6">
           <div>

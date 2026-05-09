@@ -211,7 +211,6 @@ const hasRequestedMeasurements = orderMeasurements.length > 0;
 // If ANY row has a measurement_value, the customer has submitted data.
 const hasSubmittedMeasurements = orderMeasurements.some(m => m.measurement_value !== null && m.measurement_value !== undefined && m.measurement_value !== '');
     const hasRecordedMeasurementsForQuote = Boolean(currentOrder?.measurements_taken) || hasSubmittedMeasurements;
-    const requiresMeasurementBeforeQuote = fitMethodName !== 'No Measurement Required';
     const isMeasurementLocked = isCustomerMeasurementFlow
         ? hasRequestedMeasurements || hasSubmittedMeasurements
         : isInShopMeasurementFlow
@@ -294,11 +293,13 @@ const handleSendMeasurements = (e) => {
 };
 
     const handleSendQuote = async () => {
-        if (requiresMeasurementBeforeQuote && !hasRecordedMeasurementsForQuote && !hasRequestedMeasurements) {
+        const requiresRemoteMeasurements = fitMethodName === 'Self-Measured';
+
+        if (requiresRemoteMeasurements && !hasRecordedMeasurementsForQuote && !hasRequestedMeasurements) {
             setAlertConfig({
                 isOpen: true,
                 title: 'Missing Measurements',
-                message: 'You must either record the customer\'s measurements or send them a measurement request before issuing a financial quote.',
+                message: 'You must either record the customer\'s measurements or send them a measurement request before issuing a financial quote for a remote fitting.',
                 type: 'warning'
             });
             return;

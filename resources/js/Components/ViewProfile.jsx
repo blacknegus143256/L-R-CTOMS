@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, MapPin, ChevronRight, ImageOff, X, CalendarDays, Ruler } from 'lucide-react';
 import { buildMapUrl } from '@/utils/map';
 import { Link, usePage } from '@inertiajs/react';
 import useRequireAuth from '@/hooks/useRequireAuth';
@@ -12,6 +12,29 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [actionName, setActionName] = useState('');
+    const [expandedCategories, setExpandedCategories] = useState({});
+
+    const formatCurrency = (value) => `₱${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+    const normalizeDisplayName = (value, fallback = 'Shop Item') => {
+        let displayName = value || fallback;
+
+        if (displayName.includes(' - ')) {
+            const parts = displayName.split(' - ');
+            if (parts[0].trim() === parts[1].trim()) {
+                displayName = parts[0].trim();
+            }
+        }
+
+        return displayName;
+    };
+
+    const toggleCategory = (category) => {
+        setExpandedCategories((prev) => ({
+            ...prev,
+            [category]: !prev[category],
+        }));
+    };
     
     const requireAuth = useRequireAuth(setShowAuthModal, setActionName);
     
@@ -27,7 +50,14 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     // Safely group attributes
     const groupedAttributes = shop.attributes?.reduce((acc, attr) => {
         const catName = attr.attributeCategory?.name || attr.attribute_category?.name || 'Uncategorized';
-        const typeName = attr.name || 'Generic';
+        let typeName = attr.name || 'Generic';
+
+        if (typeName.includes(' - ')) {
+            const parts = typeName.split(' - ');
+            if (parts[0].trim() === parts[1].trim()) {
+                typeName = parts[0].trim();
+            }
+        }
 
         if (!acc[catName]) acc[catName] = {};
         if (!acc[catName][typeName]) acc[catName][typeName] = [];
@@ -48,7 +78,7 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                     onClick={onClose} 
                     className="absolute top-6 right-6 z-20 w-10 h-10 bg-white/50 hover:bg-white backdrop-blur-md rounded-full flex items-center justify-center text-stone-600 transition-all shadow-sm"
                 >
-                    ✕
+                    <X className="w-5 h-5" />
                 </button>
 
                 {/* Hero / Cover Section */}
@@ -73,10 +103,7 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                         <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight">{shop.shop_name}</h2>
                         
                         <div className="flex items-center gap-1.5 mt-2 mb-2">
-                            <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
+                            <MapPin className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                             {(() => {
                                 const mapUrl = buildMapUrl(shop.user?.profile?.latitude, shop.user?.profile?.longitude);
                                 return mapUrl ? (
@@ -107,14 +134,18 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                     <div className="mb-8">
                         <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest mb-4">Available Services</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-{shop.services && shop.services.length > 0 ? shop.services.map(service => (
+{shop.services && shop.services.length > 0 ? shop.services.map(service => {
+const displayName = normalizeDisplayName(service.service_name, 'Service');
+const price = Number(service.price || 0);
+
+return (
 <div key={service.id} className="border-2 border-stone-100 rounded-[1.5rem] overflow-hidden hover:border-orchid-200 transition-all bg-white group flex flex-col shadow-sm hover:shadow-lg hover:-translate-y-1">
     
     {/* Service Image Banner */}
     <div className="h-32 w-full relative bg-stone-100 overflow-hidden shrink-0">
         <img 
             src={(service.image || service.image_url || service.service_image) ? ((service.image || service.image_url || service.service_image).startsWith('http') ? (service.image || service.image_url || service.service_image) : `/storage/${service.image || service.image_url || service.service_image}`) : '/images/default-service.jpg'} 
-            alt={service.service_name}
+            alt={displayName}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             onError={(e) => {
                 e.target.onerror = null; 
@@ -132,9 +163,9 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     <div className="p-5 flex flex-col flex-1">
         <div className="flex justify-between items-start mb-1 gap-2">
             <h4 className="font-bold text-stone-800 text-lg leading-tight line-clamp-2 group-hover:text-orchid-600 transition-colors">
-                {service.service_name}
+                {displayName}
             </h4>
-            <span className="font-black text-emerald-600 shrink-0 text-lg">₱{Number(service.price).toFixed(2)}</span>
+            <span className="font-black text-emerald-600 shrink-0 text-lg">{formatCurrency(price)}</span>
         </div>
         {service.rush_service_available && (
           <div className="flex items-center gap-1 text-xs font-semibold text-amber-600 mt-1 mb-2">
@@ -146,16 +177,12 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
         {/* Measurement Preference Badge */}
         {service.appointment_required ? (
             <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-blue-200">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+                <CalendarDays className="w-3 h-3" />
                 Appointment Required
             </span>
         ) : (
             <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-amber-200">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
-                </svg>
+                <Ruler className="w-3 h-3" />
                 Self-Measure Available
             </span>
         )}
@@ -170,11 +197,12 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
             className="w-full mt-auto py-2.5 bg-stone-50 hover:bg-orchid-50 text-stone-600 hover:text-orchid-700 font-bold rounded-xl text-sm transition-colors flex justify-center items-center gap-2 border border-stone-100 hover:border-orchid-200"
         >
             Create Order
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+            <ChevronRight className="w-4 h-4" />
         </button>
     </div>
 </div>
-                )) : (
+);
+}) : (
                     <p className="text-sm text-stone-400 italic col-span-full">No services listed yet.</p>
                 )}
                         </div>
@@ -185,21 +213,35 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                         <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest mb-6">Available Materials & Items</h3>
                         {shop.attributes && shop.attributes.length > 0 ? (
                             <div className="space-y-12">
-                                {Object.entries(groupedAttributes).map(([category, types]) => (
+                                {Object.entries(groupedAttributes).map(([category, types]) => {
+                                    const isExpanded = expandedCategories[category];
+
+                                    return (
                                     <div key={category} className="space-y-8">
                                         {/* Category Header */}
-                                        <h4 className="text-2xl font-black text-stone-900 border-b-2 border-stone-100 pb-3 flex items-center gap-3">
-                                            <span className="w-2 h-8 bg-emerald-400 rounded-full"></span>
-                                            {category}
-                                        </h4>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCategory(category)}
+                                            className="w-full text-left flex items-center justify-between gap-3 border-b-2 border-stone-100 pb-3"
+                                        >
+                                            <span className="text-2xl font-black text-stone-900 flex items-center gap-3">
+                                                <span className="w-2 h-8 bg-emerald-400 rounded-full"></span>
+                                                {category}
+                                            </span>
+                                            <span className="text-stone-500 text-[10px] font-black uppercase flex items-center gap-1">
+                                                <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                                {isExpanded ? 'Hide' : 'Show'}
+                                            </span>
+                                        </button>
                                         
                                         {/* Types Wrapper */}
+                                        {isExpanded && (
                                         <div className="space-y-8 pl-2 sm:pl-4">
                                             {Object.entries(types).map(([typeName, attrs]) => (
                                                 <div key={typeName} className="space-y-4">
                                                     {/* Type Sub-Header */}
                                                     <h5 className="text-md font-bold text-stone-700 flex items-center gap-2">
-                                                        <svg className="w-4 h-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                        <ChevronRight className="w-4 h-4 text-stone-400" />
                                                         {typeName}
                                                         <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 ml-1">
                                                             {attrs.length} ITEM{attrs.length !== 1 ? 'S' : ''}
@@ -208,19 +250,35 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
 
                                                     {/* Items Grid for this Specific Type */}
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                                        {attrs.map((attr, idx) => (
+                                                        {attrs.map((attr, idx) => {
+                                                            let displayName = attr.pivot?.item_name || attr.name || 'Shop Item';
+
+                                                            if (displayName.includes(' - ')) {
+                                                                const parts = displayName.split(' - ');
+                                                                if (parts[0].trim() === parts[1].trim()) {
+                                                                    displayName = parts[0].trim();
+                                                                }
+                                                            }
+
+                                                            const price = Number(attr.pivot?.price || attr.price || 0);
+                                                            const unit = attr.pivot?.unit || attr.unit || 'unit';
+                                                            const imageUrl = attr.pivot?.image_url || attr.image_url;
+
+                                                            return (
                                                             <div key={attr.pivot?.id || `${attr.id}-${idx}`} className="group bg-stone-50 border border-stone-100 rounded-2xl overflow-hidden hover:shadow-xl hover:border-emerald-200 transition-all duration-300 flex flex-col">
                                                                 {/* Image Container */}
                                                                 <div className="h-32 bg-stone-200 relative overflow-hidden flex-shrink-0">
-                                                                    {attr.pivot?.image_url ? (
+                                                                    {imageUrl ? (
                                                                         <img 
-                                                                            src={`/storage/${attr.pivot.image_url}`} 
-                                                                            alt={attr.pivot?.item_name || attr.name} 
+                                                                            src={`/storage/${imageUrl}`} 
+                                                                            alt={displayName} 
                                                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                                                                             onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
                                                                         />
                                                                     ) : (
-                                                                        <img src="/images/default-service.jpg" alt="No Image" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = '/images/default-service.jpg'; }} />
+                                                                        <div className="w-full h-full flex items-center justify-center bg-stone-100/60 text-stone-400">
+                                                                            <ImageOff className="w-8 h-8" />
+                                                                        </div>
                                                                     )}
                                                                     {/* Out of Stock Overlay */}
                                                                     {!attr.pivot?.is_available && (
@@ -231,25 +289,28 @@ export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
                                                                 </div>
                                                                 {/* Details Container */}
                                                                 <div className="p-4 bg-white flex-1 flex flex-col">
-                                                                    <h6 className="font-bold text-stone-900 text-sm mb-2 leading-tight line-clamp-2" title={attr.pivot?.item_name || attr.name}>
-                                                                        {attr.pivot?.item_name || attr.name}
+                                                                    <h6 className="font-bold text-stone-900 text-sm mb-2 leading-tight line-clamp-2" title={displayName}>
+                                                                        {displayName}
                                                                     </h6>
                                                                     <div className="flex items-baseline gap-1 mt-auto pt-2">
-                                                                        <span className="font-black text-emerald-700">₱{Number(attr.pivot?.price || 0).toFixed(2)}</span>
-                                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">/ {attr.pivot?.unit || 'unit'}</span>
+                                                                        <span className="font-black text-emerald-700">{formatCurrency(price)}</span>
+                                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">/ {unit}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         ) : (
-                            <p className="text-sm text-stone-400 italic">No materials or items listed yet.</p>
+                            <p className="text-sm text-stone-400 italic flex items-center justify-center gap-2"><ImageOff className="w-4 h-4" /> No materials or items listed yet.</p>
                         )}
                     </div>
                 </div>

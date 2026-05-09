@@ -78,6 +78,9 @@ const TailorOverview = ({
     const isInShopFitting = fitMethodName === 'In-Shop Fitting';
     const measurementsRef = useRef(null);
     const [mapLocations, setMapLocations] = useState(null);
+    const [isImageExpanded, setIsImageExpanded] = useState(false);
+    const [printLoading, setPrintLoading] = useState(false);
+    
     const orderMeasurements = currentOrder.order_measurements || [];
     const fittingAppointment = currentOrder.appointments?.find((a) => a.status === 'confirmed' && a.type === 'fitting');
     const dropoffAppointment = currentOrder.appointments?.find((a) => a.status === 'confirmed' && a.type === 'drop-off');
@@ -140,6 +143,118 @@ const TailorOverview = ({
         }
     };
 
+    const getImageUrl = () => {
+        if (!currentOrder.design_image) return '';
+        return currentOrder.design_image.startsWith('http') ? currentOrder.design_image : `/storage/${currentOrder.design_image}`;
+    };
+
+    const handlePrintJobTicket = () => {
+        setPrintLoading(true);
+        const printWindow = window.open('', '_blank');
+        const imageSrc = getImageUrl();
+
+        let measurementsHtml = '<p style="font-style: italic; color: #666; text-align: center; padding: 10px;">No measurements recorded.</p>';
+        if (orderMeasurements && orderMeasurements.length > 0) {
+            measurementsHtml = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                        <tr style="background: #f0f0f0;">
+                            <th style="border: 1px solid #000; padding: 6px; text-transform: uppercase; font-size: 10px; text-align: left;">Part</th>
+                            <th style="border: 1px solid #000; padding: 6px; text-transform: uppercase; font-size: 10px; text-align: left;">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${orderMeasurements.map((measurement) => `
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 6px; font-weight: bold; text-transform: uppercase;">${measurement.measurement_name || 'Unknown'}</td>
+                                <td style="border: 1px solid #000; padding: 6px;">${measurement.measurement_value ? `${measurement.measurement_value} ${measurement.unit || ''}` : '—'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        const deadlineText = formatExpectedCompletion(currentOrder);
+        const serviceName = currentOrder.orderServices?.[0]?.service?.service_name || 'Custom Order';
+        const customerName = currentOrder.user?.name || currentOrder.customer?.name || 'Customer';
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Production Sheet - Order #${currentOrder.id}</title>
+                <style>
+                    @media print {
+                        @page { margin: 0.4in; }
+                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    }
+                    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #000; background: #fff; margin: 0; padding: 0; line-height: 1.3; }
+                    .header { border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-start; }
+                    .header-left h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+                    .header-left h2 { margin: 4px 0 8px 0; font-size: 18px; color: #333; }
+                    .rush-badge { display: inline-block; background-color: #000; color: #fff; font-weight: bold; padding: 4px 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+                    .header-right { text-align: right; font-size: 13px; }
+                    .header-right strong { display: inline-block; width: 70px; text-align: left; text-transform: uppercase; font-size: 11px; color: #555; }
+                    .visual-reference { margin-bottom: 15px; text-align: center; }
+                    .visual-reference img { width: 100%; max-height: 400px; object-fit: contain; border: 2px solid #000; padding: 4px; box-sizing: border-box; }
+                    .details-grid { display: flex; gap: 20px; }
+                    .details-col { flex: 1; }
+                    .section-title { font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 8px; font-weight: bold; }
+                    .notes-box { font-size: 14px; padding: 10px; border: 1px solid #000; margin-bottom: 15px; min-height: 60px; font-family: 'Courier New', Courier, monospace; }
+                    .info-box { border: 1px solid #000; padding: 8px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; background-color: #f9f9f9; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+                    th { background-color: #f0f0f0; text-transform: uppercase; font-size: 10px; }
+                    td:first-child { font-weight: bold; text-transform: uppercase; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="header-left">
+                        <h1>PRODUCTION SHEET</h1>
+                        <h2>Order #${currentOrder.id}</h2>
+                        ${currentOrder.is_rush || currentOrder.rush_order ? '<div class="rush-badge">RUSH ORDER</div>' : ''}
+                    </div>
+                    <div class="header-right">
+                        <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px;">${customerName}</div>
+                        <div><strong>Service:</strong> ${serviceName}</div>
+                        <div><strong>Method:</strong> ${fitMethodName}</div>
+                        <div><strong>Deadline:</strong> ${deadlineText}</div>
+                    </div>
+                </div>
+
+                <div class="visual-reference">
+                    ${imageSrc ? `<img src="${imageSrc}" onload="setTimeout(() => window.print(), 500)" />` : '<div style="height: 200px; border: 2px dashed #000; display:flex; align-items:center; justify-content:center; color:#666; font-style:italic;">No design image provided</div>'}
+                </div>
+
+                <div class="details-grid">
+                    <div class="details-col">
+                        <div class="section-title">Design Notes</div>
+                        <div class="notes-box">${currentOrder.notes || 'No notes provided.'}</div>
+                        <div class="info-box">
+                            <span style="font-size:10px; color:#555;">Materials:</span><br/>
+                            ${currentOrder.material_source === 'customer' ? 'Customer Provided' : 'Shop Provided'}
+                        </div>
+                    </div>
+
+                    <div class="details-col">
+                        <div class="section-title">Measurements / Dimensions</div>
+                        ${measurementsHtml}
+                    </div>
+                </div>
+
+                ${!imageSrc ? '<script>setTimeout(() => window.print(), 500);</script>' : ''}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+
+        setTimeout(() => {
+            setPrintLoading(false);
+        }, 500);
+    };
+
     const markMeasurementsTaken = () => {
         router.patch(route('store.orders.measurements-taken', currentOrder.id), {}, {
             preserveScroll: true,
@@ -153,7 +268,14 @@ const TailorOverview = ({
                 <section className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col md:flex-row gap-6">
                     <div className="w-full md:w-1/3 aspect-[3/4] bg-stone-100 rounded-2xl overflow-hidden shadow-inner flex-shrink-0 border border-stone-200">
                         {currentOrder.design_image ? (
-                            <img src={`/storage/${currentOrder.design_image}`} alt="Design Reference" className="w-full h-full object-cover" />
+                            <img 
+                                src={getImageUrl()}
+                                alt="Design Reference" 
+                                className="w-full h-full object-cover cursor-pointer hover:opacity-75 transition-opacity duration-200" 
+                                onClick={() => setIsImageExpanded(true)}
+                                title="Click to expand and print job ticket"
+                                style={{ userSelect: 'none' }}
+                            />
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 p-4 text-center">
                                 <Camera className="w-12 h-12 mb-2 opacity-50" />
@@ -192,27 +314,68 @@ const TailorOverview = ({
                         <h3 className="text-[11px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-4">Shop Items Availed</h3>
                         <ul className="space-y-3">
                             {currentOrder.items.map((item, idx) => {
+                                // 1. Identify the core Shop Attribute ID
+                                const shopAttrId = item.pivot?.shop_attribute_id || item.shop_attribute_id || item.id;
+
+                                // 2. Cross-reference the live catalog to get the real names
+                                const catalogItem = availableShopAttributes?.find(a => a.pivot?.id === shopAttrId || a.id === shopAttrId);
+
+                                // 3. Extract the math
                                 const qty = Number(item.quantity || item.pivot?.quantity || 1);
-                                const shopAttribute = item.shopAttribute;
-                                const unitPrice = Number(item.price || shopAttribute?.price || item.pivot?.price || 0);
-                                
-                                const targetAttrId = parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id);
-                                const targetPrice = Number(item.price || item.pivot?.price || 0);
-                                let exactShopItem = shopAttribute || availableShopAttributes?.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId && Number(a.price || a.pivot?.price || 0) === targetPrice);
-                                if (!exactShopItem) exactShopItem = availableShopAttributes?.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId);
-                                
-                                const displayName = exactShopItem?.item_name || exactShopItem?.name || item.attribute_name || 'Item';
-                                const unit = exactShopItem?.unit || 'unit';
-                                
+                                const unitPrice = Number(item.price || item.pivot?.price || catalogItem?.pivot?.price || catalogItem?.price || 0);
+                                const totalPrice = qty * unitPrice;
+
+                                // 4. Extract the display names, falling back to nested relationships if the catalog isn't loaded
+                                let displayName = catalogItem?.pivot?.item_name || catalogItem?.item_name || item.shopAttribute?.item_name || catalogItem?.name || item.shopAttribute?.attribute?.name || 'Shop Item';
+                                let categoryName = catalogItem?.attributeCategory?.name || catalogItem?.attribute_category?.name || item.shopAttribute?.attribute?.attributeCategory?.name || 'Add-on';
+                                const unit = catalogItem?.pivot?.unit || catalogItem?.unit || item.unit || item.pivot?.unit || 'unit';
+
+                                // 5. Clean up redundant names (e.g., "Custom Add-on - Custom Add-on")
+                                if (displayName.includes(' - ')) {
+                                    const parts = displayName.split(' - ');
+                                    if (parts[0].trim() === parts[1].trim()) displayName = parts[0].trim();
+                                }
+                                if (displayName === categoryName) categoryName = 'Add-on';
+
                                 return (
-                                    <li key={idx} className="flex justify-between items-center text-sm font-medium text-stone-700 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100/50">
-                                        <div>
-                                            <span className="font-bold text-slate-800 block">{displayName}</span>
+                                    <li key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 text-sm font-medium text-stone-700 bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all duration-150">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1.5 leading-none">
+                                                {categoryName}
+                                            </div>
+                                            <div className="font-bold text-slate-900 text-base leading-tight truncate mb-1.5">
+                                                {displayName}
+                                            </div>
+                                            <div className="text-xs font-semibold tracking-wider leading-relaxed">
+                                                {unitPrice > 0 ? (
+                                                    <span className="text-emerald-700">
+                                                        ₱{unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2})} per {unit}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-stone-500 font-bold">Included with Service</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4 sm:justify-end flex-wrap sm:flex-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-stone-600 font-semibold uppercase tracking-wider">Qty:</span>
+                                                <div className="bg-white border-2 border-emerald-300 text-emerald-900 px-3 py-1 rounded-lg font-black text-sm shadow-sm min-w-[50px] text-center">
+                                                    {qty}
+                                                </div>
+                                            </div>
+
                                             {unitPrice > 0 && (
-                                                <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">₱{unitPrice.toLocaleString()} / {unit}</span>
+                                                <div className="flex items-center gap-2 border-l border-emerald-200 pl-4">
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] text-stone-500 font-black uppercase tracking-widest leading-none">Total</div>
+                                                        <div className="font-black text-emerald-700 text-lg leading-tight mt-0.5">
+                                                            ₱{totalPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
-                                        <span className="text-stone-500 font-bold">x{qty}</span>
                                     </li>
                                 );
                             })}
@@ -412,6 +575,53 @@ const TailorOverview = ({
                     locations={mapLocations} 
                     onClose={() => setMapLocations(null)} 
                 />
+            )}
+
+            {/* Expanded Image Modal with Print Function */}
+            {isImageExpanded && currentOrder.design_image && (
+                <div className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+                    {/* Close Button */}
+                    <button 
+                        onClick={() => setIsImageExpanded(false)}
+                        className="absolute top-6 right-6 text-white hover:text-stone-300 bg-white/20 hover:bg-white/30 rounded-full p-3 transition-all duration-200 backdrop-blur-sm"
+                        aria-label="Close image"
+                    >
+                        <span style={{ fontSize: '28px', lineHeight: '1', display: 'block' }}>×</span>
+                    </button>
+
+                    {/* Image Display */}
+                    <div className="flex-1 flex items-center justify-center max-w-2xl">
+                        <img 
+                            src={getImageUrl()}
+                            alt="Expanded Design Reference" 
+                            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl border-4 border-white/10"
+                            loading="lazy"
+                        />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="mt-8 flex flex-col sm:flex-row gap-4 items-center justify-center">
+                        <button 
+                            onClick={handlePrintJobTicket}
+                            disabled={printLoading}
+                            className="flex items-center gap-3 px-8 py-4 bg-white text-stone-900 font-bold rounded-lg hover:bg-stone-100 transition-all duration-200 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-base"
+                        >
+                            <span style={{ fontSize: '20px' }}>🖨</span>
+                            {printLoading ? 'Generating...' : 'Print Job Ticket'}
+                        </button>
+                        <button 
+                            onClick={() => setIsImageExpanded(false)}
+                            className="flex items-center gap-3 px-8 py-4 bg-stone-700 text-white font-bold rounded-lg hover:bg-stone-600 transition-all duration-200 shadow-lg text-base"
+                        >
+                            <span>Close</span>
+                        </button>
+                    </div>
+
+                    {/* Info Text */}
+                    <div className="mt-6 text-center text-white/60 text-sm">
+                        <p>Order #{currentOrder.id} • {currentOrder.user?.name || currentOrder.customer?.name || 'Customer'}</p>
+                    </div>
+                </div>
             )}
         </div>
     );

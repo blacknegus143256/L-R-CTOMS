@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\Order;
+use App\Models\OrderLog;
+use App\Models\Report;
 use App\Models\TailoringShop;
+use App\Models\User;
 use App\Models\ShopStatus;
 use Inertia\Inertia;
 
@@ -12,16 +15,24 @@ class DashboardController extends Controller
 {
    public function index()
     {
-        $pendingStatusId = ShopStatus::where('name', 'Pending')->value('id');
-        $shops = TailoringShop::latest()->get();
+        $stats = [
+            'total_shops' => TailoringShop::count(),
+            'total_users' => User::where('role', 'customer')->count(),
+            'total_orders' => Order::count(),
+            'pending_reports' => Report::where('status', 'pending')->count(),
+        ];
 
         return Inertia::render('SuperAdmin/Dashboard', [
-            'stats' => [
-                'total_shops' => TailoringShop::count(),
-                'pending_shops' => TailoringShop::where('shop_status_id', $pendingStatusId)->count(),
-                'total_users' => \App\Models\User::count(),
-            ],
-            'shops' => $shops,
+            'stats' => $stats,
+            'urgent_reports' => Report::with(['reporter', 'reported'])
+                ->where('status', 'pending')
+                ->latest()
+                ->take(5)
+                ->get(),
+            'recent_logs' => OrderLog::with('user')
+                ->latest()
+                ->take(5)
+                ->get(),
         ]);
     }
     public function approve($id)

@@ -11,6 +11,7 @@ import { FiX, FiUser, FiLogOut, FiMenu, FiHome, FiBox, FiShoppingCart, FiBriefca
 export default function AuthenticatedLayout({ header, children }) {
     const { props } = usePage();
     const user = props.auth.user;
+    const flash = props.flash || {};
     const unreadNotifications = props.unread_notifications || [];
     const pendingShopsCount = props.pending_shops_count || 0;
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,6 +79,16 @@ export default function AuthenticatedLayout({ header, children }) {
 
         seenNotificationIdsRef.current = new Set(currentNotifications.map((notification) => notification.id));
     }, [unreadNotifications]);
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast.success(flash.success);
+        }
+
+        if (flash?.error) {
+            toast.error(flash.error);
+        }
+    }, [flash?.success, flash?.error]);
 
     const getHighlightParam = (type) => {
         switch (type) {
@@ -233,6 +244,10 @@ export default function AuthenticatedLayout({ header, children }) {
     <FiUser className="w-5 h-5 mr-3" />
     Users
 </NavLink>
+                                <NavLink href={route('super.reports.index')} active={route().current('super.reports.index')} className="text-base px-4 py-3">
+                                    <FiAlertCircle className="w-5 h-5 mr-3" />
+                                    User Reports
+                                </NavLink>
                                 <NavLink href={route('super.audit-logs.index')} active={route().current('super.audit-logs.*') || route().current('super.orders.show')} className="text-base px-4 py-3">
                                     <FiActivity className="w-5 h-5 mr-3" />
                                     Audit Logs

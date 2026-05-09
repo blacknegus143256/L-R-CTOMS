@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SuperAdmin\ImpersonationController;
 use App\Http\Controllers\SuperAdmin\LogController;
+use App\Http\Controllers\SuperAdmin\OrderController as SuperAdminOrderController;
 use App\Http\Controllers\SuperAdmin\PayoutController;
 use App\Http\Controllers\Customer\AppointmentsController as CustomerAppointmentsController;
 use App\Http\Controllers\Customer\CustomerDashboardController;
@@ -40,6 +41,7 @@ Route::middleware(['auth', 'verified', 'role:super_admin'])->group(function () {
     
     Route::get('/super-admin/users', [UserController::class, 'index'])->name('super.users.index');
     Route::delete('/super-admin/users/{id}', [UserController::class, 'destroy'])->name('super.users.destroy');
+    Route::patch('/super-admin/users/{user}/toggle-status', [App\Http\Controllers\SuperAdmin\UserController::class, 'toggleStatus'])->name('super.users.toggle-status');
     
     Route::get('/super-admin/shops', [App\Http\Controllers\SuperAdmin\ShopController::class, 'index'])->name('super.shops.index');
     Route::get('/super-admin/shops/{shop}/documents/{type}', [App\Http\Controllers\SuperAdmin\ShopController::class, 'document'])->name('super.shops.document');
@@ -50,12 +52,18 @@ Route::middleware(['auth', 'verified', 'role:super_admin'])->group(function () {
     Route::post('/super-admin/shops/{id}/demote', [DashboardController::class, 'demote'])->name('super.shops.demote');
 
     Route::get('/admin/audit-logs', [LogController::class, 'index'])->name('super.audit-logs.index');
+    Route::get('/super-admin/orders', [SuperAdminOrderController::class, 'index'])->name('super.orders.index');
     Route::get('/admin/orders/{order}', [LogController::class, 'showOrder'])->name('super.orders.show');
     Route::get('/super-admin/payouts', [PayoutController::class, 'index'])->name('super.payouts.index');
     Route::post('/super-admin/payouts/{order}/release', [PayoutController::class, 'release'])->name('super.payouts.release');
     
     // Impersonation Routes
     Route::post('/super-admin/impersonate/{user}', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'impersonate'])->name('super.impersonate');
+    // Reports management for Super Admin
+    Route::get('/super-admin/reports', [App\Http\Controllers\SuperAdmin\ReportController::class, 'index'])->name('super.reports.index');
+    Route::patch('/super-admin/reports/{report}/resolve', [App\Http\Controllers\SuperAdmin\ReportController::class, 'resolve'])->name('super.reports.resolve');
+    Route::patch('/super-admin/reports/{report}/dismiss', [App\Http\Controllers\SuperAdmin\ReportController::class, 'dismiss'])->name('super.reports.dismiss');
+    Route::patch('/super-admin/reports/{report}/investigate', [App\Http\Controllers\SuperAdmin\ReportController::class, 'investigate'])->name('super.reports.investigate');
 });
 
 // For the Store Admin
@@ -92,34 +100,8 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
             return Inertia::location('/store/dashboard');
         })->name('store.orders');
         
-        // Store Orders page with shop ID - fetch orders directly
-        Route::get('/store/orders/{shopId}', function ($shopId) {
-            $shop = TailoringShop::with(['attributes.attributeCategory'])->findOrFail($shopId);
-            
-            if ($shop->user_id !== Auth::id()) {
-                abort(403, 'Unauthorized. You can only view orders for your own shop.');
-            }
-            
-            // Get orders for this shop with related data, prioritizing urgent/rush orders
-            $orders = Order::where('tailoring_shop_id', $shopId)
-                ->with([
-                    'user.profile',
-                    'customer',
-                    'service.serviceCategory',
-                    'items.shopAttribute.attributeType.attributeCategory',
-                    'tailoringShop',
-                    'latestLog.user:id,name,role',
-                ])
-                ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
-                ->orderBy('expected_completion_date', 'ASC')
-                ->get();
-
-            return Inertia::render('StoreAdmin/OrdersPage', [
-                'shopId' => $shopId,
-                'shop' => $shop,
-                'orders' => $orders
-            ]);
-        })->name('store.orders.page');
+        // Store Orders page with shop ID - with search, status, and sort filtering
+        Route::get('/store/orders/{shopId}', [\App\Http\Controllers\Store\StoreDashboardController::class, 'ordersIndex'])->name('store.orders.page');
 
         Route::get('/store/order/{order}', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'showWeb'])->name('store.orders.show');
         Route::get('/store/reworks', [ReworkController::class, 'storeIndex'])->name('store.reworks.index');
@@ -225,6 +207,9 @@ Route::get('/shop/{shop}',  function ($shop){
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 
+// Suspended account page (public)
+Route::inertia('/account-suspended', 'Suspended')->name('account.suspended');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -232,6 +217,8 @@ Route::middleware('auth')->group(function () {
     
     // Checkout - quiet API endpoint for phone/location saves
     Route::patch('/api/checkout/save-profile', [ProfileController::class, 'updateLogistics'])->name('checkout.save-profile');
+    // Create a report (authenticated users)
+    Route::post('/reports', [App\Http\Controllers\ReportController::class, 'store'])->name('reports.store');
     
     // Allow any authenticated user to leave impersonation (controller enforces security)
     Route::post('/leave-impersonation', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'leaveImpersonation'])

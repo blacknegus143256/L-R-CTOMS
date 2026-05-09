@@ -49,6 +49,10 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user ? $user->load('profile') : null,
             ],
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+            ],
             'unread_notifications' => $user
                 ? $user->unreadNotifications()->take(5)->get()
                 : [],

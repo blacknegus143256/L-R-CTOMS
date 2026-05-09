@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { Lock, Send, X, Check, ChevronRight, ImageOff } from 'lucide-react';
 
 const QuoteBuilder = ({
     currentOrder,
@@ -27,8 +28,42 @@ const QuoteBuilder = ({
     isSubmittingQuote,
     isQuoteLocked
 }) => {
+    const [materialSearch, setMaterialSearch] = useState('');
+    const [expandedCategories, setExpandedCategories] = useState({});
+
+    const toggleCategory = (category) => {
+        setExpandedCategories(prev => ({
+            ...prev,
+            [category]: !prev[category]
+        }));
+    };
+
+    // 1. Filter attributes based on the search box
+    const filteredAttributes = useMemo(() => {
+        if (!availableShopAttributes) return [];
+        const search = (materialSearch || '').toLowerCase();
+        if (!search) return availableShopAttributes;
+        return availableShopAttributes.filter(attr => {
+            const name = (attr.pivot?.item_name || attr.name || '').toLowerCase();
+            const category = (attr.attributeCategory?.name || attr.attribute_category?.name || attr.attribute_type?.name || attr.category?.name || 'Material').toLowerCase();
+            return name.includes(search) || category.includes(search);
+        });
+    }, [availableShopAttributes, materialSearch]);
+
+    // 2. Group the filtered results by category
+    const groupedAttributes = useMemo(() => {
+        return filteredAttributes.reduce((acc, attr) => {
+            const category = attr.attributeCategory?.name || attr.attribute_category?.name || attr.attribute_type?.name || attr.category?.name || 'Material';
+            if (!acc[category]) acc[category] = [];
+            acc[category].push(attr);
+            return acc;
+        }, {});
+    }, [filteredAttributes]);
+
+    // (UI integration for search/grouping can be added later)
+
     return (
-        <div className="bg-stone-900 p-6 md:p-8 rounded-3xl border border-stone-800 shadow-xl text-white flex flex-col justify-between">
+        <div className="bg-stone-900 p-4 sm:p-6 md:p-8 rounded-3xl border border-stone-800 shadow-xl text-white flex flex-col justify-between">
             <div>
                 <div className="mb-6">
                     <h2 className="text-xl font-black text-white mb-1">
@@ -45,36 +80,41 @@ const QuoteBuilder = ({
                 {currentOrder?.items && currentOrder.items.length > 0 && (
                     <div className="p-6 rounded-2xl border border-stone-700 mb-6 bg-stone-800/50 backdrop-blur-sm">
                         <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider mb-4 block pb-3 border-b border-stone-700">
-                            📋 Customer's Initial Selection
+                            Customer's Initial Selection
                         </h4>
                         <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                             {currentOrder.items.map((item, idx) => {
+                                // 1. Identify the core Shop Attribute ID
+                                const shopAttrId = item.pivot?.shop_attribute_id || item.shop_attribute_id || item.id;
+
+                                // 2. Cross-reference the live catalog to get the real names
+                                const catalogItem = availableShopAttributes?.find(a => a.pivot?.id === shopAttrId || a.id === shopAttrId);
+
+                                // 3. Extract the math
                                 const qty = Number(item.quantity || item.pivot?.quantity || 1);
-                                const shopAttribute = item.shopAttribute;
-                                const unitPrice = Number(item.price || shopAttribute?.price || item.pivot?.price || 0);
+                                const unitPrice = Number(item.price || item.pivot?.price || catalogItem?.pivot?.price || catalogItem?.price || 0);
                                 const lineTotal = unitPrice * qty;
-                                
-                                const targetAttrId = parseInt(shopAttribute?.attribute_type_id || item.attribute_type_id || item.attribute_id || item.attribute?.id);
-                                const targetPrice = Number(item.price || item.pivot?.price || 0);
-                                let exactShopItem = shopAttribute || availableShopAttributes?.find(a => 
-                                    parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId && 
-                                    Number(a.price || a.pivot?.price || 0) === targetPrice
-                                );
-                                if (!exactShopItem) {
-                                    exactShopItem = availableShopAttributes?.find(a => parseInt(a.attribute_type_id || a.attribute_id || a.id) === targetAttrId);
+
+                                // 4. Extract the display names, falling back to nested relationships if the catalog isn't loaded
+                                let displayName = catalogItem?.pivot?.item_name || catalogItem?.item_name || item.shopAttribute?.item_name || catalogItem?.name || item.shopAttribute?.attribute?.name || 'Shop Item';
+                                let categoryName = catalogItem?.attributeCategory?.name || catalogItem?.attribute_category?.name || item.shopAttribute?.attribute?.attributeCategory?.name || 'Add-on';
+                                const unit = catalogItem?.pivot?.unit || catalogItem?.unit || item.unit || item.pivot?.unit || 'unit';
+
+                                // 5. Clean up redundant names (e.g., "Custom Add-on - Custom Add-on")
+                                if (displayName.includes(' - ')) {
+                                    const parts = displayName.split(' - ');
+                                    if (parts[0].trim() === parts[1].trim()) displayName = parts[0].trim();
                                 }
-                                
-                                const customName = exactShopItem?.item_name || exactShopItem?.name;
-                                const displayName = customName || item.attribute_name || 'Custom Add-on';
-                                const notes = exactShopItem?.notes || '';
-                                const unit = exactShopItem?.unit || 'unit';
-                                
-                                const rawImage = exactShopItem?.image_url || item.image_path || item.image_url || null;
+                                if (displayName === categoryName) categoryName = 'Add-on';
+
+                                const notes = catalogItem?.notes || item.notes || '';
+
+                                const rawImage = catalogItem?.image_url || item.image_path || item.image_url || null;
                                 const imageUrl = rawImage ? (rawImage.startsWith('http') ? rawImage : `/storage/${rawImage}`) : null;
 
                                 return (
-                                    <div key={idx} className="flex justify-between items-center p-4 bg-stone-900 border border-stone-700 rounded-2xl shadow-sm gap-4 mb-3 last:mb-0">
-                                        <div className="flex items-center gap-4">
+                                    <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 sm:p-4 bg-stone-900 border border-stone-700 rounded-2xl shadow-sm gap-3 sm:gap-4 mb-3 last:mb-0">
+                                        <div className="flex items-center gap-4 w-full">
                                             {imageUrl ? (
                                                 <div className="w-16 h-16 rounded-xl overflow-hidden bg-stone-800 flex-shrink-0 border border-stone-600">
                                                     <img src={imageUrl} alt={displayName} className="w-full h-full object-cover" />
@@ -84,12 +124,12 @@ const QuoteBuilder = ({
                                                     N/A
                                                 </div>
                                             )}
-                                            <div>
+                                            <div className="flex-1 min-w-0 w-full">
                                                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block mb-1">
-                                                    {shopAttribute?.attributeType?.attributeCategory?.name || 'Specification'}
+                                                    {categoryName}
                                                 </span>
                                                 <span className="text-sm font-bold text-stone-200 block mb-1">
-                                                    {shopAttribute?.item_name || item.attribute_name || shopAttribute?.attributeType?.name || 'Custom Add-on'} - {displayName}
+                                                    {displayName}
                                                 </span>
                                                 {notes && (
                                                     <span className="text-[10px] font-medium text-stone-400 block mb-1 italic">
@@ -129,9 +169,11 @@ const QuoteBuilder = ({
                 <div className="space-y-3 mb-6 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
                     {materials.map((mat, index) => (
                         <div key={`material-row-${mat.id ?? index}`} className="bg-stone-800 p-4 rounded-2xl border border-stone-700 space-y-3">
-                            <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center">
                                 <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Item #{index + 1}</span>
-                                <button onClick={!isLocked ? () => removeMaterialLocal(index) : undefined} disabled={isLocked} className={`text-rose-400 hover:text-rose-300 font-bold text-xs ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}>✕ Remove</button>
+                                <button onClick={!isLocked ? () => removeMaterialLocal(index) : undefined} disabled={isLocked} className={`text-rose-400 hover:text-rose-300 font-bold text-xs ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                                    <span className="inline-flex items-center gap-1"><X className="w-3 h-3" /> Remove</span>
+                                </button>
                             </div>
                             <div className="space-y-3">
                                 {isCustomerProvided ? (
@@ -153,7 +195,7 @@ const QuoteBuilder = ({
                                                 ))}
                                             </select>
                                         </div>
-                                        <div className="col-span-6 md:col-span-3">
+                                        <div className="col-span-12 sm:col-span-6 md:col-span-3">
                                             <input 
                                                 disabled={isLocked} id={`material-quantity-${index}`} 
                                                 name={`material-quantity-${index}`} 
@@ -166,7 +208,7 @@ const QuoteBuilder = ({
                                                 className={`w-full bg-stone-900 border border-stone-600 rounded-xl px-3 py-2 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`} 
                                             />
                                         </div>
-                                        <div className="col-span-6 md:col-span-3">
+                                        <div className="col-span-12 sm:col-span-6 md:col-span-3">
                                             <select 
                                                 disabled={isLocked} id={`material-unit-type-${index}`} 
                                                 name={`material-unit-type-${index}`} 
@@ -184,59 +226,102 @@ const QuoteBuilder = ({
                                 ) : (
                                     !mat.id ? (
                                         <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                                                Select Material from Shop
-                                            </label>
-                                            <div className="grid grid-cols-1 gap-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                                                {availableShopAttributes?.length ? (
-                                                    availableShopAttributes.map((attr, attrIdx) => {
-                                                        const isSelected = mat.id === attr.id;
-                                                        const rawImage = attr.image_url || attr.pivot?.image_url;
-                                                        const imageUrl = rawImage ? `/storage/${rawImage}` : null;
-                                                        const resolvedCategory = attr.attributeCategory?.name || attr.attribute_category?.name || attr.attribute_type?.name || attr.category?.name || 'Material';
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                <label className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Select Material from Shop</label>
+                                                <div className="relative w-full sm:w-1/2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search materials..."
+                                                        value={materialSearch}
+                                                        onChange={(e) => setMaterialSearch(e.target.value)}
+                                                        disabled={isLocked}
+                                                        className="w-full bg-stone-950 border border-stone-700 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder-stone-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                                                    />
+                                                    {materialSearch && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setMaterialSearch('')}
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
 
+                                            <div className="max-h-72 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                                                {Object.keys(groupedAttributes).length > 0 ? (
+                                                    Object.entries(groupedAttributes).map(([category, items]) => {
+                                                        const isExpanded = expandedCategories[category];
                                                         return (
-                                                            <div
-                                                                key={`shop-inv-${attr.id}-${attrIdx}`}
-                                                                onClick={!isLocked ? () => {
-                                                                    const rawImage = attr.image_url || attr.pivot?.image_url;
-                                                                    const image_url = rawImage ? (rawImage.startsWith('http') || rawImage.startsWith('/storage') ? rawImage : `/storage/${rawImage}`) : null;
-                                                                    updateMaterial(index, {
-                                                                        attribute_type_id: attr.attribute_type_id || attr.attribute_type?.id || null,
-                                                                        id: attr.id,
-                                                                        name: attr.pivot?.item_name || attr.name,
-                                                                        price: Number(attr.pivot?.price || attr.price || 0),
-                                                                        unit: attr.pivot?.unit || attr.unit || 'unit',
-                                                                        category: resolvedCategory,
-                                                                        notes: attr.notes || attr.pivot?.notes || '',
-                                                                        quantity: mat.quantity || 1,
-                                                                        image_url,
-                                                                    });
-                                                                } : undefined}
-                                                                className={`p-4 rounded-2xl border-2 transition-all ${isLocked ? 'pointer-events-none opacity-70 cursor-not-allowed' : 'cursor-pointer hover:shadow-md hover:border-stone-500'} ${isSelected ? 'border-emerald-500 bg-emerald-900/20 shadow-lg shadow-emerald-900/10 ring-2 ring-emerald-500/30' : 'border-stone-700 bg-stone-800/50'} flex items-center gap-4`}
-                                                            >
-                                                                {imageUrl ? (
-                                                                    <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border border-stone-600">
-                                                                        <img src={imageUrl} alt={attr.name} className="w-full h-full object-cover" />
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="w-14 h-14 rounded-xl bg-stone-900 border border-stone-700 flex items-center justify-center flex-shrink-0 text-[9px] font-black text-stone-600 uppercase">
-                                                                        No Image
+                                                            <div key={category} className="space-y-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleCategory(category)}
+                                                                    className="w-full flex items-center justify-between text-left border-b border-stone-700 pb-1 hover:border-emerald-500/50 transition-colors"
+                                                                >
+                                                                    <span className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest">
+                                                                        {category} <span className="text-stone-500 font-medium normal-case tracking-normal">({items.length})</span>
+                                                                    </span>
+                                                                    <span className="text-stone-500 text-[10px] font-black uppercase flex items-center gap-1">
+                                                                        <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                                                        {isExpanded ? 'Hide' : 'Show'}
+                                                                    </span>
+                                                                </button>
+
+                                                                {isExpanded && (
+                                                                    <div className="grid grid-cols-1 gap-3">
+                                                                        {items.map((attr, attrIdx) => {
+                                                                            const isSelected = mat.id === attr.id;
+                                                                            const rawImage = attr.image_url || attr.pivot?.image_url;
+                                                                            const imageUrl = rawImage ? `/storage/${rawImage}` : null;
+                                                                            const resolvedCategory = category;
+
+                                                                            return (
+                                                                                <div
+                                                                                    key={`shop-inv-${attr.id}-${attrIdx}`}
+                                                                                    onClick={!isLocked ? () => {
+                                                                                        const img_url = rawImage ? (rawImage.startsWith('http') || rawImage.startsWith('/storage') ? rawImage : `/storage/${rawImage}`) : null;
+                                                                                        updateMaterial(index, {
+                                                                                            attribute_type_id: attr.attribute_type_id || attr.attribute_type?.id || null,
+                                                                                            id: attr.id,
+                                                                                            name: attr.pivot?.item_name || attr.name,
+                                                                                            price: Number(attr.pivot?.price || attr.price || 0),
+                                                                                            unit: attr.pivot?.unit || attr.unit || 'unit',
+                                                                                            category: resolvedCategory,
+                                                                                            notes: attr.notes || attr.pivot?.notes || '',
+                                                                                            quantity: mat.quantity || 1,
+                                                                                            image_url: img_url,
+                                                                                        });
+                                                                                    } : undefined}
+                                                                                    className={`p-3 rounded-2xl border-2 transition-all ${isLocked ? 'pointer-events-none opacity-70 cursor-not-allowed' : 'cursor-pointer hover:shadow-md hover:border-stone-500'} ${isSelected ? 'border-emerald-500 bg-emerald-900/20 shadow-lg shadow-emerald-900/10 ring-2 ring-emerald-500/30' : 'border-stone-700 bg-stone-800/50'} flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4`}
+                                                                                >
+                                                                                    {imageUrl ? (
+                                                                                        <div className="w-16 h-16 sm:w-12 sm:h-12 rounded-xl overflow-hidden flex-shrink-0 border border-stone-600">
+                                                                                            <img src={imageUrl} alt={attr.name} className="w-full h-full object-cover" />
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="w-16 h-16 sm:w-12 sm:h-12 rounded-xl bg-stone-900 border border-stone-700 flex items-center justify-center flex-shrink-0 text-[8px] font-black text-stone-600 uppercase">
+                                                                                            No Image
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <span className="block font-bold text-white text-sm leading-tight truncate">{attr.pivot?.item_name || attr.name}</span>
+                                                                                        <span className="block text-[10px] font-bold text-stone-400 mt-0.5">₱{Number(attr.pivot?.price || attr.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} / {attr.pivot?.unit || attr.unit || 'unit'}</span>
+                                                                                    </div>
+                                                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-stone-600'}`}>
+                                                                                        {isSelected && <Check className="w-3 h-3 text-stone-900" />}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                 )}
-                                                                <div className="flex-1 min-w-0">
-                                                                    <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block mb-0.5">{resolvedCategory}</span>
-                                                                    <span className="block font-bold text-white text-sm leading-tight truncate">{attr.pivot?.item_name || attr.name}</span>
-                                                                    <span className="block text-[9px] font-bold text-stone-400 mt-0.5">₱{Number(attr.pivot?.price || attr.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})} / {attr.pivot?.unit || attr.unit || 'unit'}</span>
-                                                                </div>
-                                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-stone-600'}`}>
-                                                                    {isSelected && <span className="text-stone-900 text-[10px] font-black">✓</span>}
-                                                                </div>
                                                             </div>
                                                         );
                                                     })
                                                 ) : (
-                                                    <p className="text-xs text-stone-500">No materials available</p>
+                                                    <p className="text-xs text-stone-500 text-center py-6 border border-dashed border-stone-700 rounded-xl">No materials match your search.</p>
                                                 )}
                                             </div>
                                         </div>
@@ -252,24 +337,27 @@ const QuoteBuilder = ({
                                                     Change
                                                 </button>
                                             </div>
-                                            <div className="p-4 bg-stone-800/50 border border-stone-600/50 rounded-2xl flex gap-4">
+                                            <div className="p-3 sm:p-4 bg-stone-800/50 border border-stone-600/50 rounded-2xl flex gap-3 sm:gap-4">
                                                 {mat.image_url ? (
-                                                    <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border border-stone-600">
+                                                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden flex-shrink-0 border border-stone-600">
                                                         <img key={mat.id} src={mat.image_url} alt={mat.name} className="w-full h-full object-cover" />
                                                     </div>
                                                 ) : (
-                                                    <div className="w-20 h-20 rounded-xl bg-stone-900 border border-stone-700 flex items-center justify-center flex-shrink-0 text-xs font-bold text-stone-500 uppercase">
-                                                        No Image
+                                                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-stone-900 border border-stone-700 flex items-center justify-center flex-shrink-0 text-[10px] sm:text-xs font-bold text-stone-500 uppercase">
+                                                        <ImageOff className="w-5 h-5" />
                                                     </div>
                                                 )}
-                                                <div className="flex-1 space-y-1.5">
-                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">{mat.category || 'Material'}</span>
-                                                    <span className="block font-bold text-white text-base leading-tight">{mat.name}</span>
-                                                    {mat.notes && <span className="block text-[10px] text-stone-400 italic">Note: {mat.notes}</span>}
-                                                    <span className="block text-sm font-bold text-stone-300">₱{Number(mat.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} / {mat.unit || 'unit'}</span>
-                                                    <div className="flex items-center justify-between pt-2 border-t border-stone-600/50">
-                                                        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Quantity</span>
-                                                        <div className="flex items-center gap-2">
+                                                <div className="flex-1 min-w-0 space-y-1">
+                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block truncate">{mat.category || 'Material'}</span>
+                                                    <span className="block font-bold text-white text-sm sm:text-base leading-tight truncate">{mat.name}</span>
+                                                    {mat.notes && (
+                                                        <span className="block text-[10px] text-stone-400 italic truncate">Note: {mat.notes}</span>
+                                                    )}
+                                                    <span className="block text-xs sm:text-sm font-bold text-stone-300 truncate">₱{Number(mat.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} / {mat.unit || 'unit'}</span>
+
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 mt-2 border-t border-stone-600/50">
+                                                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider">Quantity</span>
+                                                        <div className="flex items-center gap-2 max-w-full">
                                                             <input
                                                                 disabled={isLocked}
                                                                 type="number"
@@ -285,9 +373,9 @@ const QuoteBuilder = ({
                                                                         updateMaterial(index, { quantity: 1 });
                                                                     }
                                                                 }}
-                                                                className={`w-20 bg-stone-950 border border-stone-600/50 rounded-lg px-2 py-1.5 text-white text-sm font-bold text-center focus:ring-emerald-500 focus:border-emerald-500 outline-none ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                                className={`w-16 sm:w-20 bg-stone-950 border border-stone-600/50 rounded-lg px-2 py-1.5 text-white text-xs sm:text-sm font-bold text-center focus:ring-emerald-500 focus:border-emerald-500 outline-none ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                                                             />
-                                                            <span className="text-stone-400 text-xs font-bold">{mat.unit || 'unit'}</span>
+                                                            <span className="text-stone-400 text-[10px] sm:text-xs font-bold truncate max-w-[60px]">{mat.unit || 'unit'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -316,11 +404,8 @@ const QuoteBuilder = ({
                             type="number" 
                             min="0" 
                             step="0.01" 
-                            value={effectiveLaborPrice}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setLaborPrice(val === '' ? '' : val);
-                            }}
+                            value={effectiveLaborPrice === 0 ? '' : effectiveLaborPrice}
+                            onChange={(e) => setLaborPrice(e.target.value)}
                             onBlur={() => {
                                 if (effectiveLaborPrice === '' || Number(effectiveLaborPrice) < 0) {
                                     const baseServicePrice = Number(currentOrder?.orderServices?.[0]?.price) || Number(currentOrder?.service?.price) || 0;
@@ -330,6 +415,7 @@ const QuoteBuilder = ({
                                 }
                             }}
                             disabled={isLaborLocked}
+                            placeholder="0"
                             className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
                                 isLaborLocked 
                                     ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80' 
@@ -347,15 +433,20 @@ const QuoteBuilder = ({
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                value={Number(rushFee || 0)}
-                                onChange={(e) => setRushFee(e.target.value ? Number(e.target.value) : 0)}
+                                value={rushFee === 0 ? '' : rushFee}
+                                onChange={(e) => setRushFee(e.target.value)}
+                                onBlur={() => {
+                                    if (rushFee === '' || Number(rushFee) < 0) {
+                                        setRushFee(0);
+                                    }
+                                }}
                                 disabled={isLocked}
+                                placeholder="0"
                                 className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
                                     isLocked
                                         ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
                                         : 'bg-stone-800 border border-stone-700 text-white focus:ring-rose-400 focus:border-rose-400'
                                 }`}
-                                placeholder="0.00"
                             />
                             <p className="text-[11px] text-stone-400 mt-1">Applied only when customer requested rush order.</p>
                         </div>
@@ -471,7 +562,13 @@ const QuoteBuilder = ({
                         : 'bg-emerald-500 text-stone-900 hover:bg-emerald-400 disabled:opacity-50'
                 }`}
             >
-                {isQuoteLocked ? '🔒 Quote Finalized / Locked' : (isSubmittingQuote ? 'Sending...' : '📨 Send Financial Quote')}
+                {isQuoteLocked ? (
+                    <span className="inline-flex items-center justify-center gap-2"><Lock className="w-4 h-4" /> Quote Finalized / Locked</span>
+                ) : isSubmittingQuote ? (
+                    'Sending...'
+                ) : (
+                    <span className="inline-flex items-center justify-center gap-2"><Send className="w-4 h-4" /> Send Financial Quote</span>
+                )}
             </button>
         </div>
     );

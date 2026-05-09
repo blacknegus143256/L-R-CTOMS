@@ -22,7 +22,22 @@ class ShopController extends Controller
             });
 
         if ($request->filled('search')) {
-            $query->where('shop_name', 'like', '%' . $request->input('search') . '%');
+            $clean = trim((string) $request->input('search'));
+            $startsWith = $clean . '%';
+
+            $query->where('shop_name', 'like', '%' . $clean . '%');
+
+            // Relevance: exact name first, then starts-with, then others
+            $query->orderByRaw(
+                "
+                    CASE
+                        WHEN shop_name = ? THEN 1
+                        WHEN shop_name LIKE ? THEN 2
+                        ELSE 3
+                    END ASC
+                ",
+                [$clean, $startsWith]
+            );
         }
 
         $attributeIds = $request->input('attributes', []);
