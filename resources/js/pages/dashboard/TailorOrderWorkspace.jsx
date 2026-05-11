@@ -8,13 +8,13 @@ import TailorOverview from './TailorOrderComponents/TailorOverview.jsx';
 import TailorQuoteBuilder from './TailorOrderComponents/TailorQuoteBuilder.jsx';
 import TailorShowcase from './TailorOrderComponents/TailorShowcase.jsx';
 import { Head, Link } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { ArrowLeft, Ruler, Camera, ClipboardList, AlertCircle, MapPin, Phone, Download, Maximize2, X } from 'lucide-react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.jsx';
+import { ArrowLeft, Ruler, Camera, ClipboardList, AlertCircle, MapPin, Phone, Download, Maximize2, X, FileText, CheckCircle2 } from 'lucide-react';
 import { FiLock } from 'react-icons/fi';
 import { TbCurrencyPeso } from 'react-icons/tb';
 import { router, usePage } from '@inertiajs/react';
 
-export default function TailorOrderWorkspace({ auth, order }) {
+export default function TailorOrderWorkspace({ auth, order, globalMeasurements = {} }) {
     const { props, url } = usePage();
     const parsedUrl = new URL(url, 'http://localhost');
     const action = (parsedUrl.searchParams.get('action') || '').trim().toLowerCase();
@@ -44,6 +44,7 @@ export default function TailorOrderWorkspace({ auth, order }) {
         return status === 'pending' || status === 'pending review';
     });
     const reworkStatus = (reworkRequest?.status || '').toString();
+    const reworkStatusNormalized = reworkStatus.trim().toLowerCase();
     const canAccessShowcase = ['confirmed', 'appointment scheduled', 'in progress', 'ready for pickup', 'completed'].includes(rawStatus);
     const hasFinishedLook = (currentOrder.images || []).length > 0;
     const canMarkAsCompleted = ['in progress', 'ready for production'].includes(rawStatus);
@@ -179,12 +180,21 @@ const [showRejectModal, setShowRejectModal] = useState(false);
     const [productionMinDays, setProductionMinDays] = useState(currentOrder?.production_min_days ?? '');
     const [productionMaxDays, setProductionMaxDays] = useState(currentOrder?.production_max_days ?? '');
     const initialMeasurementFields = currentOrder?.order_measurements?.length > 0
-        ? currentOrder.order_measurements.map((measurement) => ({
-            name: measurement.measurement_name,
-            instruction: measurement.instruction || '',
-            value: measurement.measurement_value || '',
-            unit: measurement.unit || '',
-        }))
+        ? currentOrder.order_measurements.map((measurement) => {
+            // Auto-fill from global measurements if order doesn't have a value yet
+            const globalValue = !measurement.measurement_value && globalMeasurements[measurement.measurement_name]?.value 
+                ? globalMeasurements[measurement.measurement_name].value 
+                : measurement.measurement_value || '';
+            const isAutoFilled = !measurement.measurement_value && !!globalValue;
+            
+            return {
+                name: measurement.measurement_name,
+                instruction: measurement.instruction || '',
+                value: globalValue || '',
+                unit: measurement.unit || '',
+                isAutoFilled,
+            };
+        })
         : [{ name: '', instruction: '', value: '' }];
 
     const [measurementFields, setMeasurementFields] = useState(initialMeasurementFields);
@@ -260,11 +270,9 @@ const hasSubmittedMeasurements = orderMeasurements.some(m => m.measurement_value
 const handleSendMeasurements = (e) => {
     if (e) e.preventDefault(); // Stop any default browser behavior
 
+    // Keep the full measurement objects (including `value`) but remove empty-name rows
     const requestedArr = (measurementFields || [])
-        .map((measurement) => ({
-            name: (measurement?.name || '').trim(),
-            instruction: (measurement?.instruction || '').trim(),
-        }))
+        .map((m) => ({ ...m, name: (m?.name || '').trim(), instruction: (m?.instruction || '').trim() }))
         .filter((measurement) => measurement.name !== '');
 
         if (isCustomerMeasurementFlow && requestedArr.length === 0) {
@@ -279,6 +287,7 @@ const handleSendMeasurements = (e) => {
 
     // Explicitly use router.patch, NOT router.get or router.post
     router.patch(`/store/orders/${currentOrder.id}/request-measurements`, {
+        // Pass the raw state objects so `value` and other properties are preserved
         measurement_fields: requestedArr,
         measurement_unit: measurementUnit,
     }, {
@@ -398,6 +407,9 @@ const handleSendMeasurements = (e) => {
             });
 
             if (!proceedWithoutPhoto) {
+                setActiveTab('showcase');
+                setActiveHighlight('showcase');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
             }
         }
@@ -477,8 +489,8 @@ const handleSendMeasurements = (e) => {
     const acceptRework = async () => {
         const inputNote = await promptDialog({
             title: 'Accept Rework',
-            message: 'Add acceptance notes (optional):',
-            defaultValue: reworkRequest?.tailor_response_notes || '',
+            message: 'Enter your official resolution note. For accepted reworks, tell the customer how to return the item. For rejected reworks, explain the out-of-scope reason or suggest placing a new order.',
+            defaultValue: reworkRequest?.tailor_notes || '',
             placeholder: 'Optional notes',
             confirmText: 'Accept',
             cancelText: 'Cancel',
@@ -486,15 +498,15 @@ const handleSendMeasurements = (e) => {
             required: false,
         });
         router.patch(`/store/order-reworks/${reworkRequest.id}/accept`, {
-            tailor_response_notes: inputNote || null,
+            tailor_notes: inputNote || null,
         }, { preserveScroll: true });
     };
 
     const rejectRework = async () => {
         const inputNote = await promptDialog({
             title: 'Reject Rework',
-            message: 'Add a rejection reason (required):',
-            defaultValue: reworkRequest?.tailor_response_notes || '',
+            message: 'Enter your official resolution note. For accepted reworks, tell the customer how to return the item. For rejected reworks, explain the out-of-scope reason or suggest placing a new order.',
+            defaultValue: reworkRequest?.tailor_notes || '',
             placeholder: 'Rejection reason',
             confirmText: 'Reject',
             cancelText: 'Cancel',
@@ -510,40 +522,52 @@ const handleSendMeasurements = (e) => {
             return;
         }
         router.patch(`/store/order-reworks/${reworkRequest.id}/reject`, {
-            tailor_response_notes: inputNote,
+            tailor_notes: inputNote,
         }, { preserveScroll: true });
     };
 
     const markReworkGarmentReceived = async () => {
-        const inputNote = await promptDialog({
+        const confirmed = await confirmDialog({
             title: 'Mark Garment Received',
-            message: 'Add received notes (optional):',
-            defaultValue: reworkRequest?.tailor_response_notes || '',
-            placeholder: 'Optional notes',
-            confirmText: 'Save',
+            message: 'Have you received the garment from the customer and started the rework?',
+            confirmText: 'Yes, Start Rework',
             cancelText: 'Cancel',
             type: 'info',
-            required: false,
         });
-        router.patch(`/store/order-reworks/${reworkRequest.id}/received`, {
-            tailor_response_notes: inputNote || null,
+        if (!confirmed) return;
+        router.patch(`/store/order-reworks/${reworkRequest.id}/status`, {
+            status: 'In Progress',
+        }, { preserveScroll: true });
+    };
+
+    const markReworkReadyForPickup = async () => {
+        const confirmed = await confirmDialog({
+            title: 'Confirm Ready for Pickup',
+            message: 'Is the rework finished and ready for the customer to pick up?',
+            confirmText: 'Yes, Mark Ready',
+            cancelText: 'Cancel',
+            type: 'success',
+        });
+
+        if (!confirmed) return;
+
+        // Send 'Resolved' instead of 'Ready for Pickup' to pass backend validation
+        router.patch(`/store/order-reworks/${reworkRequest.id}/status`, {
+            status: 'Resolved',
         }, { preserveScroll: true });
     };
 
     const markReworkResolved = async () => {
-        const inputNote = await promptDialog({
+        const confirmed = await confirmDialog({
             title: 'Resolve Rework',
-            message: 'Add resolution notes (optional):',
-            defaultValue: reworkRequest?.tailor_response_notes || '',
-            placeholder: 'Optional notes',
-            confirmText: 'Resolve',
+            message: 'Mark this rework claim as successfully resolved and closed?',
+            confirmText: 'Resolve Claim',
             cancelText: 'Cancel',
             type: 'success',
-            required: false,
         });
+        if (!confirmed) return;
         router.patch(`/store/order-reworks/${reworkRequest.id}/status`, {
             status: 'Resolved',
-            tailor_response_notes: inputNote || null,
         }, { preserveScroll: true });
     };
 
@@ -768,15 +792,25 @@ const handleSendMeasurements = (e) => {
                     )}
                 </div>
 
-                {hasManualPaymentProof && (
+                {manualReferenceId === 'CASH-INTENT' && !['Paid', 'Partial'].includes(paymentStatusRaw) ? (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+                        <div className="mb-3 flex items-start gap-3">
+                            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" />
+                            <div>
+                                <h4 className="text-lg font-black text-amber-900 mb-1">Cash Payment Expected</h4>
+                                <p className="text-sm text-amber-800">
+                                    The customer has opted to pay in cash. Please collect the exact amount at the shop counter and click "Record Cash Payment" below.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                ) : manualReferenceId && !['Paid', 'Partial'].includes(paymentStatusRaw) ? (
                     <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
                         <div className="mb-6">
                             <h4 className="text-lg font-black text-stone-900">Manual Payment Submission</h4>
-                            {manualReferenceId && (
-                                <p className="mt-1 text-sm text-stone-600">
-                                    The customer has uploaded proof for a manual transfer (Reference: <strong className="font-mono text-indigo-600">{manualReferenceId}</strong>). Please verify this against your GCash records.
-                                </p>
-                            )}
+                            <p className="mt-1 text-sm text-stone-600 mb-4">
+                                The customer has uploaded proof for a manual transfer (Reference: <strong className="font-mono text-indigo-600">{manualReferenceId}</strong>). Please verify this against your records.
+                            </p>
                         </div>
 
                         {manualProofUrl ? (
@@ -820,7 +854,7 @@ const handleSendMeasurements = (e) => {
                             <p className="text-sm font-semibold text-rose-700">No proof image uploaded yet.</p>
                         )}
                     </div>
-                )}
+                ) : null}
                 </div>
 
                 {reworkRequest && (
@@ -853,8 +887,8 @@ const handleSendMeasurements = (e) => {
                             </div>
                         )}
 
-                        {reworkRequest.tailor_response_notes && (
-                            <p className="text-sm text-stone-700 mt-4"><span className="font-bold">Tailor Notes:</span> {reworkRequest.tailor_response_notes}</p>
+                        {reworkRequest.tailor_notes && (
+                            <p className="text-sm text-stone-700 mt-4"><span className="font-bold">Tailor Notes:</span> {reworkRequest.tailor_notes}</p>
                         )}
                     </div>
                 )}
@@ -988,6 +1022,8 @@ const handleSendMeasurements = (e) => {
             shouldHighlightMeasurements={action === 'view_measurements'}
             onAccept={handleAccept}
             onReject={() => setShowRejectModal(true)}
+            setActiveTab={setActiveTab}
+            globalMeasurements={globalMeasurements}
         />
     </div>
 )}
@@ -1112,42 +1148,97 @@ const handleSendMeasurements = (e) => {
         <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm">
             <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">Post-Completion Rework</h3>
             {reworkRequest ? (
-                <>
-                    <p className="text-lg font-black text-stone-900">Rework {reworkStatus || 'Pending Review'}</p>
-                    <p className="text-sm text-stone-700 mt-1"><span className="font-bold">Category:</span> {reworkRequest.reason_category}</p>
-                    <p className="text-sm text-stone-700 mt-1"><span className="font-bold">Customer Notes:</span> {reworkRequest.customer_notes}</p>
-                    {!!reworkRequest?.proof_images?.length && (
-                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {reworkRequest.proof_images.map((img, idx) => (
-                                <img key={`tailor-rework-proof-${idx}`} src={img?.startsWith('http') ? img : `/storage/${img}`} alt="Rework proof" className="w-full h-24 object-cover rounded-xl border border-amber-200 bg-white" />
-                            ))}
+                <div className="space-y-5">
+                    <div className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <p className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-rose-600">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    Customer Claim Details
+                                </p>
+                                <p className="mt-2 text-lg font-black text-stone-900">Rework {reworkStatus || 'Pending Review'}</p>
+                            </div>
+                            <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-rose-700">
+                                {reworkRequest.reason_category || 'General'}
+                            </span>
                         </div>
-                    )}
-                    {reworkRequest.tailor_response_notes && (
-                        <p className="text-sm text-stone-700 mt-4"><span className="font-bold">Tailor Response:</span> {reworkRequest.tailor_response_notes}</p>
+
+                        <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+                            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Customer Notes</p>
+                                <p className="mt-2 text-sm leading-6 text-stone-700">{reworkRequest.customer_notes || 'No customer notes provided.'}</p>
+                            </div>
+
+                            <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Claim Summary</p>
+                                <div className="mt-3 space-y-2 text-sm text-stone-700">
+                                    <p><span className="font-bold text-stone-900">Category:</span> {reworkRequest.reason_category || 'General'}</p>
+                                    <p><span className="font-bold text-stone-900">Status:</span> {reworkStatus || 'Pending Review'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {!!reworkRequest?.proof_images?.length && (
+                            <div className="mt-5">
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Proof Images</p>
+                                <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                                    {reworkRequest.proof_images.map((img, idx) => (
+                                        <img
+                                            key={`tailor-rework-proof-${idx}`}
+                                            src={img?.startsWith('http') ? img : `/storage/${img}`}
+                                            alt="Rework proof"
+                                            className="h-24 w-full rounded-xl border border-rose-200 bg-white object-cover"
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {reworkRequest.tailor_notes && (
+                        <section className={`rounded-2xl border p-5 shadow-sm ${['rejected', 'declined'].includes(reworkStatusNormalized) ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                            <p className={`inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] ${['rejected', 'declined'].includes(reworkStatusNormalized) ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Official Shop Resolution
+                            </p>
+                            <p className="mt-3 text-sm leading-6 text-stone-800">{reworkRequest.tailor_notes}</p>
+                        </section>
                     )}
 
-                    {reworkStatus === 'Pending Review' && (
-                        <div className="mt-4 flex flex-wrap gap-3">
-                            <button type="button" onClick={acceptRework} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold">Accept Rework</button>
-                            <button type="button" onClick={rejectRework} className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold">Reject Rework</button>
-                        </div>
-                    )}
-                    {reworkStatus === 'Accepted' && (
-                        <div className="mt-4">
-                            <button type="button" onClick={markReworkGarmentReceived} className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold">
-                                Rework Garment Received
-                            </button>
-                        </div>
-                    )}
-                    {reworkStatus === 'In Progress' && (
-                        <div className="mt-4">
-                            <button type="button" onClick={markReworkResolved} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold">
-                                Mark Rework as Resolved
-                            </button>
-                        </div>
-                    )}
-                </>
+                    <div className="border-t border-stone-200 pt-4">
+                        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Actions</p>
+                        {(reworkStatusNormalized === 'pending' || reworkStatusNormalized === 'pending review') && (
+                            <div className="flex flex-wrap gap-3">
+                                <button type="button" onClick={acceptRework} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold inline-flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Accept Rework
+                                </button>
+                                <button type="button" onClick={rejectRework} className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold inline-flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4" />
+                                    Reject Rework
+                                </button>
+                            </div>
+                        )}
+
+                        {(['approved', 'accepted'].includes(reworkStatusNormalized)) && (
+                            <div>
+                                <button type="button" onClick={markReworkGarmentReceived} className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold inline-flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
+                                    Mark Garment Received & Start Rework
+                                </button>
+                            </div>
+                        )}
+
+                        {(reworkStatusNormalized === 'in progress' || reworkStatusNormalized === 'in_progress') && (
+                            <div>
+                                <button type="button" onClick={markReworkReadyForPickup} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold inline-flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Mark Ready for Pickup
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             ) : (
                 <p className="text-sm text-stone-600">No rework request has been submitted for this order.</p>
             )}

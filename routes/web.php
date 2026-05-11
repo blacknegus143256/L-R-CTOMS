@@ -113,6 +113,7 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
         Route::patch('/store/orders/{order}/reject', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'rejectOrder'])->name('store.orders.reject');
         Route::patch('/store/orders/{order}/quote', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'quote'])->name('store.orders.quote');
         Route::patch('/store/orders/{order}/request-measurements', [\App\Http\Controllers\Store\StoreDashboardController::class, 'requestMeasurements'])->name('store.orders.request-measurements');
+        Route::patch('/store/orders/{order}/save-measurements', [\App\Http\Controllers\Store\StoreDashboardController::class, 'saveMeasurements'])->name('store.orders.save-measurements');
         Route::patch('/store/orders/{order}/materials-received', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'markMaterialsReceived'])->name('store.orders.materials-received');
         Route::patch('/store/orders/{order}/measurements-taken', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'markMeasurementsTaken'])->name('store.orders.measurements-taken');
         Route::patch('/store/orders/{order}/payment-status', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'updatePaymentStatus'])->name('store.orders.payment-status');

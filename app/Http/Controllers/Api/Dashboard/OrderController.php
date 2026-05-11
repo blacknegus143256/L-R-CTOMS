@@ -18,10 +18,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use App\Enums\OrderStatus;
 use App\Notifications\OrderUpdatedNotification;
 use App\Models\OrderService;
+use App\Models\UserMeasurement;
 
 class OrderController extends Controller
 {
@@ -189,7 +191,7 @@ class OrderController extends Controller
             'service_id' => ['required', Rule::exists('services', 'id')->where('tailoring_shop_id', $shop->id)],
             'material_source' => 'required|in:customer,shop,tailor_choice',
             'is_rush' => 'nullable|boolean',
-            'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
             'measurement_type' => 'nullable|string',
             'measurement_preference' => 'nullable|string',
             'measurement_date' => 'nullable|date_format:Y-m-d H:i:s',
@@ -553,7 +555,7 @@ class OrderController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
             'caption' => 'nullable|string|max:255',
         ]);
 
@@ -618,15 +620,43 @@ class OrderController extends Controller
             'attributes' => function ($query) {
                 $query->withPivot('price', 'item_name', 'image_url', 'notes', 'unit');
             },
-            'attributes.attributeCategory', // =��� This eager-loads the category!
+            'attributes.attributeCategory',
         ]);
 
         $categories = AttributeCategory::orderBy('name')->get(['id', 'name']);
 
+        // Fetch the customer's global measurements for auto-fill
+        $customerId = $order->user_id ?? $order->customer_id;
+        $globalMeasurements = [];
+        
+        if ($customerId) {
+            try {
+                $globalMeasurements = UserMeasurement::where('user_id', $customerId)
+                    ->get(['measurement_name', 'value', 'unit', 'last_verified_at'])
+                    ->mapWithKeys(fn($m) => [
+                        $m->measurement_name => [
+                            'value' => $m->value,
+                            'unit' => $m->unit,
+                            'lastVerified' => $m->last_verified_at,
+                        ]
+                    ])
+                    ->toArray();
+            } catch (\Exception $e) {
+                // Silently fail and return empty measurements if table doesn't exist or query fails
+                // This ensures the order view still loads properly
+                $globalMeasurements = [];
+                Log::warning('Failed to fetch global measurements', [
+                    'user_id' => $customerId,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
         return \Inertia\Inertia::render('dashboard/TailorOrderWorkspace', [
             'order' => $order,
-            'shop' => $shop, // Pass the shop explicitly to fix the UI fallback issue
+            'shop' => $shop,
             'categories' => $categories,
+            'globalMeasurements' => $globalMeasurements,
         ]);
     }
 

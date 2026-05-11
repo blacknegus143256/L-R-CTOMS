@@ -98,11 +98,11 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
         >
             <Head title="Master Schedule" />
 
-            <div className="py-8 bg-stone-50/50 min-h-screen">
+            <div className="py-4 bg-stone-50/50 min-h-screen">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="bg-white rounded-[2rem] shadow-xl shadow-stone-200/40 border border-stone-100 overflow-hidden">
                         {/* Header & Legend */}
-                        <div className="p-6 md:p-8 border-b border-stone-100 bg-amber-50/30 flex flex-col gap-4 md:flex-row md:items-center justify-between">
+                        <div className="p-4 md:p-6 border-b border-stone-100 bg-amber-50/30 flex flex-col gap-4 md:flex-row md:items-center justify-between">
                             <div>
                                 <h3 className="text-2xl font-black text-amber-900 flex items-center gap-3">
                                     <FiCalendar className="w-6 h-6 text-amber-500" />
@@ -129,14 +129,14 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
                         </div>
 
                         {/* Grid */}
-                        <div className="p-6 md:p-8">
+                        <div className="p-4 md:p-6">
                             <div className="grid grid-cols-7 gap-4 mb-4">
                                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                                     <div key={day} className="text-center font-bold text-stone-400 text-xs md:text-sm uppercase tracking-widest">{day}</div>
                                 ))}
                             </div>
                             <div className="grid grid-cols-7 gap-2 md:gap-4">
-                                {blanks.map(blank => <div key={`blank-${blank}`} className="aspect-square rounded-2xl bg-stone-50 border border-transparent"></div>)}
+                                {blanks.map(blank => <div key={`blank-${blank}`} className="min-h-[100px] md:min-h-[120px] rounded-2xl bg-stone-50 border border-transparent"></div>)}
                                 
                                 {days.map(day => {
                                     const dayString = format(new Date(displayYear, displayMonth, day), 'yyyy-MM-dd');
@@ -188,7 +188,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
                                         <div 
                                             key={day} 
                                             onClick={() => openDayModal(day)}
-                                            className={`aspect-square rounded-2xl border flex flex-col p-2 md:p-3 transition-all cursor-pointer hover:scale-[1.01] ${cellBackgroundClass} ${baseLayerClass}`}
+                                            className={`min-h-[100px] md:min-h-[120px] rounded-2xl border flex flex-col p-2 md:p-3 transition-all cursor-pointer hover:scale-[1.01] ${cellBackgroundClass} ${baseLayerClass}`}
                                         >
                                             <span className={`text-sm md:text-lg font-bold ${isClosedException ? 'text-white' : hasAppointments ? 'text-indigo-700' : isToday ? 'text-stone-900' : 'text-stone-500'}`}>{day}</span>
                                             

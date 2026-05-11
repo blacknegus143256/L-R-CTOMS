@@ -55,7 +55,7 @@ class OrderReworkController extends Controller
             'reason_category' => ['required', 'string', 'max:120'],
             'customer_notes' => ['required', 'string', 'max:2000'],
             'proof_images' => ['nullable', 'array'],
-            'proof_images.*' => ['image', 'mimes:jpeg,png,jpg,webp,gif', 'max:2048'],
+            'proof_images.*' => ['image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'],
         ]);
 
         $rework = OrderRework::create([
@@ -93,10 +93,11 @@ class OrderReworkController extends Controller
         $validated = $request->validate([
             'tailor_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+        $tailorNotes = $request->input('tailor_notes', $orderRework->tailor_notes);
 
         $orderRework->update([
             'status' => 'Accepted',
-            'tailor_notes' => $validated['tailor_notes'] ?? $orderRework->tailor_notes,
+            'tailor_notes' => $tailorNotes,
         ]);
 
         if ($order->user) {
@@ -122,10 +123,11 @@ class OrderReworkController extends Controller
         $validated = $request->validate([
             'tailor_notes' => ['required', 'string', 'max:2000'],
         ]);
+        $tailorNotes = $request->input('tailor_notes');
 
         $orderRework->update([
             'status' => 'Rejected',
-            'tailor_notes' => $validated['tailor_notes'],
+            'tailor_notes' => $tailorNotes,
         ]);
 
         if ($order->user) {
@@ -157,10 +159,11 @@ class OrderReworkController extends Controller
         $validated = $request->validate([
             'tailor_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+        $tailorNotes = $request->input('tailor_notes', $orderRework->tailor_notes);
 
         $orderRework->update([
             'status' => 'In Progress',
-            'tailor_notes' => $validated['tailor_notes'] ?? $orderRework->tailor_notes,
+            'tailor_notes' => $tailorNotes,
         ]);
 
         if ($order->user) {
@@ -187,10 +190,11 @@ class OrderReworkController extends Controller
             'status' => ['required', Rule::in(self::ALLOWED_STATUSES)],
             'tailor_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+        $tailorNotes = $request->input('tailor_notes', $orderRework->tailor_notes);
 
         $orderRework->update([
             'status' => $validated['status'],
-            'tailor_notes' => $validated['tailor_notes'] ?? $orderRework->tailor_notes,
+            'tailor_notes' => $tailorNotes,
         ]);
 
         if ($order->user) {

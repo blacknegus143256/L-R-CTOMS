@@ -35,8 +35,9 @@ class ShopSettingsController extends Controller
         }
 
         $validated = $request->validate([
-            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:2048'],
-            'document_qr_code' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:2048'],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'],
+            'document_qr_code' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'],
+            'google_maps_link' => ['nullable', 'url', 'max:500'],
             'payout_method' => 'nullable|string|max:100',
             'payout_account' => 'nullable|string|max:255',
             'slot_duration_minutes' => 'required|integer|min:15',
@@ -76,6 +77,7 @@ class ShopSettingsController extends Controller
 
         DB::transaction(function () use ($shop, $validated) {
             $shop->update([
+                'google_maps_link' => $validated['google_maps_link'] ?? null,
                 'payout_method' => $validated['payout_method'] ?? null,
                 'payout_account' => $validated['payout_account'] ?? null,
                 'slot_duration_minutes' => $validated['slot_duration_minutes'],

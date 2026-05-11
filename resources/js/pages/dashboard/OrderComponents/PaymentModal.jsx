@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { AlertCircle, CreditCard, Gift, Loader, X } from 'lucide-react';
+import { AlertCircle, Banknote, CreditCard, Gift, Loader, X } from 'lucide-react';
 import AlertModal from '@/Components/AlertModal';
 import { showAlert } from '@/utils/alert';
 import { getImageUploadError } from '@/utils/imageUpload';
@@ -64,6 +64,42 @@ const PaymentModal = ({
                 message: 'Please select a payment option.',
                 type: 'error',
             });
+            return;
+        }
+
+        // In-shop cash intent flow: confirm order and register cash payment intent.
+        if (paymentMethod === 'cash') {
+            setIsPaymentProcessing(true);
+            setPaymentError(null);
+
+            try {
+                await axios.patch(`/my-orders/${currentOrder.id}/accept`, {});
+
+                const payload = new FormData();
+                payload.append('payment_type', selectedPaymentType);
+                payload.append('is_cash', 'true');
+
+                await axios.post(`/orders/${currentOrder.id}/manual-payment`, payload);
+
+                onClose?.();
+                showAlert({
+                    title: 'Order Confirmed',
+                    message: 'Your order is confirmed. Please pay the required amount in cash during your shop visit.',
+                    type: 'success',
+                });
+                return;
+            } catch (error) {
+                console.error('Cash Payment Intent Error:', error.response || error);
+                setPaymentError(error.response?.data?.message || 'Failed to process cash payment intent.');
+                setAlert({
+                    isOpen: true,
+                    title: 'Payment Error',
+                    message: error.response?.data?.message || 'Failed to process cash payment intent.',
+                    type: 'error',
+                });
+            } finally {
+                setIsPaymentProcessing(false);
+            }
             return;
         }
 
@@ -180,10 +216,10 @@ const PaymentModal = ({
                 </div>
 
                 <div className="mb-6 rounded-2xl border border-indigo-100 bg-white p-4 text-sm text-indigo-800">
-                    Choose your preferred payment path: PayMongo checkout or manual QR transfer.
+                    Choose your preferred payment path: PayMongo checkout, manual QR transfer, or pay in-shop with cash.
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <button
                         type="button"
                         onClick={() => setPaymentMethod('paymongo')}
@@ -195,6 +231,7 @@ const PaymentModal = ({
                     >
                         Pay via PayMongo
                     </button>
+
                     <button
                         type="button"
                         onClick={() => setPaymentMethod('manual')}
@@ -205,6 +242,19 @@ const PaymentModal = ({
                         }`}
                     >
                         Manual QR Transfer
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setPaymentMethod('cash')}
+                        className={`p-3 rounded-2xl border-2 font-black transition flex flex-col items-center justify-center gap-1 ${
+                            paymentMethod === 'cash'
+                                ? 'border-amber-600 bg-amber-100 text-amber-900'
+                                : 'border-stone-200 bg-white text-stone-700 hover:border-amber-300'
+                        }`}
+                    >
+                        <Banknote className="w-4 h-4" />
+                        <span>Pay In-Shop (Cash)</span>
                     </button>
                 </div>
 
@@ -367,7 +417,7 @@ const PaymentModal = ({
                         ) : (
                             <>
                                 <CreditCard className="w-5 h-5" />
-                                {paymentMethod === 'manual' ? 'Submit Payment Proof' : 'Confirm Payment'}
+                                {paymentMethod === 'manual' ? 'Submit Payment Proof' : paymentMethod === 'cash' ? 'Confirm Cash Payment' : 'Confirm Payment'}
                             </>
                         )}
                     </button>

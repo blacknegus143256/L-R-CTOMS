@@ -45,6 +45,14 @@ const getStatusStyle = (status) => {
     }
 };
 
+const getNextStep = (status) => {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (normalized === 'pending' || normalized === 'pending review') return 'Customer is waiting for your review.';
+    if (['approved', 'accepted', 'in progress'].includes(normalized)) return 'Waiting for customer to drop off the item.';
+    if (['resolved', 'completed'].includes(normalized)) return 'Rework completed and ready for the customer.';
+    return 'Check the order for next actions.';
+};
+
 export default function Index({ auth, reworks = [] }) {
     const normalizedReworks = reworks.map((rework) => ({
         ...rework,
@@ -141,20 +149,34 @@ export default function Index({ auth, reworks = [] }) {
                                             <td className="px-6 py-4 text-sm text-stone-700">
                                                 {formatDate(rework.created_at)}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider ${getStatusStyle(rework.statusLabel)}`}>
-                                                    {rework.statusLabel}
-                                                </span>
-                                            </td>
+                                                    <td className="px-6 py-4">
+                                                        <div>
+                                                            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider ${getStatusStyle(rework.statusLabel)}`}>
+                                                                {rework.statusLabel}
+                                                            </span>
+                                                            <p className="mt-2 text-xs text-stone-500">{getNextStep(rework.statusLabel)}</p>
+                                                        </div>
+                                                    </td>
                                             <td className="px-6 py-4 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => router.get(route('store.orders.show', rework.order_id), { tab: 'rework' })}
-                                                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all hover:bg-slate-800"
-                                                >
-                                                    Manage Fix
-                                                    <ArrowRight className="h-4 w-4" />
-                                                </button>
+                                                {rework.statusLabel && rework.statusLabel.toLowerCase().includes('pending') ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => router.get(route('store.orders.show', rework.order_id), { tab: 'rework' })}
+                                                        className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-md transition-all hover:bg-amber-600"
+                                                    >
+                                                        Review Request
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => router.get(route('store.orders.show', rework.order_id), { tab: 'rework' })}
+                                                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-md transition-all hover:bg-indigo-700"
+                                                    >
+                                                        View Order
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     )) : (

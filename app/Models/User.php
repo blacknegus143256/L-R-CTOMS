@@ -90,6 +90,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Appointment::class);
     }
 
+    public function measurements(): HasMany
+    {
+        return $this->hasMany(UserMeasurement::class);
+    }
+
     /**
      * Override to send custom OTP verification email instead of default Laravel verification email.
      */

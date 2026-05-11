@@ -34,7 +34,7 @@ class DashboardShopController extends Controller
         }
 
         $request->validate([
-            'logo' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'logo' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);
 
         // Delete old logo

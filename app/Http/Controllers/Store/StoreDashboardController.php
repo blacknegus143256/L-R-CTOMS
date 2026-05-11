@@ -10,10 +10,13 @@ use App\Models\ShopException;
 use App\Models\TailoringShop;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\User;
+use App\Models\UserMeasurement;
 use App\Notifications\OrderUpdatedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
@@ -459,7 +462,8 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             ->map(function ($field) {
                 return [
                     'name' => trim((string) ($field['name'] ?? $field['part'] ?? '')),
-                    'instruction' => $field['instruction'] ?? null,
+                    // Accept value if the tailor provided it during quoting/fitting
+                    'value' => array_key_exists('value', $field) ? $field['value'] : null,
                 ];
             })
             ->filter(fn ($field) => $field['name'] !== '')
@@ -474,19 +478,43 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
                 ->delete();
         }
 
+        $hasAnyValues = false;
         foreach ($requestedMeasurements as $measurement) {
-            $orderMeasurement = OrderMeasurement::firstOrNew([
-                'order_id' => $order->id,
+            $orderMeasurement = $order->order_measurements()->firstOrNew([
                 'measurement_name' => $measurement['name'],
             ]);
 
-            $orderMeasurement->unit = $validated['measurement_unit'];
-
-            if (! $orderMeasurement->exists) {
-                $orderMeasurement->measurement_value = null;
+            // 1. THE MISSING LINK: Actually save the typed number!
+            if (isset($measurement['value']) && $measurement['value'] !== '') {
+                $orderMeasurement->measurement_value = (string) $measurement['value'];
+                $hasAnyValues = true;
+            } else {
+                if (! $orderMeasurement->exists) {
+                    $orderMeasurement->measurement_value = null;
+                }
             }
 
+            $orderMeasurement->unit = $validated['measurement_unit'] ?? ($measurement['unit'] ?? 'in');
             $orderMeasurement->save();
+
+            // 2. PHASE 2 SYNC: Save to the Customer's Global Profile
+            if (isset($measurement['value']) && $measurement['value'] !== '') {
+                $customerId = $order->user_id ?? $order->customer_id ?? ($order->user?->id ?? null);
+                if ($customerId) {
+                    UserMeasurement::updateOrCreate(
+                        [
+                            'user_id' => $customerId,
+                            'measurement_name' => $measurement['name'],
+                        ],
+                        [
+                            'value' => (float) $measurement['value'],
+                            'unit' => $validated['measurement_unit'] ?? ($measurement['unit'] ?? 'in'),
+                            'notes' => 'Recorded by tailor during request',
+                            'last_verified_at' => now(),
+                        ]
+                    );
+                }
+            }
         }
 
         $order->load('order_measurements');
@@ -516,8 +544,155 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             }
         }
 
+        // Log the action to the timeline
+        $actionDesc = $hasAnyValues 
+            ? 'Tailor recorded in-shop measurements.' 
+            : 'Tailor requested specific measurements from the customer.';
+        $actionType = $hasAnyValues ? 'measurements_recorded' : 'measurements_requested';
+        $this->logOrderActivity(
+            $order,
+            $user?->id,
+            $actionType,
+            $actionDesc
+        );
+
         return redirect()->route('store.orders.show', $order->id)
             ->with('success', 'Measurement request updated successfully.');
+    }
+
+    /**
+     * Save in-shop/home visit measurements from the tailor.
+     * PATCH /store/orders/{order}/save-measurements
+     * 
+     * This endpoint allows tailors to input measurements during in-shop or home visit fittings.
+     * Measurements are saved to both the order snapshot and the customer's global profile.
+     */
+    public function saveMeasurements(Request $request, Order $order)
+    {
+        $user = $request->user();
+        $shop = $user->tailoringShops()->first() ?? null;
+
+        if (!$shop || $order->tailoring_shop_id !== $shop->id) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $validated = $request->validate([
+            'measurements' => 'required|array',
+            'measurements.*.name' => 'required|string',
+            'measurements.*.value' => 'required|numeric|min:0',
+            'measurements.*.unit' => 'nullable|string|in:in,cm,inches,centimeters',
+        ]);
+
+        // Normalize unit format
+        $normalizeUnit = function ($unit) {
+            if (!$unit) return 'in';
+            $unit = strtolower(trim($unit));
+            return $unit === 'centimeters' || $unit === 'cm' ? 'cm' : 'in';
+        };
+
+        // Update order measurements with values
+        foreach ($validated['measurements'] as $measurement) {
+            $normalizedUnit = $normalizeUnit($measurement['unit'] ?? null);
+
+            OrderMeasurement::updateOrCreate(
+                [
+                    'order_id' => $order->id,
+                    'measurement_name' => $measurement['name'],
+                ],
+                [
+                    'measurement_value' => (string) $measurement['value'],
+                    'unit' => $normalizedUnit,
+                ]
+            );
+        }
+
+        // --- PHASE 2: SYNC TO GLOBAL CUSTOMER PROFILE ---
+        if ($order->user) {
+            $syncMeasurements = array_map(function ($m) use ($normalizeUnit) {
+                return [
+                    'name' => $m['name'],
+                    'value' => $m['value'],
+                    'unit' => $normalizeUnit($m['unit'] ?? null),
+                ];
+            }, $validated['measurements']);
+
+            $this->syncToUserMeasurements($order->user, $syncMeasurements);
+        }
+
+        // Reload order with updated measurements
+        $order->load('order_measurements');
+
+        // Mark measurements as taken if this is an in-shop fitting
+        if ($order->measurement_type === 'in_shop' || 
+            ($order->fitMethod?->name ?? $order->fit_method?->name) === 'In-Shop Fitting') {
+            $order->update(['measurements_taken' => true]);
+            $this->checkReadyForProduction($order);
+        }
+
+        // Notify customer of measurement submission
+        if ($order->user) {
+            $recentNotification = DB::table('notifications')
+                ->where('data->type', 'measurements_recorded')
+                ->where('data->order_id', $order->id)
+                ->where('created_at', '>=', now()->subMinutes(5))
+                ->whereNull('read_at')
+                ->exists();
+
+            if (!$recentNotification) {
+                $order->user->notify(new OrderUpdatedNotification(
+                    $order,
+                    "Measurements recorded for your order #{$order->id} during your fitting.",
+                    'measurements_recorded'
+                ));
+            }
+        }
+
+        return redirect()->route('store.orders.show', $order->id)
+            ->with('success', 'Measurements saved and synced to customer profile.');
+    }
+
+    /**
+     * Sync measurements from order to the customer's global profile.
+     * Updates or creates UserMeasurement records for profile-based sizing.
+     */
+    private function syncToUserMeasurements(?User $user, array $measurements): void
+    {
+        if (!$user) {
+            return;
+        }
+
+        try {
+            foreach ($measurements as $measurement) {
+                // Skip if no value provided
+                if (empty($measurement['value'])) {
+                    continue;
+                }
+
+                $unit = $measurement['unit'] ?? 'in';
+                if (!is_string($unit)) {
+                    $unit = 'in';
+                }
+
+                UserMeasurement::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'measurement_name' => $measurement['name'],
+                    ],
+                    [
+                        'value' => (float) $measurement['value'],
+                        'unit' => $unit,
+                        'notes' => 'Recorded by tailor during fitting',
+                        'last_verified_at' => now(),
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            // Log but don't fail the fitting if measurements can't be saved to global profile
+            Log::warning('Failed to sync measurements from tailor fitting', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     /**
@@ -527,7 +702,6 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
     {
         $userId = Auth::id();
         
-        // If no shopId provided, redirect to the shop's orders page
         if (!$shopId) {
             $shop = TailoringShop::where('user_id', $userId)->first();
             if ($shop) {
@@ -536,13 +710,104 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             return redirect()->route('store.dashboard');
         }
 
-        // Verify the shop belongs to the authenticated user
         $shop = TailoringShop::with(['attributes.attributeCategory'])->findOrFail($shopId);
         if ($shop->user_id !== $userId) {
             abort(403, 'Unauthorized. You can only view orders for your own shop.');
         }
 
-        // Build the base query
+        // ==========================================
+        // BULLETPROOF ELOQUENT STATS CALCULATION
+        // ==========================================
+        // Loads all orders with relationships into memory to calculate global tab numbers.
+        // Safely handles status as Enum, String, or Object.
+        // Separates from pagination to maintain accuracy across all filters.
+        
+        $allOrders = Order::where('tailoring_shop_id', $shopId)
+            ->with(['status', 'payment']) 
+            ->get();
+
+        // Safe status extractor - handles Enum, String, or Object
+        $getStatus = function($o): string {
+            if (!isset($o->status)) {
+                return '';
+            }
+            
+            $status = $o->status;
+            
+            // Handle BackedEnum (has ->value)
+            if ($status instanceof \BackedEnum) {
+                return trim((string)$status->value);
+            }
+            
+            // Handle UnitEnum (case-based enum)
+            if ($status instanceof \UnitEnum) {
+                return trim((string)$status->name);
+            }
+            
+            // Handle objects with 'name' or 'value' property
+            if (is_object($status)) {
+                return trim((string)($status->name ?? $status->value ?? ''));
+            }
+            
+            // Handle plain strings
+            return trim((string)$status);
+        };
+
+        // Safe payment status extractor - handles multiple storage formats
+        $getPaymentStatus = function($o): string {
+            $payStatus = 'Pending';
+            
+            // Try loading from payment relationship
+            if ($o->payment) {
+                $ps = $o->payment->payment_status ?? $o->payment->status ?? null;
+                
+                if ($ps instanceof \BackedEnum) {
+                    $payStatus = trim((string)$ps->value);
+                } elseif ($ps instanceof \UnitEnum) {
+                    $payStatus = trim((string)$ps->name);
+                } elseif (is_object($ps)) {
+                    $payStatus = trim((string)($ps->name ?? $ps->value ?? 'Pending'));
+                } else {
+                    $payStatus = trim((string)($ps ?? 'Pending'));
+                }
+            }
+            
+            // Fallback to direct payment_status attribute if relationship failed
+            if (empty($payStatus) || $payStatus === 'Pending') {
+                $payStatus = trim((string)($o->payment_status ?? 'Pending'));
+            }
+            
+            return $payStatus;
+        };
+
+        $stats = [
+            'all' => $allOrders->count(),
+            'requested' => $allOrders->filter(fn($o) => $getStatus($o) === 'Requested')->count(),
+            'quoted' => $allOrders->filter(fn($o) => $getStatus($o) === 'Quoted')->count(),
+            'confirmed' => $allOrders->filter(fn($o) => $getStatus($o) === 'Confirmed')->count(),
+            'pendingPayment' => $allOrders->filter(function($o) use ($getStatus, $getPaymentStatus) {
+                // Only "Confirmed" orders can be pending payment
+                if ($getStatus($o) !== 'Confirmed') {
+                    return false;
+                }
+                
+                // Check if payment is pending or missing
+                $payStatus = $getPaymentStatus($o);
+                return $payStatus === 'Pending' || empty($payStatus);
+            })->count(),
+            'readyForProduction' => $allOrders->filter(fn($o) => $getStatus($o) === 'Ready for Production')->count(),
+            'inProgress' => $allOrders->filter(fn($o) => in_array($getStatus($o), ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready']))->count(),
+            'readyToPickUp' => $allOrders->filter(fn($o) => in_array($getStatus($o), ['Ready for Pickup', 'Ready to Pick Up', 'Ready']))->count(),
+            'rush' => $allOrders->filter(fn($o) => (bool) $o->is_rush)->count(),
+            'completed' => $allOrders->filter(fn($o) => $getStatus($o) === 'Completed')->count(),
+        ];
+
+        // ==========================================
+        // BASE QUERY FOR PAGINATED RESULTS
+        // ==========================================
+        // Eager-loads all necessary relationships for the table view.
+        // Filters and sorting applied separately via Eloquent query builder.
+        
         $query = Order::where('tailoring_shop_id', $shopId)
             ->with([
                 'user.profile',
@@ -553,27 +818,60 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
                 'latestLog.user:id,name,role',
             ]);
 
-        // Apply Status Filter if provided
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        // ==========================================
+        // SMART STATUS FILTERING
+        // ==========================================
+        // Uses relationship methods (whereHas, whereDoesntHave) to avoid column guessing.
+        // All filters defer to relationship chains instead of raw table columns.
+        
+        if ($request->filled('status') && $request->status !== 'All') {
+            $status = $request->status;
+            
+            if ($status === 'Pending Payment') {
+                // Confirmed orders with no payment or payment status = Pending
+                $query->whereHas('status', function ($q) {
+                    $q->where('name', 'Confirmed');
+                })->where(function($q) {
+                    $q->whereDoesntHave('payment')
+                      ->orWhereHas('payment.status', function($subQ) {
+                          $subQ->where('name', 'Pending');
+                      });
+                });
+            } elseif ($status === 'Rush') {
+                $query->where('is_rush', true);
+            } elseif ($status === 'In Progress') {
+                $query->whereHas('status', function ($q) {
+                    $q->whereIn('name', ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready']);
+                });
+            } elseif ($status === 'Ready to Pick Up') {
+                $query->whereHas('status', function ($q) {
+                    $q->whereIn('name', ['Ready for Pickup', 'Ready to Pick Up', 'Ready']);
+                });
+            } else {
+                // Generic status filter for any other order status
+                $query->whereHas('status', function ($statusQuery) use ($status) {
+                    $statusQuery->where('name', $status);
+                });
+            }
         }
 
-        // Apply Search Filter (Searching Order ID or User Name)
+        // ==========================================
+        // SMART SEARCH
+        // ==========================================
+        // Prioritizes exact ID matches, then name matches, then partial matches.
+        // Uses CASE statement to rank relevance.
+        
         if ($request->filled('search')) {
             $searchTerm = '%' . $request->search . '%';
+            $cleanSearch = trim((string) $request->search);
+            $startsWith = $cleanSearch . '%';
+
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('id', 'like', $searchTerm)
                   ->orWhereHas('user', function ($subQ) use ($searchTerm) {
                       $subQ->where('name', 'like', $searchTerm);
                   });
             });
-        }
-
-        // --- SMART SEARCH RELEVANCE RANKING ---
-        // If searching, prioritize exact matches first, then "starts with", then everything else.
-        if ($request->filled('search')) {
-            $cleanSearch = trim((string) $request->search);
-            $startsWith = $cleanSearch . '%';
 
             $query->orderByRaw(
                 "
@@ -599,35 +897,33 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             );
         }
 
-        // Apply Sorting (server-side only)
+        // ==========================================
+        // SORTING
+        // ==========================================
+        // Supports: newest, oldest, due-soon, price-high, price-low
+        
         $sort = $request->input('sort', 'newest');
-
-        // Only apply default Rush priority if they specifically want "Newest" and aren't searching
-        if ($sort === 'newest' && ! $request->filled('search')) {
-            $query->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
-                  ->latest();
+        if ($sort === 'newest') {
+            $query->latest();
         } elseif ($sort === 'oldest') {
             $query->oldest();
         } elseif ($sort === 'due-soon') {
-            // Put null dates at the bottom, sort closest dates to the top
-            $query->orderByRaw('expected_completion_date IS NULL ASC')
-                  ->orderBy('expected_completion_date', 'asc');
+            $query->orderByRaw('expected_completion_date IS NULL ASC')->orderBy('expected_completion_date', 'asc');
         } elseif ($sort === 'price-high') {
             $query->orderBy('total_price', 'desc');
         } elseif ($sort === 'price-low') {
-            $query->orderByRaw('total_price IS NULL ASC')
-                  ->orderBy('total_price', 'asc');
+            $query->orderByRaw('total_price IS NULL ASC')->orderBy('total_price', 'asc');
         } else {
-            $query->latest(); // Fallback
+            $query->latest();
         }
 
-        // Paginate with query string parameters preserved
         $orders = $query->paginate(10)->withQueryString();
 
         return Inertia::render('StoreAdmin/OrdersPage', [
             'shopId' => $shopId,
             'shop' => $shop,
             'orders' => $orders,
+            'stats' => $stats,
             'filters' => $request->only(['search', 'status', 'sort']),
         ]);
     }
@@ -661,6 +957,23 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
                 'ready_for_production'
             ));
         }
+    }
+
+    private function logOrderActivity(Order $order, ?int $userId, string $action, string $description): void
+    {
+        // Migration-safe scaffold: no-op until order_logs table exists
+        if (!\Illuminate\Support\Facades\Schema::hasTable('order_logs')) {
+            return;
+        }
+
+        DB::table('order_logs')->insert([
+            'order_id' => $order->id,
+            'user_id' => $userId,
+            'action' => $action,
+            'description' => $description,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }
 

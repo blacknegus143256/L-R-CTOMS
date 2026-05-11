@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Camera, MapPin } from 'lucide-react';
-import LocationMapModal from '@/Components/LocationMapModal'; // Adjust path if needed
+import { Camera, ClipboardList, MapPin, Printer } from 'lucide-react';
+import { showNotification } from '@/utils/notification';
+import { generateReceipt } from '@/utils/receiptGenerator';
 
 const formatAppointment = (appointment) => {
     if (!appointment || !appointment.date) return 'TBD';
@@ -63,23 +64,26 @@ const TailorOverview = ({
     shouldHighlightMeasurements = false,
     onAccept,
     onReject,
+    setActiveTab,
     showRejectModal,
     rejectReasons,
     rejectData,
     setRejectData,
     handleReject,
-    rejectProcessing 
+    rejectProcessing,
+    globalMeasurements = {}
 }) => {
     const fitMethodName = currentOrder.fit_method?.name || currentOrder.fitMethod?.name || 'Unknown';
     const orderOwner = currentOrder.user || currentOrder.customer || {};
     const customerAddress = orderOwner.profile?.street
         ? `${orderOwner.profile.street}, ${orderOwner.profile.barangay || ''}`.replace(/,\s*$/, '')
         : 'No address provided';
-    const isInShopFitting = fitMethodName === 'In-Shop Fitting';
+    const isTailorMeasuredFlow = ['In-Shop Fitting', 'Home Visit'].includes(fitMethodName);
     const measurementsRef = useRef(null);
-    const [mapLocations, setMapLocations] = useState(null);
     const [isImageExpanded, setIsImageExpanded] = useState(false);
     const [printLoading, setPrintLoading] = useState(false);
+    const [tailorInputs, setTailorInputs] = useState({});
+    const [isSubmittingMeasurements, setIsSubmittingMeasurements] = useState(false);
     
     const orderMeasurements = currentOrder.order_measurements || [];
     const fittingAppointment = currentOrder.appointments?.find((a) => a.status === 'confirmed' && a.type === 'fitting');
@@ -95,6 +99,21 @@ const TailorOverview = ({
         return value === null || value === undefined || `${value}`.trim() === '';
     });
 
+    const initialItemsTotal = (currentOrder.items || [])
+        .filter(item => Number(item.price || item.pivot?.price) > 0)
+        .reduce((total, item) => total + (Number(item.price || item.pivot?.price || 0) * Number(item.quantity || item.pivot?.quantity || 1)), 0);
+
+    const addedMaterialsTotal = (currentOrder.required_materials || [])
+        .reduce((total, req) => total + (Number(req.price || 0) * Number(req.quantity || 1)), 0);
+
+    const materialsTotal = initialItemsTotal + addedMaterialsTotal;
+    const grandTotal = Number(currentOrder.total_amount || currentOrder.total_price || 0);
+    const rushFee = Number(currentOrder.rush_fee || 0);
+    const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Math.max(0, grandTotal - materialsTotal - rushFee) : Number(currentOrder.orderServices?.[0]?.price || 0));
+    const amountPaid = Number(currentOrder.amount_paid || 0);
+    const remainingBalance = Math.max(0, grandTotal - amountPaid);
+    const paymentStatusRaw = (currentOrder.payment?.status?.name || currentOrder.payment_status || currentOrder.payment?.payment_status || '').toString().trim();
+
     const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested').toString().trim().toLowerCase();
     const statusRank = {
         requested: 0,
@@ -108,12 +127,24 @@ const TailorOverview = ({
         completed: 7,
     };
     const isAtLeastConfirmed = (statusRank[rawStatus] ?? 0) >= statusRank.confirmed;
+    const isAtLeastQuoted = (statusRank[rawStatus] ?? 0) >= statusRank.quoted;
 
     useEffect(() => {
         if (shouldHighlightMeasurements && measurementsRef.current) {
             measurementsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }, [shouldHighlightMeasurements]);
+
+    // Auto-fill tailor inputs from customer's global measurement profile
+    useEffect(() => {
+        const initialInputs = {};
+        pendingMeasurements.forEach(m => {
+            const globalValue = globalMeasurements[m.measurement_name]?.value || 
+                              globalMeasurements[m.measurement_name];
+            initialInputs[m.measurement_name] = globalValue || '';
+        });
+        setTailorInputs(initialInputs);
+    }, [currentOrder?.id, globalMeasurements]);
 
     const markMaterialsReceived = () => {
         router.patch(route('store.orders.materials-received', currentOrder.id), {}, {
@@ -122,25 +153,15 @@ const TailorOverview = ({
     };
 
     const handleViewMap = () => {
-        if (fitMethodName === 'Home Visit') {
-            setMapLocations([{
-                lat: orderOwner.profile?.latitude,
-                lng: orderOwner.profile?.longitude,
-                shopName: `${orderOwner.name}'s Location`,
-                street: orderOwner.profile?.street,
-                barangay: orderOwner.profile?.barangay,
-            }]);
-        } else if (fitMethodName === 'In-Shop Fitting') {
-            const shop = currentOrder.tailoring_shop || currentOrder.shop;
-            setMapLocations([{
-                lat: shop?.latitude,
-                lng: shop?.longitude,
-                shopName: shop?.shop_name || 'Tailoring Shop',
-                street: shop?.street,
-                barangay: shop?.barangay,
-                google_maps_link: shop?.google_maps_link,
-            }]);
+        const lat = orderOwner?.profile?.latitude;
+        const lng = orderOwner?.profile?.longitude;
+
+        if (lat && lng) {
+            window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank');
+            return;
         }
+
+        showNotification?.warning('Customer location coordinates are missing.');
     };
 
     const getImageUrl = () => {
@@ -255,10 +276,50 @@ const TailorOverview = ({
         }, 500);
     };
 
+    
+
+    const submitTailorMeasurements = () => {
+        // Validate that all pending measurements have values
+        const submitted = pendingMeasurements
+            .filter(m => tailorInputs[m.measurement_name])
+            .map(m => ({
+                name: m.measurement_name,
+                value: parseFloat(tailorInputs[m.measurement_name]) || 0,
+                unit: m.unit || 'in',
+            }));
+
+        if (submitted.length === 0) {
+            alert('Please enter measurements for all fields.');
+            return;
+        }
+
+        setIsSubmittingMeasurements(true);
+        router.patch(`/store/orders/${currentOrder.id}/save-measurements`, {
+            measurements: submitted,
+        }, {
+            onSuccess: () => {
+                setIsSubmittingMeasurements(false);
+            },
+            onError: () => {
+                setIsSubmittingMeasurements(false);
+            },
+            preserveScroll: true,
+        });
+    };
+
     const markMeasurementsTaken = () => {
         router.patch(route('store.orders.measurements-taken', currentOrder.id), {}, {
             preserveScroll: true,
         });
+    };
+
+    const openGoogleMaps = (lat, lng) => {
+        if (lat && lng) {
+            window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+            return true;
+        }
+
+        return false;
     };
 
     return (
@@ -266,8 +327,8 @@ const TailorOverview = ({
             {/* Left Column: Customer Request */}
             <div className="lg:col-span-2 space-y-8">
                 <section className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-1/3 aspect-[3/4] bg-stone-100 rounded-2xl overflow-hidden shadow-inner flex-shrink-0 border border-stone-200">
-                        {currentOrder.design_image ? (
+                    <div className="w-full md:w-1/2 h-64 md:h-auto rounded-2xl overflow-hidden border border-stone-200 bg-stone-50">
+                        {getImageUrl() ? (
                             <img 
                                 src={getImageUrl()}
                                 alt="Design Reference" 
@@ -428,12 +489,24 @@ const TailorOverview = ({
                                                         {measure.measurement_value} <span className="text-sm text-emerald-700 font-bold">{measure.unit}</span>
                                                     </span>
                                                     <span className="ml-auto text-emerald-500 text-sm font-bold bg-white px-2 py-1 rounded-lg border border-emerald-100 shadow-sm">
-                                                        ✓ Done
+                                                        Done
                                                     </span>
                                                 </div>
+                                            ) : isTailorMeasuredFlow ? (
+                                                <div className="space-y-2">
+                                                    <input 
+                                                        type="number"
+                                                        step="0.1"
+                                                        placeholder="Enter value"
+                                                        value={tailorInputs[measure.measurement_name] || ''}
+                                                        onChange={(e) => setTailorInputs(prev => ({...prev, [measure.measurement_name]: e.target.value}))}
+                                                        disabled={isSubmittingMeasurements}
+                                                        className="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-900 placeholder-indigo-400 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    />
+                                                    <span className="text-xs text-indigo-600 font-medium">{measure.unit || 'in'}</span>
+                                                </div>
                                             ) : (
-                                                <span className="text-sm font-bold text-amber-700 flex items-center gap-2">
-                                                    <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                <span className="text-sm font-bold text-amber-700">
                                                     Waiting on customer
                                                 </span>
                                             )}
@@ -463,7 +536,7 @@ const TailorOverview = ({
                                     {currentOrder.material_source === 'customer' ? 'Customer Provided' : 'Shop Provided'}
                                 </span>
                             </div>
-                            {currentOrder.material_source === 'customer' && !currentOrder.materials_received && isAtLeastConfirmed && (
+                            {currentOrder.material_source === 'customer' && !currentOrder.materials_received && (
                                 <button
                                     type="button"
                                     onClick={markMaterialsReceived}
@@ -480,20 +553,28 @@ const TailorOverview = ({
                                     {fitMethodName}
                                 </span>
                             </div>
-                            {isInShopFitting ? (
+                            {isTailorMeasuredFlow ? (
                                 <div className="flex justify-between items-baseline gap-4 rounded-xl border border-stone-700/70 bg-stone-800/40 px-3 py-2">
                                     <span className="text-[10px] uppercase tracking-wider opacity-80">Appointment</span>
                                     <span className="font-bold text-cyan-300">{measurementDate ? formatAppointment(fittingAppointment) : 'TBD'}</span>
                                 </div>
                             ) : null}
-                            {isInShopFitting && !currentOrder.measurements_taken && isAtLeastConfirmed && (
-                                <button
-                                    type="button"
-                                    onClick={markMeasurementsTaken}
-                                    className="w-full rounded-xl bg-indigo-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-indigo-950/20 transition-colors hover:bg-indigo-600"
-                                >
-                                    Mark Measurements Taken
-                                </button>
+                            {isTailorMeasuredFlow && !currentOrder.measurements_taken && (
+                                <div className="group relative w-full">
+                                    <div
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => typeof setActiveTab === 'function' ? setActiveTab('measurements & quote') : null}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (typeof setActiveTab === 'function') setActiveTab('measurements & quote'); } }}
+                                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 px-4 py-3 text-sm font-bold text-indigo-700 shadow-sm cursor-pointer transition-colors hover:bg-indigo-50/70 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        <ClipboardList className="h-4 w-4 shrink-0" />
+                                        <span>Please enter measurements in the <br/>"Measurements & Quote" tab.</span>
+                                    </div>
+                                    <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                        Switch to the Measurements & Quote tab
+                                    </div>
+                                </div>
                             )}
                         </div>
                         <div className="mt-4 p-4 rounded-xl border-2 transition-colors flex items-start gap-3 bg-white">
@@ -518,13 +599,14 @@ const TailorOverview = ({
                                 ) : (
                                     <p className="font-black text-stone-700 text-base">Remote (Self-Measured)</p>
                                 )}
-                                {['Home Visit', 'In-Shop Fitting'].includes(fitMethodName) && (
+                                {fitMethodName === 'Home Visit' && (
                                     <button 
                                         type="button"
                                         onClick={handleViewMap}
-                                        className="mt-3 w-full py-2 bg-stone-100 text-stone-700 hover:bg-stone-200 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                                        className="mt-4 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        <MapPin className="w-4 h-4" /> View on Map
+                                        <MapPin className="w-4 h-4" />
+                                        View Customer Location on Map
                                     </button>
                                 )}
                             </div>
@@ -549,6 +631,16 @@ const TailorOverview = ({
                                 {formatExpectedCompletion(currentOrder)}
                             </span>
                         </div>
+                        {isAtLeastQuoted && (
+                        <button
+                            type="button"
+                            onClick={() => generateReceipt(currentOrder, availableShopAttributes)}
+                            className="mt-3 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-950/20 transition-colors hover:bg-emerald-600 flex items-center justify-center gap-2"
+                        >
+                            <Printer className="w-4 h-4" />
+                            Print Invoice
+                        </button>
+                        )}
                     </div>
                 </div>
                 {/* Review Actions */}
@@ -559,24 +651,17 @@ const TailorOverview = ({
                             onClick={onAccept}
                             className="w-full py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 transition shadow-lg"
                         >
-                            👍 Can Accept - Proceed to Quote
+                            Can Accept - Proceed to Quote
                         </button>
                         <button 
                             onClick={onReject}
                             className="w-full py-3 bg-white text-rose-600 border-2 border-rose-200 font-bold rounded-xl hover:bg-rose-50 hover:border-rose-300 transition shadow-sm"
                         >
-                            ❌ Reject Order
+                            Reject Order
                         </button>
                     </div>
                 )}
             </div>
-            {mapLocations && (
-                <LocationMapModal 
-                    locations={mapLocations} 
-                    onClose={() => setMapLocations(null)} 
-                />
-            )}
-
             {/* Expanded Image Modal with Print Function */}
             {isImageExpanded && currentOrder.design_image && (
                 <div className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-sm">

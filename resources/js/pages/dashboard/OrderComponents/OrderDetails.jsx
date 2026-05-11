@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
 import {  TbCurrencyPeso } from 'react-icons/tb';
-import { Camera, MapPin, Phone, CheckCircle, Printer, Download, Maximize2, X } from 'lucide-react';
+import { Camera, MapPin, Phone, CheckCircle, Printer, Download, Maximize2, X, Ruler, Check, AlertTriangle, Clock3, Wallet, Info } from 'lucide-react';
 import { showAlert } from '@/utils/alert';
+import { generateReceipt } from '@/utils/receiptGenerator';
+import { showNotification } from '@/utils/notification';
 import PaymentModal from './PaymentModal';
 import { filterImageFiles } from '@/utils/imageUpload';
 
-const OrderDetails = ({ currentOrder, shop, availableShopAttributes, customerMeasurements, setCustomerMeasurements, isAcceptingQuote, onAcceptQuote, reworkRef }) => {
+const OrderDetails = ({ currentOrder, shop, availableShopAttributes, customerMeasurements, setCustomerMeasurements, isAcceptingQuote, onAcceptQuote, reworkRef, globalMeasurements = {}, reworkSubmissionSignal = 0 }) => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+    
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
     const [isDeclineModalOpen, setIsDeclineModalOpen] = useState(false);
@@ -53,6 +56,39 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
     const remainingBalance = Math.max(0, grandTotal - amountPaid);
     const downpaymentAmount = grandTotal / 2;
     const fitMethodName = currentOrder.fit_method?.name || currentOrder.fitMethod?.name || 'Unknown';
+    
+    const handleViewMap = () => {
+        if (fitMethodName === 'Home Visit') {
+            const lat = currentOrder.user?.profile?.latitude;
+            const lng = currentOrder.user?.profile?.longitude;
+
+            if (lat && lng) {
+                window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+            } else {
+                showNotification?.warning('Your location coordinates are missing.');
+            }
+        } else if (fitMethodName === 'In-Shop Fitting') {
+            const shop = currentOrder.tailoring_shop || currentOrder.shop || currentOrder.tailoringShop;
+            const profile = shop?.user?.profile || currentOrder.shop?.user?.profile || shopProfile;
+
+            // Prioritize direct Google Maps link
+            const mapsLink = shop?.google_maps_link || profile?.google_maps_link;
+            if (mapsLink) {
+                const formattedLink = mapsLink.startsWith('http') ? mapsLink : `https://${mapsLink}`;
+                window.open(formattedLink, '_blank');
+                return;
+            }
+
+            const lat = profile?.latitude;
+            const lng = profile?.longitude;
+
+            if (lat && lng) {
+                window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+            } else {
+                showNotification?.warning('Shop location coordinates are missing.');
+            }
+        }
+    };
     const customerAddress = currentOrder.user?.profile
         ? `${currentOrder.user.profile.street || 'Address not provided'}, ${currentOrder.user.profile.barangay || ''}`.replace(/,\s*$/, '')
         : 'Address not provided';
@@ -60,8 +96,8 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
     const shopAddress = shopProfile
         ? `${shopProfile.street || 'Shop Address'}, ${shopProfile.barangay || ''}`.replace(/,\s*$/, '')
         : 'Shop Address';
-    const pendingMeasures = (currentOrder.order_measurements || []).filter((measurement) => !measurement.measurement_value);
-    const completedMeasures = (currentOrder.order_measurements || []).filter((measurement) => measurement.measurement_value);
+    const pendingMeasures = (currentOrder.order_measurements || []).filter((measurement) => !(measurement.measurement_value || measurement.value));
+    const completedMeasures = (currentOrder.order_measurements || []).filter((m) => m.measurement_value || m.value);
     const requiresRemoteMeasurements = fitMethodName === 'Self-Measured';
     const lockedMeasurementUnit = (() => {
         const fromSnapshot = currentOrder.measurement_snapshot?.unit;
@@ -78,6 +114,8 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
     const rejectionMatch = currentOrder.notes?.match(/PAYMENT_REJECTED:\s*(.*?)(?:\n\n|$)/);
     const rejectionReason = rejectionMatch ? rejectionMatch[1] : null;
     const orderAppointments = Array.isArray(currentOrder.appointments) ? currentOrder.appointments : [];
+    // Prefer an appointment that has a date; this represents the fitting/visit slot
+    const fittingAppointment = orderAppointments.find(a => a && a.date) || null;
 
     const formatAppointment = (appointment) => {
         if (!appointment?.date) return 'TBD';
@@ -108,6 +146,17 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
             }
         }
     }, [currentOrder?.order_measurements, lockedMeasurementUnit]);
+
+    useEffect(() => {
+        if (!reworkSubmissionSignal) return;
+
+        setReworkReasonCategory('Fit Issue');
+        setReworkCustomerNotes('');
+        setReworkProofImages([]);
+        setReworkProofError('');
+        setIsReworkDragActive(false);
+        setShowReworkModal(true);
+    }, [reworkSubmissionSignal]);
 
     const submitReworkRequest = () => {
         if (!reworkCustomerNotes.trim()) {
@@ -165,9 +214,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
         });
     };
 
-    const handlePrintReceipt = () => {
-        window.print();
-    };
+    
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -425,41 +472,27 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                     </div>
                 </section>
 
-{/* Measurement Section - Split View: Pending Input + Completed Read-Only */}
-{(hasPendingMeasurements || hasRecordedMeasurements) && (
+{/* Measurement Section */}
+{fitMethodName !== 'No Measurement Required' && (
     <div className="space-y-6">
-        {/* Pending Measurements: Input Form (Amber Box) */}
+        {/* State 1: Pending (Self-Measured) */}
         {hasPendingMeasurements && (
             <div className="bg-amber-50 p-6 rounded-3xl border border-amber-200 shadow-sm">
-                <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">
-                    Pending Measurements
-                </h3>
-                <p className="text-sm text-amber-700 mb-4">
-                    Please provide the following measurements. These are required to finalize your quote.
-                </p>
+                <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">Pending Measurements</h3>
+                <p className="text-sm text-amber-700 mb-4">Please provide the following measurements to finalize your quote.</p>
                 <div className="grid sm:grid-cols-2 gap-4">
                     {pendingMeasures.map((measure, idx) => (
                         <div key={`pending-${idx}`}>
-                            <label className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block mb-2">
-                                {measure.measurement_name}
-                            </label>
+                            <label className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block mb-2">{measure.measurement_name}</label>
                             <div className="relative">
                                 <input
-                                    type="number"
-                                    step="0.1"
+                                    type="number" step="0.1" placeholder="0.0"
                                     value={customerMeasurements.find(m => m.name === measure.measurement_name)?.value || ''}
                                     onChange={(e) => {
                                         const newValue = e.target.value;
-                                        setCustomerMeasurements((prev) =>
-                                            prev.map((m) =>
-                                                m.name === measure.measurement_name
-                                                    ? { ...m, value: newValue }
-                                                    : m
-                                            )
-                                        );
+                                        setCustomerMeasurements(prev => prev.map(m => m.name === measure.measurement_name ? { ...m, value: newValue } : m));
                                     }}
-                                    className="w-full rounded-lg border border-stone-200 shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-bold bg-white"
-                                    placeholder="0.0"
+                                    className="w-full rounded-lg border border-stone-200 shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 font-bold bg-white"
                                 />
                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                     <span className="text-amber-600 font-bold text-xs">{lockedMeasurementUnitLabel}</span>
@@ -504,32 +537,50 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         });
                     }}
                     disabled={isSubmitting || submitSuccess}
-                    className={`mt-4 w-full sm:w-auto px-8 py-3 font-black rounded-xl transition-colors shadow-md ${
-                        submitSuccess 
-                            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                            : 'bg-amber-600 text-white hover:bg-amber-700'
-                    }`}
+                    className={`mt-4 w-full sm:w-auto px-8 py-3 font-black rounded-xl transition-colors shadow-md ${submitSuccess ? 'bg-emerald-500 text-white' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
                 >
-                    {submitSuccess ? '✅ Measurements Submitted!' : (isSubmitting ? 'Submitting...' : 'Submit Measurements')}
+                    {submitSuccess ? (<><Check className="w-4 h-4 inline-block mr-2" />Measurements Submitted</>) : (isSubmitting ? 'Submitting...' : 'Submit Measurements')}
                 </button>
             </div>
         )}
 
-        {/* Completed Measurements: Read-Only Grid (Stone Box) */}
-        {hasRecordedMeasurements && (
+        {/* State 2: Pending (In-Shop / Home Visit) */}
+        {completedMeasures.length === 0 && ['In-Shop Fitting', 'Home Visit'].includes(fitMethodName) && (
+            <div className="bg-blue-50 p-6 rounded-3xl border border-blue-200 shadow-sm flex flex-col items-center justify-center text-center">
+                <Ruler className="w-12 h-12 text-blue-300 mb-3" />
+                <h3 className="font-black text-blue-900 mb-1 text-lg">Measurements Pending Appointment</h3>
+                <p className="text-sm text-blue-700 max-w-md mb-4">
+                    Your measurements will be professionally taken and recorded here by the tailor during your scheduled visit.
+                </p>
+                
+                {/* Conditional Appointment Reminder */}
+                {fittingAppointment && fittingAppointment.date ? (
+                    <div className="bg-white px-5 py-3 rounded-xl border border-blue-100 shadow-sm inline-flex flex-col items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">Scheduled Date</span>
+                        <span className="text-base font-bold text-blue-900">
+                            {formatAppointment(fittingAppointment)}
+                        </span>
+                    </div>
+                ) : (
+                    <div className="bg-amber-100/50 px-5 py-3 rounded-xl border border-amber-200 inline-flex items-center gap-2">
+                        <span className="text-sm font-bold text-amber-800">Appointment scheduling pending...</span>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* State 3: Completed (Read-Only Grid for ALL methods) */}
+        {completedMeasures.length > 0 && (
             <div className="bg-stone-50 p-6 rounded-3xl border border-stone-200 shadow-sm">
-                <h3 className="text-[11px] font-black text-stone-700 uppercase tracking-[0.2em] mb-4">
-                    Submitted Measurements
-                </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-[11px] font-black text-stone-700 uppercase tracking-[0.2em]">Recorded Measurements</h3>
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-md uppercase tracking-wider">Saved to Profile</span>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {completedMeasures.map((measure, idx) => (
-                        <div key={`completed-${idx}`} className="bg-white p-4 rounded-xl border border-stone-200">
-                            <span className="text-[10px] font-bold uppercase text-stone-500 tracking-wider block mb-1">
-                                {measure.measurement_name}
-                            </span>
-                            <span className="text-xl font-black text-slate-800">
-                                {measure.measurement_value} <span className="text-sm text-stone-500 font-normal">{measure.unit || lockedMeasurementUnitLabel}</span>
-                            </span>
+                        <div key={`completed-${idx}`} className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                            <span className="text-[10px] font-bold uppercase text-stone-500 tracking-wider block mb-1">{measure.measurement_name || measure.name}</span>
+                            <span className="text-xl font-black text-slate-800">{measure.measurement_value || measure.value} <span className="text-sm text-stone-500 font-normal">{measure.unit || lockedMeasurementUnitLabel}</span></span>
                         </div>
                     ))}
                 </div>
@@ -602,12 +653,12 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                     totalAmount={grandTotal}
                     amountPaid={amountPaid}
                     remainingBalance={remainingBalance}
-                    onPrintReceipt={handlePrintReceipt}
+                    onPrintReceipt={() => generateReceipt(currentOrder, availableShopAttributes)}
                     paymentStatusRaw={paymentStatusRaw}
                 />
 
                 {/* Moved Review & Accept Quote Block */}
-                {((currentOrder.status?.name || currentOrder.status) === 'Quoted') && !['Partial', 'Paid'].includes(paymentStatusRaw) && (
+                {((currentOrder.status?.name || currentOrder.status) === 'Quoted') && !['Partial', 'Paid'].includes(paymentStatusRaw) && !currentOrder.manual_payment_reference_id && !currentOrder.manual_payment_proof_path && !currentOrder.paymongo_payment_id && (
                     <div className="mt-12 bg-white p-6 md:p-8 rounded-3xl border border-orchid-200 shadow-lg shadow-orchid-100">
                         <div className="mb-6 border-b border-stone-100 pb-6">
                             <h3 className="text-xl font-black text-orchid-800 flex items-center gap-2 mb-2">
@@ -622,7 +673,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         {rejectionReason && !currentOrder.manual_payment_proof_path && (
                             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4">
                                 <div className="flex items-start gap-3">
-                                    <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                    <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-500" />
                                     <div>
                                         <p className="text-sm font-black text-rose-900">Payment Proof Rejected</p>
                                         <p className="mt-1 text-xs text-rose-700">{rejectionReason}</p>
@@ -635,7 +686,7 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         {isPaymentUnderReview ? (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                                 <div className="flex items-center gap-3">
-                                    <svg className="h-6 w-6 animate-pulse text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    <Clock3 className="h-6 w-6 animate-pulse text-amber-500" />
                                     <div>
                                         <p className="text-sm font-black text-amber-900">Payment Verifying</p>
                                         <p className="text-xs text-amber-700">The tailor is reviewing your payment proof. This usually takes a few hours.</p>
@@ -999,18 +1050,34 @@ const baseLabor = Number(currentOrder.labor_price || 0) || (grandTotal > 0 ? Mat
                         <p className="font-bold text-slate-800">Your Home Address</p>
                         <p className="text-sm text-slate-600">{customerAddress}</p>
                         <span className="inline-block mt-1 text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">Staff will visit you</span>
+                        <button
+                            type="button"
+                            onClick={handleViewMap}
+                            className="mt-2 w-full py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                        >
+                            <MapPin className="w-4 h-4" /> View on Map
+                        </button>
                     </div>
                 ) : fitMethodName === 'In-Shop Fitting' ? (
                     <div>
                         <p className="font-bold text-slate-800">Shop Address</p>
                         <p className="text-sm text-slate-600">{shopAddress}</p>
                         <span className="inline-block mt-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">Please visit the shop</span>
+                        <button
+                            type="button"
+                            onClick={handleViewMap}
+                            className="mt-2 w-full py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                        >
+                            <MapPin className="w-4 h-4" /> View on Map
+                        </button>
                     </div>
                 ) : (
                     <p className="text-sm font-bold text-slate-600">Online / Remote (No visit required)</p>
                 )}
             </div>
         </div>
+
+        
 
         {/* 3. Service Category */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
@@ -1046,8 +1113,24 @@ function PaymentSection({
         ? (manualProofPath.startsWith('http') ? manualProofPath : `/storage/${manualProofPath}`)
         : null;
     const manualReferenceId = currentOrder?.manual_payment_reference_id || '';
+    const isCashIntent = manualReferenceId === 'CASH-INTENT';
     const hasManualPaymentProof = Boolean(manualProofUrl || manualReferenceId);
-    const isManualVerifying = !isPartialPayment && !isFullPayment && hasManualPaymentProof;
+    const isManualVerifying = !isPartialPayment && !isFullPayment && hasManualPaymentProof && !isCashIntent;
+    const isCashVerifying = !isPartialPayment && !isFullPayment && isCashIntent;
+
+    const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested').toString().trim().toLowerCase();
+    const statusRank = {
+        requested: 0,
+        quoted: 1,
+        confirmed: 2,
+        'appointment scheduled': 3,
+        'ready for production': 4,
+        'in progress': 5,
+        'ready to pick up': 6,
+        'ready for pickup': 6,
+        completed: 7,
+    };
+    const isAtLeastQuoted = (statusRank[rawStatus] ?? 0) >= statusRank.quoted;
 
     useEffect(() => {
         if (!isProofViewerOpen) {
@@ -1077,18 +1160,26 @@ function PaymentSection({
                     <div>
                         <h3 className="text-xl font-black flex items-center gap-2 text-emerald-900">
                             <CheckCircle className="w-6 h-6" />
-                            {isManualVerifying ? 'Manual Payment Submitted' : (isPartialPayment ? 'Partial Payment Secured in Escrow' : 'Fully Funded')}
+                            {isCashVerifying ? 'Paying In-Shop (Cash)' : isManualVerifying ? 'Manual Payment Submitted' : (isPartialPayment ? 'Partial Payment Secured' : 'Fully Funded')}
                         </h3>
                         <p className="text-sm mt-1 text-emerald-700">
-                            {isManualVerifying
+                            {isCashVerifying
+                                ? 'Your order is confirmed. Please settle your payment at the counter during your visit.'
+                                : isManualVerifying
                                 ? 'Your transfer proof is submitted and currently under review by the shop.'
                                 : isFullPayment
-                                ? 'Your order is fully funded in escrow.'
-                                : 'Your initial payment is safely locked in escrow while production proceeds.'}
+                                ? 'Your order is fully funded.'
+                                : 'Your initial payment is safely locked while production proceeds.'}
                         </p>
                     </div>
-                    {currentOrder.paymongo_payment_id && (
-                        <button onClick={onPrintReceipt} className="p-2 bg-white rounded-lg border border-emerald-200 transition-all duration-200 hover:bg-stone-100" title="Print receipt">
+                    
+                    {/* Only show Print if the order is Quoted AND they have selected a valid payment path */}
+                    {isAtLeastQuoted && (isPartialPayment || isFullPayment || isCashIntent) && (
+                        <button 
+                            onClick={onPrintReceipt} 
+                            className="p-2 bg-white rounded-lg border border-emerald-200 transition-all duration-200 hover:bg-stone-100 shadow-sm" 
+                            title="Print Invoice / Receipt"
+                        >
                             <Printer className="w-5 h-5 text-emerald-600" />
                         </button>
                     )}
@@ -1108,7 +1199,7 @@ function PaymentSection({
                         </div>
                     </div>
 
-                    {!isManualVerifying && (
+                    {!isManualVerifying && !isCashVerifying && (
                         <div className="border-b border-stone-100 pb-4">
                             <div className="space-y-3">
                                 <div className="flex justify-between">
@@ -1142,15 +1233,17 @@ function PaymentSection({
                                 )}
 
                                 {isPartialPayment && (
-                                    <p className="text-xs text-amber-700 font-semibold italic pt-2 border-t border-amber-200">
-                                        💡 The remaining balance will be collected upon completion of your order.
+                                    <p className="text-xs text-amber-700 font-semibold italic pt-2 border-t border-amber-200 inline-flex items-center gap-1.5">
+                                        <Info className="h-4 w-4" />
+                                        The remaining balance will be collected upon completion of your order.
                                     </p>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {hasManualPaymentProof && (
+                    {/* Manual Transfer Proof Section (Only show if NOT cash intent) */}
+                    {hasManualPaymentProof && !isCashIntent && (
                         <div className="border-b border-stone-100 pb-4 space-y-3">
                             <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Manual Payment Proof</div>
 
@@ -1201,6 +1294,19 @@ function PaymentSection({
                             ) : (
                                 <p className="text-sm font-semibold text-rose-700">No proof image uploaded.</p>
                             )}
+                        </div>
+                    )}
+
+                    {/* Cash Intent Notification Section */}
+                    {isCashIntent && !isFullPayment && !isPartialPayment && (
+                        <div className="border-b border-stone-100 pb-4 space-y-3">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                                <Wallet className="h-6 w-6 text-amber-700" />
+                                <div className="flex-1">
+                                    <p className="font-bold text-amber-900">Cash Payment Selected</p>
+                                    <p className="text-sm text-amber-800 mt-1">Please prepare the exact amount for your visit. The tailor will update this status once they receive your payment.</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 

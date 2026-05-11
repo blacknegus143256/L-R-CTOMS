@@ -112,9 +112,11 @@ const initialRushFee = currentOrder?.is_rush
 
     const grandTotal = Number(currentOrder?.total_amount || currentOrder?.total_price || 0);
     const currentRushFee = Number(currentOrder?.rush_fee || 0);
-    const effectiveLaborPrice = resolvedQuoteLocked && grandTotal > 0
-        ? Math.max(0, grandTotal - calculateSubtotal() - getInitialItemsTotal() - currentRushFee)
-        : laborPrice;
+    const effectiveLaborPrice = Number(
+        resolvedQuoteLocked && grandTotal > 0
+            ? Math.max(0, grandTotal - calculateSubtotal() - getInitialItemsTotal() - currentRushFee)
+            : laborPrice || 0
+    );
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

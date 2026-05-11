@@ -54,7 +54,7 @@ class InventoryController extends Controller
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
             'checkout_type' => 'required|string|in:fixed_price,requires_quote',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);
             
         $imagePath = null;
@@ -96,7 +96,7 @@ $request->validate([
             'appointment_required' => 'boolean',
             'notes' => 'nullable|string',
             'checkout_type' => 'sometimes|string|in:fixed_price,requires_quote',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);
 
         $service = Service::where('id', $id)
@@ -150,7 +150,7 @@ $request->validate([
             'price' => 'required|numeric|min:0',
             'unit' => 'required|string|max:255',
             'stock_quantity' => 'nullable|numeric|min:0',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);
         $shop = TailoringShop::where('user_id', Auth::id())->firstOrFail();
         
@@ -197,7 +197,7 @@ $request->validate([
             'unit' => 'required|string|max:255',
             'item_name' => 'nullable|string|max:255',
             'stock_quantity' => 'nullable|numeric|min:0',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);
 
         $image_url = null;

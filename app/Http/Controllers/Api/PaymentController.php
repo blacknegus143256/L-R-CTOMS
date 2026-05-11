@@ -22,41 +22,66 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $isCash = $request->boolean('is_cash');
+
         $validated = $request->validate([
-            'reference_id' => ['required', 'string'],
-            'payment_proof' => ['required', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:2048'],
-            'payment_type' => ['nullable', 'in:full,partial'],
+            'payment_type' => ['required', 'in:full,partial'],
+            'reference_id' => $isCash ? ['nullable', 'string'] : ['required', 'string'],
+            'payment_proof' => $isCash ? ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'] : ['required', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'],
         ]);
 
-        $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
-
         $existingPayment = $order->payment;
-        if ($existingPayment?->manual_payment_proof_path && Storage::disk('public')->exists($existingPayment->manual_payment_proof_path)) {
+
+        $proofPath = null;
+        if (! $isCash && $request->hasFile('payment_proof')) {
+            $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+        }
+
+        if (($isCash || $proofPath) && $existingPayment?->manual_payment_proof_path && Storage::disk('public')->exists($existingPayment->manual_payment_proof_path)) {
             Storage::disk('public')->delete($existingPayment->manual_payment_proof_path);
         }
+
+        $manualReferenceId = $isCash
+            ? 'CASH-INTENT'
+            : ($validated['reference_id'] ?? $existingPayment?->manual_payment_reference_id);
 
         Payment::updateOrCreate(
             ['order_id' => $order->id],
             [
-                'payment_type' => $validated['payment_type'] ?? $existingPayment?->payment_type,
+                'payment_type' => $validated['payment_type'],
                 'payment_status' => 'Pending',
                 'amount' => 0,
-                'manual_payment_reference_id' => $validated['reference_id'],
-                'manual_payment_proof_path' => $proofPath,
+                'manual_payment_reference_id' => $manualReferenceId,
+                'manual_payment_proof_path' => $isCash ? null : $proofPath,
                 'paymongo_link_id' => $existingPayment?->paymongo_link_id,
                 'paymongo_payment_id' => $existingPayment?->paymongo_payment_id,
             ]
         );
 
+        if ($isCash) {
+            $cashIntentNote = 'CUSTOMER INTENDS TO PAY IN CASH';
+            $existingNotes = (string) ($order->notes ?? '');
+
+            if (!str_contains($existingNotes, $cashIntentNote)) {
+                $order->update([
+                    'notes' => trim($cashIntentNote . ($existingNotes !== '' ? "\n" . $existingNotes : '')),
+                ]);
+            }
+        }
+
         $order->tailoringShop?->user?->notify(new OrderUpdatedNotification(
             $order,
-            'Customer submitted manual payment proof for Order #' . $order->id . '. Please verify the transfer reference and screenshot.',
+            $isCash
+                ? 'Customer selected in-shop cash payment for Order #' . $order->id . '. Please collect payment during the visit.'
+                : 'Customer submitted manual payment proof for Order #' . $order->id . '. Please verify the transfer reference and screenshot.',
             'payment_received'
         ));
 
         return response()->json([
             'success' => true,
-            'message' => 'Payment proof submitted successfully. The shop will verify your transfer shortly.',
+            'message' => $isCash
+                ? 'Cash payment intent recorded successfully. Please pay in shop during your visit.'
+                : 'Payment proof submitted successfully. The shop will verify your transfer shortly.',
         ]);
     }
 

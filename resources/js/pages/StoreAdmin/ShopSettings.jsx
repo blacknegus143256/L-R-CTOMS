@@ -1,9 +1,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
-import { showAlert } from '@/utils/alert';
+import { Head, router, useForm } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getImageUploadError } from '@/utils/imageUpload';
+import { MapPin, ExternalLink, CheckCircle, AlertCircle, ChevronDown, ChevronUp, TriangleAlert, ArrowRight, X } from 'lucide-react';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MAX_SHIFT_MINUTES = 12 * 60;
@@ -64,14 +64,19 @@ const validateTime = (open, close) => {
 };
 
 export default function ShopSettings({ auth, shop }) {
-    const [showReturnModal, setShowReturnModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+    const [pendingVisit, setPendingVisit] = useState(null);
+    const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [logoError, setLogoError] = useState('');
     const [qrError, setQrError] = useState('');
+    const allowNavigationRef = useRef(false);
     const urlParams = new URLSearchParams(window.location.search);
     const isFromOnboarding = urlParams.get('from_onboarding') === 'true';
 
     useEffect(() => {
         if (window.location.hash === '#weekly-schedule') {
+            setIsScheduleOpen(true);
             setTimeout(() => {
                 const element = document.getElementById('weekly-schedule');
 
@@ -81,6 +86,8 @@ export default function ShopSettings({ auth, shop }) {
             }, 300);
         }
     }, []);
+
+   
 
     const defaultWeek = Array.from({ length: 7 }, (_, dayOfWeek) => ({
         day_of_week: dayOfWeek,
@@ -108,9 +115,10 @@ export default function ShopSettings({ auth, shop }) {
         reason: item?.reason || '',
     }));
 
-    const { data, setData, post, processing, errors } = useForm({
+    const initialFormData = {
         logo: null,
         _method: 'patch',
+        google_maps_link: shop?.google_maps_link || '',
         payout_method: shop?.payout_method || '',
         payout_account: shop?.payout_account || '',
         slot_duration_minutes: shop?.slot_duration_minutes ?? 30,
@@ -119,8 +127,81 @@ export default function ShopSettings({ auth, shop }) {
         max_user_bookings_per_slot: shop?.max_user_bookings_per_slot ?? 3,
         schedules: mergedSchedules,
         exceptions: initialExceptions,
+    };
+
+    const normalizeFormState = (source) => ({
+        _method: source?._method || 'patch',
+        google_maps_link: source?.google_maps_link || '',
+        payout_method: source?.payout_method || '',
+        payout_account: source?.payout_account || '',
+        slot_duration_minutes: Number(source?.slot_duration_minutes ?? 30),
+        max_bookings_per_slot: Number(source?.max_bookings_per_slot ?? 1),
+        max_user_bookings_per_slot: Number(source?.max_user_bookings_per_slot ?? 3),
+        schedules: (source?.schedules || []).map((item) => ({
+            day_of_week: Number(item?.day_of_week ?? 0),
+            is_open: Boolean(item?.is_open),
+            open_time: item?.open_time || '',
+            close_time: item?.close_time || '',
+        })),
+        exceptions: (source?.exceptions || []).map((item) => ({
+            date: item?.date || '',
+            is_closed: Boolean(item?.is_closed),
+            open_time: item?.open_time || '',
+            close_time: item?.close_time || '',
+            reason: item?.reason || '',
+        })),
+        logo: source?.logo?.name || null,
+        document_qr_code: source?.document_qr_code?.name || null,
     });
 
+    const { data, setData, post, processing, errors, defaults } = useForm(initialFormData);
+    const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(normalizeFormState(initialFormData)));
+    const hasUnsavedChanges = JSON.stringify(normalizeFormState(data)) !== savedSnapshot;
+
+    const clearDirtyState = () => {
+        const nextDefaults = {
+            ...data,
+            logo: null,
+            document_qr_code: null,
+        };
+
+        defaults(nextDefaults);
+        setData('logo', null);
+        setData('document_qr_code', null);
+        setSavedSnapshot(JSON.stringify(normalizeFormState(nextDefaults)));
+        setPendingVisit(null);
+        setShowUnsavedChangesModal(false);
+        allowNavigationRef.current = true;
+    };
+
+     useEffect(() => {
+        const removeBeforeVisitListener = router.on('before', (event) => {
+            if (allowNavigationRef.current) {
+                allowNavigationRef.current = false;
+                return;
+            }
+
+            if (showSuccessModal) {
+                return;
+            }
+
+            if (!hasUnsavedChanges) {
+                return;
+            }
+
+            const visitMethod = String(event.detail.visit?.method || 'get').toLowerCase();
+
+            if (visitMethod === 'get') {
+                event.preventDefault();
+                setPendingVisit(event.detail.visit);
+                setShowUnsavedChangesModal(true);
+            }
+        });
+
+        return () => {
+            removeBeforeVisitListener();
+        };
+    }, [hasUnsavedChanges, showSuccessModal]);
     const updateSchedule = (index, key, value) => {
         const next = [...data.schedules];
         let newOpen = key === 'open_time' ? value : next[index].open_time;
@@ -217,6 +298,23 @@ export default function ShopSettings({ auth, shop }) {
     });
 
     const hasAnyTimeValidationError = [...scheduleTimeErrors, ...exceptionTimeErrors].some(Boolean);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (showSuccessModal) {
+                return;
+            }
+
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges, showSuccessModal]);
     
     const addException = () => {
         setData('exceptions', [
@@ -279,19 +377,30 @@ export default function ShopSettings({ auth, shop }) {
         post(route('store.settings.update'), {
             preserveScroll: true,
             onSuccess: () => {
-                if (isFromOnboarding) {
-                    setShowReturnModal(true);
-                } else {
-                    showAlert({
-                        title: 'Success',
-                        message: 'Settings Saved Successfully!',
-                        type: 'success',
-                    });
-                }
-                setData('logo', null);
-                setData('document_qr_code', null);
+                clearDirtyState();
+                setShowSuccessModal(true);
             },
         });
+    };
+
+    const continueUnsavedNavigation = () => {
+        if (!pendingVisit) {
+            setShowUnsavedChangesModal(false);
+            return;
+        }
+
+        setShowUnsavedChangesModal(false);
+        allowNavigationRef.current = true;
+
+        router.visit(pendingVisit.url, {
+            method: pendingVisit.method,
+            data: pendingVisit.data,
+            replace: pendingVisit.replace,
+            preserveScroll: pendingVisit.preserveScroll,
+            preserveState: pendingVisit.preserveState,
+        });
+
+        setPendingVisit(null);
     };
 
     return (
@@ -307,6 +416,52 @@ export default function ShopSettings({ auth, shop }) {
                         </p>
 
                         <form onSubmit={handleSubmit} className="space-y-10 mt-8" encType="multipart/form-data">
+                            <section>
+                                <h2 className="text-xl font-black text-stone-900 mb-4">Shop Details & Location</h2>
+                                <div className="rounded-3xl border border-stone-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm space-y-6">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <MapPin className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+                                            <label htmlFor="google_maps_link" className="block text-sm font-bold text-stone-700">
+                                                Google Maps Link (Optional)
+                                            </label>
+                                        </div>
+                                        <input
+                                            id="google_maps_link"
+                                            type="url"
+                                            value={data.google_maps_link || ''}
+                                            onChange={(e) => setData('google_maps_link', e.target.value)}
+                                            placeholder="https://maps.google.com/maps/place/..."
+                                            disabled={processing}
+                                            className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors disabled:bg-stone-100"
+                                        />
+                                        {errors.google_maps_link && (
+                                            <div className="flex items-start gap-2 mt-2">
+                                                <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" />
+                                                <p className="text-rose-600 text-xs font-medium">{errors.google_maps_link}</p>
+                                            </div>
+                                        )}
+                                        <p className="text-xs text-stone-600 mt-2 leading-relaxed">
+                                            Paste the exact share link from Google Maps to ensure customers get perfectly accurate directions. This helps them find your shop without entering an address manually.
+                                        </p>
+                                        {data.google_maps_link && (
+                                            <div className="mt-3 flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                                <a
+                                                    href={data.google_maps_link}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group"
+                                                >
+                                                    Preview link
+                                                    <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </section>
+
                             <section>
                                 <h2 className="text-xl font-black text-stone-900 mb-4">Shop Profile Image</h2>
                                 <div className="rounded-3xl border border-stone-200 bg-stone-50 p-6 shadow-sm space-y-4">
@@ -455,69 +610,96 @@ export default function ShopSettings({ auth, shop }) {
                             </section>
 
                             <section id="weekly-schedule">
-                                <h2 className="text-xl font-black text-stone-900 mb-4">Weekly Schedule</h2>
-                                <div className="space-y-3">
-                                    {data.schedules.map((schedule, index) => (
-                                        <div key={schedule.day_of_week} className="grid grid-cols-1 gap-4 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md md:grid-cols-5">
-                                            <div className="md:col-span-2 flex items-center justify-between gap-4">
-                                                <div>
-                                                    <span className="block text-sm font-black uppercase tracking-[0.2em] text-stone-500">Day</span>
-                                                    <span className="mt-1 block text-lg font-black text-stone-800">{dayNames[schedule.day_of_week]}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <label className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={schedule.is_open}
-                                                            onChange={(e) => updateSchedule(index, 'is_open', e.target.checked)}
-                                                            disabled={processing}
-                                                        />
-                                                        Open
-                                                    </label>
-                                                    {schedule.day_of_week === 1 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={applyMondayHoursToAllOpenDays}
-                                                            disabled={processing || !schedule.open_time || !schedule.close_time}
-                                                            className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            Apply Monday's Hours to All Open Days
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="block text-xs font-black uppercase tracking-[0.2em] text-stone-500">Opening Time</label>
-                                                <input
-                                                    type="time"
-                                                    value={schedule.open_time}
-                                                    onChange={(e) => updateSchedule(index, 'open_time', e.target.value)}
-                                                    disabled={!schedule.is_open || processing}
-                                                    className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="block text-xs font-black uppercase tracking-[0.2em] text-stone-500">Closing Time</label>
-                                                <input
-                                                    type="time"
-                                                    value={schedule.close_time}
-                                                    onChange={(e) => updateSchedule(index, 'close_time', e.target.value)}
-                                                    disabled={!schedule.is_open || processing}
-                                                    className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
-                                                />
-                                                {scheduleTimeErrors[index] && (
-                                                    <p className="text-xs font-semibold text-rose-600">{scheduleTimeErrors[index]}</p>
-                                                )}
-                                                <p
-                                                    className={`text-xs leading-5 ${isOverTwelveHours(schedule.open_time, schedule.close_time) ? 'text-rose-500 font-semibold' : 'text-stone-500'}`}
-                                                >
-                                                    {isOverTwelveHours(schedule.open_time, schedule.close_time)
-                                                        ? 'This shift exceeds 12 hours. Please shorten the duration.'
-                                                        : 'Click the clock icon inside the box to select a time easily.'}
-                                                </p>
-                                            </div>
+                                <div className="mt-8 overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsScheduleOpen(!isScheduleOpen)}
+                                        className="flex w-full items-center justify-between bg-stone-50 p-6 transition-colors hover:bg-stone-100"
+                                    >
+                                        <div className="text-left">
+                                            <h2 className="text-lg font-black text-slate-800">Weekly Schedule</h2>
+                                            <p className="mt-1 text-sm text-stone-500">Set your shop's opening and closing hours for each day.</p>
                                         </div>
-                                    ))}
+                                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-stone-500">
+                                            {isScheduleOpen ? (
+                                                <>
+                                                    <ChevronUp className="h-4 w-4" />
+                                                    Hide
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ChevronDown className="h-4 w-4" />
+                                                    Show
+                                                </>
+                                            )}
+                                        </div>
+                                    </button>
+
+                                    {isScheduleOpen && (
+                                        <div className="space-y-3 border-t border-stone-200 p-6">
+                                            {data.schedules.map((schedule, index) => (
+                                                <div key={schedule.day_of_week} className="grid grid-cols-1 gap-4 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md md:grid-cols-5">
+                                                    <div className="md:col-span-2 flex items-center justify-between gap-4">
+                                                        <div>
+                                                            <span className="block text-sm font-black uppercase tracking-[0.2em] text-stone-500">Day</span>
+                                                            <span className="mt-1 block text-lg font-black text-stone-800">{dayNames[schedule.day_of_week]}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <label className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={schedule.is_open}
+                                                                    onChange={(e) => updateSchedule(index, 'is_open', e.target.checked)}
+                                                                    disabled={processing}
+                                                                />
+                                                                Open
+                                                            </label>
+                                                            {schedule.day_of_week === 1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={applyMondayHoursToAllOpenDays}
+                                                                    disabled={processing || !schedule.open_time || !schedule.close_time}
+                                                                    className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                >
+                                                                    Apply Monday's Hours to All Open Days
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="block text-xs font-black uppercase tracking-[0.2em] text-stone-500">Opening Time</label>
+                                                        <input
+                                                            type="time"
+                                                            value={schedule.open_time}
+                                                            onChange={(e) => updateSchedule(index, 'open_time', e.target.value)}
+                                                            disabled={!schedule.is_open || processing}
+                                                            className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="block text-xs font-black uppercase tracking-[0.2em] text-stone-500">Closing Time</label>
+                                                        <input
+                                                            type="time"
+                                                            value={schedule.close_time}
+                                                            onChange={(e) => updateSchedule(index, 'close_time', e.target.value)}
+                                                            disabled={!schedule.is_open || processing}
+                                                            className="w-full rounded-2xl border border-stone-300 px-3 py-3 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-stone-100"
+                                                        />
+                                                        {scheduleTimeErrors[index] && (
+                                                            <p className="text-xs font-semibold text-rose-600">{scheduleTimeErrors[index]}</p>
+                                                        )}
+                                                        <p
+                                                            className={`text-xs leading-5 ${isOverTwelveHours(schedule.open_time, schedule.close_time) ? 'text-rose-500 font-semibold' : 'text-stone-500'}`}
+                                                        >
+                                                            {isOverTwelveHours(schedule.open_time, schedule.close_time)
+                                                                ? 'This shift exceeds 12 hours. Please shorten the duration.'
+                                                                : 'Click the clock icon inside the box to select a time easily.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </section>
 
@@ -624,13 +806,18 @@ export default function ShopSettings({ auth, shop }) {
                                 </div>
                             </section>
 
-                            <div className="pt-2 flex justify-end">
+                            <div className="pt-6 flex flex-col sm:flex-row justify-between gap-4 border-t border-stone-200">
+                                <div className="text-sm text-stone-600 flex items-center gap-2 py-1">
+                                    <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                    <span className="font-medium">All changes will be saved together</span>
+                                </div>
                                 <button
                                     type="submit"
                                     disabled={processing || Boolean(logoError) || Boolean(qrError) || hasAnyTimeValidationError}
-                                    className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-black hover:bg-emerald-700 disabled:opacity-60"
+                                    className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 whitespace-nowrap"
                                 >
-                                    {processing ? 'Saving Settings...' : 'Save Settings'}
+                                    <CheckCircle className="w-4 h-4" />
+                                    {processing ? 'Saving...' : 'Save All Settings'}
                                 </button>
                             </div>
                         </form>
@@ -638,21 +825,96 @@ export default function ShopSettings({ auth, shop }) {
                 </div>
             </div>
 
-            <Modal show={showReturnModal} onClose={() => setShowReturnModal(false)} maxWidth="sm">
-                <div className="p-6 text-center">
-                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-                        <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+            {/* Smart Success Modal */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col text-center p-8 relative">
+                        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mb-4">
+                            <CheckCircle className="w-8 h-8" />
+                        </div>
+                        <h2 className="text-2xl font-black text-slate-800 mb-2">Successfully Saved!</h2>
+
+                        {(!shop?.is_active || isFromOnboarding) ? (
+                            <div className="mb-6">
+                                <p className="text-stone-600 text-sm mb-3">
+                                    Congratulations! Your shop details are saved. Your store is currently <strong className="text-amber-600">pending review</strong>.
+                                </p>
+                                <p className="text-stone-500 text-xs">
+                                    Please wait until our admin team approves your shop. Once approved, it will be fully displayed on the system for customers.
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-stone-600 text-sm mb-6">
+                                Your shop settings have been successfully updated and are live.
+                            </p>
+                        )}
+
+                        <div className="flex flex-col gap-3">
+                            {isFromOnboarding && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        clearDirtyState();
+                                        setShowSuccessModal(false);
+                                        allowNavigationRef.current = true;
+                                        router.get(route('store.onboarding', { startStep: 5 }));
+                                    }}
+                                    className="w-full py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-stone-800 transition shadow-md"
+                                >
+                                    Return to Onboarding Wizard
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    clearDirtyState();
+                                    setShowSuccessModal(false);
+                                }}
+                                className="w-full py-3 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition"
+                            >
+                                Stay on this Page
+                            </button>
+                        </div>
                     </div>
-                    <h3 className="mb-2 text-lg font-black text-stone-900">Successfully Saved!</h3>
-                    <p className="mb-6 text-sm text-stone-600">
-                        Your setup is saved. Would you like to return to the Onboarding Wizard to complete your remaining steps?
-                    </p>
-                    <div className="flex flex-col gap-3">
-<Link href={route('store.onboarding', { startStep: 5 })} className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800">
-                            Yes, Return to Wizard
-                        </Link>
-                        <button type="button" onClick={() => setShowReturnModal(false)} className="w-full rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50">
-                            No, Stay on this Page
+                </div>
+            )}
+
+            <Modal show={showUnsavedChangesModal} onClose={() => {
+                setShowUnsavedChangesModal(false);
+                setPendingVisit(null);
+            }} maxWidth="sm">
+                <div className="p-6">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-amber-100">
+                            <TriangleAlert className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-black text-stone-900">Unsaved changes</h3>
+                            <p className="mt-1 text-sm text-stone-600">
+                                You have unsaved changes in Shop Settings. If you leave now, your edits will be lost.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowUnsavedChangesModal(false);
+                                setPendingVisit(null);
+                            }}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-bold text-stone-700 transition-colors hover:bg-stone-50"
+                        >
+                            <X className="h-4 w-4" />
+                            Stay on page
+                        </button>
+                        <button
+                            type="button"
+                            onClick={continueUnsavedNavigation}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-rose-700"
+                        >
+                            Leave without saving
+                            <ArrowRight className="h-4 w-4" />
                         </button>
                     </div>
                 </div>

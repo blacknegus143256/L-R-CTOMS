@@ -18,20 +18,27 @@ const MeasurementRequest = ({
     isRequested
 }) => {
     const fitMethodName = currentOrder?.fit_method?.name || currentOrder?.fitMethod?.name || 'Unknown';
-    const isCustomerFlow = fitMethodName === 'Self-Measured';
-    const isInShopFlow = fitMethodName === 'In-Shop Fitting';
+    const isCustomerMeasurementFlow = fitMethodName === 'Self-Measured';
+    const isNoMeasurementFlow = fitMethodName === 'No Measurement Required';
+    const isTailorMeasuredFlow = ['In-Shop Fitting', 'Home Visit'].includes(fitMethodName);
 
     return (
         <div id="measurements" tabIndex={-1} className="bg-white p-6 md:p-8 rounded-3xl border border-stone-200 shadow-sm flex flex-col h-full outline-none">
             <div className="mb-6">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-1">
                     <Ruler className="w-6 h-6 text-indigo-600" />
-                    {isCustomerFlow ? 'Request Customer Measurements' : isInShopFlow ? 'In-Shop Measurement Tracker' : 'Request Measurements'}
+                    {isCustomerMeasurementFlow
+                        ? 'Request Customer Measurements'
+                        : isTailorMeasuredFlow
+                            ? `${fitMethodName} Measurement Tracker`
+                            : isNoMeasurementFlow
+                                ? 'No Measurement Required'
+                                : 'Request Measurements'}
                 </h2>
                 <p className="text-sm text-stone-500">List the specific body parts the customer needs to measure.</p>
             </div>
 
-            {isCustomerFlow ? (
+            {isCustomerMeasurementFlow ? (
                 <div className="flex flex-col flex-1">
                     {/* Status Banner */}
                     {isMeasurementFormLocked && (
@@ -81,9 +88,12 @@ const MeasurementRequest = ({
                                             <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
                                                 Part to Measure
                                             </label>
-                                            {currentOrder?.order_measurements?.some(m => m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && m.measurement_value) && (
+                                            {currentOrder?.order_measurements?.some(m => 
+                                                m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && 
+                                                (m.measurement_value || m.value)
+                                            ) && (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                                    ✓ Customer Provided
+                                                    {isTailorMeasuredFlow ? '✓ Recorded' : '✓ Customer Provided'}
                                                 </span>
                                             )}
                                         </div>
@@ -184,14 +194,13 @@ const MeasurementRequest = ({
                         }
                     </button>
                 </div>
-            ) : isInShopFlow ? (
+            ) : isTailorMeasuredFlow ? (
                 <div className="flex flex-col flex-1">
                     <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between">
                         <div>
                             <h3 className="font-black text-blue-800 flex items-center gap-2">
-                                <span className="text-xl">📍</span> In-Shop Fitting
+                                {fitMethodName}
                             </h3>
-                            <p className="text-xs text-blue-600 font-medium mt-1">Internal tracker (Not sent to customer)</p>
                         </div>
                         <div className="text-right">
                             <span className="text-[10px] font-black uppercase text-blue-400 block tracking-wider">Fitting Date</span>
@@ -221,9 +230,12 @@ const MeasurementRequest = ({
                                             <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
                                                 Part to Measure
                                             </label>
-                                            {currentOrder?.order_measurements?.some(m => m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && m.measurement_value) && (
+                                            {currentOrder?.order_measurements?.some(m => 
+                                                m.measurement_name?.toLowerCase() === field.name?.toLowerCase() && 
+                                                (m.measurement_value || m.value)
+                                            ) && (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                                    ✓ Customer Provided
+                                                    {isTailorMeasuredFlow ? '✓ Recorded' : '✓ Customer Provided'}
                                                 </span>
                                             )}
                                         </div>
@@ -307,16 +319,24 @@ const MeasurementRequest = ({
                             ? '🔒 Measurements Locked' 
                             : measurementSuccess 
                                 ? '✅ Measurements Saved!' 
-                                : (isSubmittingMeasurements ? 'Saving...' : '💾 Save In-Shop Measurements')
+                                : (isSubmittingMeasurements ? 'Saving...' : `Save ${fitMethodName} Measurements`)
                         }
                     </button>
                 </div>
-            ) : (
+            ) : isNoMeasurementFlow ? (
                 <div className="p-6 bg-stone-50 border border-stone-200 border-dashed rounded-2xl text-center h-full flex flex-col items-center justify-center">
-                    <span className="text-3xl block mb-3">✂️</span>
+                    <Ruler className="w-10 h-10 text-stone-400 mb-3" />
                     <h3 className="font-black text-stone-800 mb-2 text-lg">No Measurements Required</h3>
                     <p className="text-sm text-stone-500 font-medium px-4">
                         The customer indicated this is a standard alteration or they will provide a reference garment. No measurement tracking is needed.
+                    </p>
+                </div>
+            ) : (
+                <div className="p-6 bg-stone-50 border border-stone-200 border-dashed rounded-2xl text-center h-full flex flex-col items-center justify-center">
+                    <Ruler className="w-10 h-10 text-stone-400 mb-3" />
+                    <h3 className="font-black text-stone-800 mb-2 text-lg">Measurement Flow Unavailable</h3>
+                    <p className="text-sm text-stone-500 font-medium px-4">
+                        This fit method does not map to a measurement workflow yet.
                     </p>
                 </div>
             )}

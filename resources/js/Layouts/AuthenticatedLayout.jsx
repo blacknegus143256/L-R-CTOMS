@@ -6,11 +6,15 @@ import { formatDistanceToNow } from 'date-fns';
 import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import { FiX, FiUser, FiLogOut, FiMenu, FiHome, FiBox, FiShoppingCart, FiBriefcase, FiLayers, FiCalendar, FiSettings, FiBell, FiPackage, FiCheckCircle, FiAlertCircle, FiMessageSquare, FiImage, FiXCircle, FiActivity, FiTool, FiRefreshCw } from 'react-icons/fi';
+import { FiX, FiUser, FiLogOut, FiMenu, FiHome, FiBox, FiShoppingCart, FiBriefcase, FiLayers, FiCalendar, FiSettings, FiBell, FiPackage, FiCheckCircle, FiAlertCircle, FiMessageSquare, FiImage, FiXCircle, FiActivity, FiTool, FiRefreshCw, FiClipboard } from 'react-icons/fi';
+import { Store } from 'lucide-react';
 
 export default function AuthenticatedLayout({ header, children }) {
     const { props } = usePage();
     const user = props.auth.user;
+    const shop = props.shop || user?.tailoringShops?.[0] || user?.tailoringShop || user?.shop || null;
+    const shouldShowOnboardingLink = user?.role === 'store_admin' && (!shop || !shop.is_active || String(shop?.status || '').trim().toLowerCase() !== 'approved');
+    const isCustomer = user?.role !== 'super_admin' && user?.role !== 'store_admin';
     const flash = props.flash || {};
     const unreadNotifications = props.unread_notifications || [];
     const pendingShopsCount = props.pending_shops_count || 0;
@@ -266,6 +270,18 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Dashboard
                                 </NavLink>
                                 </div>
+                                {shouldShowOnboardingLink && (
+                                    <div>
+                                        <NavLink
+                                            href={route('store.onboarding')}
+                                            active={route().current('store.onboarding') || route().current('store.onboarding.*')}
+                                            className="text-base px-4 py-3 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                        >
+                                            <FiClipboard className="w-5 h-5 mr-3" />
+                                            Complete Setup
+                                        </NavLink>
+                                    </div>
+                                )}
                                 <div>
                                     <NavLink href={route('store.services.index')} active={route().current('store.services.index')} className="text-base px-4 py-3" >
                                         <FiLayers className="w-5 h-5 mr-3" />
@@ -299,12 +315,18 @@ export default function AuthenticatedLayout({ header, children }) {
                             </>
                         )}
                         {/* Customer Dashboard Link */}
-                        {user.role !== 'super_admin' && user.role !== 'store_admin' && (
+                        {isCustomer && (
                             <>
                             <div>
                                 <NavLink href={route('dashboard')} active={route().current('dashboard')} className="text-lg px-4 py-3">
                                     <FiHome className="w-5 h-5 mr-3" />
                                     Dashboard
+                                </NavLink>
+                            </div>
+                            <div>
+                                <NavLink href="/" active={route().current('home')} className="text-base px-4 py-3">
+                                    <Store className="w-5 h-5 mr-3" />
+                                    Explore Shops
                                 </NavLink>
                             </div>
                             <div>

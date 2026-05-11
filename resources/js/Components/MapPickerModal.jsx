@@ -1,5 +1,6 @@
 import Modal from '@/Components/Modal';
 import MapLibrePicker from '@/Components/MapLibrePicker';
+import { MapPin, RefreshCw, ChevronLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function MapPickerModal({
@@ -52,6 +53,7 @@ export default function MapPickerModal({
                 lat: draftData?.latitude,
                 lng: draftData?.longitude,
                 street: draftData?.street || '',
+                barangay: draftData?.barangay,
             });
         }
         setShowMismatchModal(false);
@@ -73,7 +75,7 @@ export default function MapPickerModal({
                                 e.stopPropagation();
                                 onClose?.();
                             }}
-                            className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-bold text-stone-600 hover:bg-stone-50"
+                            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-bold text-stone-600 hover:bg-stone-50 transition-colors"
                         >
                             Close
                         </button>
@@ -88,15 +90,26 @@ export default function MapPickerModal({
                         searchQuery={searchQuery}
                     />
 
-                    <div className="mt-5 flex justify-end">
+                    <div className="mt-5 flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClose?.();
+                            }}
+                            className="px-4 py-2.5 text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
                         <button
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleConfirm();
                             }}
-                            className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-700"
+                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700"
                         >
+                            <MapPin className="w-4 h-4 mr-2" />
                             Confirm Location
                         </button>
                     </div>
@@ -105,17 +118,78 @@ export default function MapPickerModal({
 
             <Modal show={showMismatchModal} onClose={() => setShowMismatchModal(false)} maxWidth="sm">
                 <div className="p-6">
-                    <h3 className="text-lg font-black text-rose-600 mb-2">Location Mismatch Warning</h3>
-                    <p className="text-sm text-stone-600 mb-6">
-                        The map detects this pin is near <strong>{draftData?.apiBarangay}</strong>, but your profile is set to <strong>{currentBarangay}</strong>.
-                        {' '}Are you sure you want to save this location?
-                    </p>
-                    <div className="flex justify-end gap-3">
-                        <button type="button" onClick={() => setShowMismatchModal(false)} className="px-4 py-2 text-sm font-bold text-stone-600 hover:bg-stone-100 rounded-xl">
+                    <div className="flex items-start gap-3 mb-4">
+                        <div className="flex-shrink-0 pt-0.5">
+                            <MapPin className="w-5 h-5 text-rose-600" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-lg font-black text-rose-600 mb-1">Location Mismatch Detected</h3>
+                            <p className="text-sm text-stone-600">
+                                The map detects this pin is in <strong className="font-bold text-stone-900">{draftData?.apiBarangay}</strong>, but your profile is set to <strong className="font-bold text-stone-900">{currentBarangay}</strong>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                        <p className="text-sm text-amber-900 font-medium">
+                            Which barangay would you like to use?
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowMismatchModal(false);
+                            }}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
                             Review Map
                         </button>
-                        <button type="button" onClick={executeSave} className="px-4 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl">
-                            Save Anyway
+
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+
+                                const detectedBarangay = draftData?.apiBarangay;
+                                const detectedStreet = draftData?.street || '';
+                                const lat = draftData?.latitude;
+                                const lng = draftData?.longitude;
+
+                                // Update local draft for immediate UI feedback
+                                handleSetDraftData('barangay', detectedBarangay);
+
+                                // Immediately pass the explicit values to the save handler to avoid async state delays
+                                onSave?.({
+                                    lat,
+                                    lng,
+                                    street: detectedStreet,
+                                    barangay: detectedBarangay,
+                                });
+
+                                setShowMismatchModal(false);
+                                onClose?.();
+                            }}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                            Update to {draftData?.apiBarangay} & Save
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                executeSave();
+                            }}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors"
+                        >
+                            Save Current ({currentBarangay})
                         </button>
                     </div>
                 </div>

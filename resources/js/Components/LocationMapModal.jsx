@@ -7,13 +7,24 @@ export default function LocationMapModal({ locations = [], onClose }) {
     const mapRef = useRef(null);
     const locationData = locations[0] || {};
 
+    // Validate coordinates are valid numbers
+    const isValidCoordinate = (lat, lng) => {
+        return typeof lat === 'number' && typeof lng === 'number' && 
+               !Number.isNaN(lat) && !Number.isNaN(lng) &&
+               lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    };
+
+    // Filter out locations with invalid coordinates
+    const validLocations = locations.filter(loc => isValidCoordinate(loc.lat, loc.lng));
+
     useEffect(() => {
-        if (!locations || locations.length === 0) return;
+        if (!validLocations || validLocations.length === 0) return;
+        if (!isValidCoordinate(validLocations[0].lat, validLocations[0].lng)) return;
 
         const map = new maplibregl.Map({
             container: mapContainer.current,
             style: 'https://tiles.openfreemap.org/styles/bright',
-            center: [locations[0].lng, locations[0].lat],
+            center: [validLocations[0].lng, validLocations[0].lat],
             zoom: 14,
         });
 
@@ -25,8 +36,8 @@ export default function LocationMapModal({ locations = [], onClose }) {
             // Create bounds and add markers
             const bounds = new maplibregl.LngLatBounds();
             
-            locations.forEach(location => {
-                if (location.lat && location.lng) {
+            validLocations.forEach(location => {
+                if (isValidCoordinate(location.lat, location.lng)) {
                     // Create marker with popup
                     const popup = new maplibregl.Popup({ offset: 25 })
                         .setHTML(`
@@ -47,24 +58,43 @@ export default function LocationMapModal({ locations = [], onClose }) {
             });
             
             // Fit bounds to show all markers
-            if (locations.length > 0) {
-                map.fitBounds(bounds, { padding: 50 });
+            if (validLocations.length > 0) {
+                try {
+                    map.fitBounds(bounds, { padding: 50 });
+                } catch (error) {
+                    console.warn('Could not fit bounds:', error);
+                }
             }
         });
 
         return () => map.remove();
-    }, [locations]);
+    }, [validLocations]);
 
-    if (!locations || locations.length === 0) return null;
+    if (!validLocations || validLocations.length === 0) {
+        return (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/80 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-lg p-6 max-w-sm text-center">
+                    <p className="text-stone-700 font-bold mb-2">Location Not Available</p>
+                    <p className="text-sm text-stone-600 mb-4">The location coordinates are not available or invalid for this order.</p>
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 bg-stone-700 text-white rounded-lg hover:bg-stone-800 font-bold text-sm"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // Generate Google Maps link
     const getGoogleMapsLink = () => {
-        if (locations.length === 2) {
-            const loc1 = locations[0];
-            const loc2 = locations[1];
+        if (validLocations.length === 2) {
+            const loc1 = validLocations[0];
+            const loc2 = validLocations[1];
             return `https://www.google.com/maps/dir/${loc1.lat},${loc1.lng}/${loc2.lat},${loc2.lng}`;
-        } else if (locations.length === 1) {
-            const loc = locations[0];
+        } else if (validLocations.length === 1) {
+            const loc = validLocations[0];
             return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
         }
         return null;

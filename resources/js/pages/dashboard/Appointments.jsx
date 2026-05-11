@@ -61,10 +61,10 @@ export default function Appointments({ auth, appointmentsByDate = {}, holidaysBy
         >
             <Head title="My Appointments" />
 
-            <div className="py-12 bg-stone-50/50 min-h-screen">
+            <div className="py-4 bg-stone-50/50 min-h-screen">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="bg-white rounded-[2rem] shadow-xl shadow-stone-200/40 border border-stone-100 overflow-hidden">
-                        <div className="p-6 md:p-8 border-b border-stone-100 bg-indigo-50/30 flex flex-col gap-4 md:flex-row md:items-center justify-between">
+                        <div className="p-4 md:p-6 border-b border-stone-100 bg-indigo-50/30 flex flex-col gap-4 md:flex-row md:items-center justify-between">
                             <div>
                                 <h3 className="text-2xl font-black text-indigo-950 flex items-center gap-3">
                                     <FiCalendar className="w-6 h-6 text-indigo-500" />
@@ -86,7 +86,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, holidaysBy
                             </div>
                         </div>
 
-                        <div className="p-6 md:p-8">
+                        <div className="p-4 md:p-6">
                             <div className="grid grid-cols-7 gap-4 mb-4">
                                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName) => (
                                     <div key={dayName} className="text-center font-bold text-stone-400 text-xs md:text-sm uppercase tracking-widest">
@@ -97,7 +97,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, holidaysBy
 
                             <div className="grid grid-cols-7 gap-2 md:gap-4">
                                 {blanks.map((blank) => (
-                                    <div key={`blank-${blank}`} className="aspect-square rounded-2xl bg-stone-50 border border-transparent"></div>
+                                    <div key={`blank-${blank}`} className="min-h-[100px] md:min-h-[120px] rounded-2xl bg-stone-50 border border-transparent"></div>
                                 ))}
 
                                 {days.map((day) => {
@@ -119,7 +119,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, holidaysBy
                                                     openModal(day, myApts);
                                                 }
                                             }}
-                                            className={`aspect-square rounded-2xl border flex flex-col p-2 md:p-3 transition-all ${
+                                            className={`min-h-[100px] md:min-h-[120px] rounded-2xl border flex flex-col p-2 md:p-3 transition-all ${
                                                 hasMyAppointments
                                                     ? 'bg-indigo-50/50 border-indigo-200 shadow-sm hover:border-indigo-400 cursor-pointer'
                                                     : isToday

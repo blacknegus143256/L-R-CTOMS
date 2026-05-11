@@ -69,7 +69,7 @@ export default function AddNewAttributeModal({
                             <div className="text-center text-emerald-600">
                                 <Plus className="w-12 h-12 mx-auto mb-2 opacity-60" />
                                 <p className="font-semibold">Click to upload</p>
-                                <p className="text-xs text-emerald-500 mt-1">JPEG, PNG up to 2MB</p>
+                                <p className="text-xs text-emerald-500 mt-1">JPEG, PNG up to 5MB</p>
                             </div>
                         )}
                         {imageError && <p className="mt-2 text-xs font-semibold text-rose-600">{imageError}</p>}

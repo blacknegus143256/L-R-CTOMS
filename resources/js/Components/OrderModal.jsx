@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { router, useForm, usePage } from '@inertiajs/react';
-import { toast } from 'react-hot-toast';
 
 import ServiceSelection from './OrderWizard/ServiceSelection.jsx';
 import DesignContext from './OrderWizard/DesignContext.jsx';
@@ -10,6 +9,8 @@ import FitLogistics from './OrderWizard/FitLogistics.jsx';
 import { FiX, FiAlertCircle } from 'react-icons/fi';
 import Logistics from './OrderWizard/Logistics.jsx';
 import OrderSummary from './OrderWizard/OrderSummary.jsx';
+import OrderSuccessModal from './OrderSuccessModal.jsx';
+import { showNotification } from '../utils/notification';
 
 export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onSuccess }) {
   const { data, setData, post, processing, errors, reset } = useForm({
@@ -44,6 +45,8 @@ export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onS
   const [profileCheckLoading, setProfileCheckLoading] = useState(true);
   const [profileComplete, setProfileComplete] = useState(true);
   const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [successfulOrder, setSuccessfulOrder] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Scroll container ref: used to reset scroll when the modal step changes
   const scrollContainerRef = useRef(null);
@@ -399,32 +402,74 @@ const toggleAttribute = (attrId) => {
     router.post(`/shops/${shop.id}/orders`, submissionData, {
       forceFormData: true, // Required for image uploads
       preserveScroll: true,
-      onSuccess: () => {
+      onSuccess: (page) => {
+        // Get the order data from the response
+        const order = page.props?.data || null;
+        
         reset();
-        onClose();
-        if (onSuccess) onSuccess();
+        
+        if (order) {
+          // Show success modal instead of closing immediately
+          setSuccessfulOrder(order);
+          setShowSuccessModal(true);
+          
+          // Show success toast notification
+          showNotification.success(`Order #${order.id} submitted successfully!`, {
+            duration: 5000
+          });
+          
+          if (onSuccess) onSuccess();
+        } else {
+          // Fallback if no order data
+          onClose();
+          showNotification.success('Order submitted successfully!', {
+            duration: 5000
+          });
+        }
       },
       onError: (err) => {
         setLoading(false);
-        if (err?.booking) {
-          toast.error(err.booking, { duration: 5000, position: 'top-center' });
-          setError(err.booking);
+        
+        // Handle specific validation errors
+        const errorMap = {
+          booking: 'Could not schedule appointment. Please check your selected time.',
+          measurement_date: 'Selected measurement date is not available.',
+          material_dropoff_date: 'Selected material drop-off date is not available.',
+          appointment_time: 'Selected time slot is no longer available.',
+          requires_profile: 'Please complete your profile to place an order.',
+          service_id: 'Please select a valid service.',
+          material_source: 'Please select a material source.',
+        };
+
+        // Check for specific error fields
+        for (const [field, message] of Object.entries(errorMap)) {
+          if (err?.[field]) {
+            const errorMessage = err[field] || message;
+            showNotification.error(errorMessage, { duration: 5000 });
+            setError(errorMessage);
+            return;
+          }
+        }
+
+        // Check if there's a message field
+        if (err?.message) {
+          showNotification.error(err.message, { duration: 5000 });
+          setError(err.message);
           return;
         }
 
-        if (err?.measurement_date) {
-          toast.error(err.measurement_date, { duration: 5000, position: 'top-center' });
-          setError(err.measurement_date);
-          return;
-        }
-
-        const firstError = err && typeof err === 'object' ? Object.values(err).find(Boolean) : null;
+        // Get first validation error from object
+        const firstError = err && typeof err === 'object' 
+          ? Object.values(err).find(Boolean) 
+          : null;
+          
         if (firstError) {
-          toast.error(String(firstError), { duration: 5000, position: 'top-center' });
-          setError(String(firstError));
+          const errorMessage = String(firstError);
+          showNotification.error(errorMessage, { duration: 5000 });
+          setError(errorMessage);
         } else {
-          const fallbackMessage = 'Could not schedule appointment. Please check your selected time.';
-          toast.error(fallbackMessage, { duration: 5000, position: 'top-center' });
+          const fallbackMessage = 'Unable to submit order. Please try again later.';
+          showNotification.error(fallbackMessage, { duration: 5000 });
           setError(fallbackMessage);
         }
       },
@@ -606,6 +651,18 @@ const toggleAttribute = (attrId) => {
             </motion.div>
           </AnimatePresence>
         )}
+
+        {/* Success Modal */}
+        <OrderSuccessModal
+          isOpen={showSuccessModal}
+          order={successfulOrder}
+          shop={shop}
+          onClose={() => {
+            setShowSuccessModal(false);
+            setSuccessfulOrder(null);
+            onClose();
+          }}
+        />
       </div>
     </div>
   );

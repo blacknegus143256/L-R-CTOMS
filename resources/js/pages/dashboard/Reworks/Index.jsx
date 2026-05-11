@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { ArrowRight, Clock3, MessageSquareText, Store } from 'lucide-react';
+import { ArrowRight, Clock3, MessageSquareText, Store, Camera } from 'lucide-react';
 
 const formatDate = (value) => {
     if (!value) return 'Unknown';
@@ -39,10 +39,29 @@ const getNextStep = (status) => {
 };
 
 export default function Index({ auth, reworks = [] }) {
+    const [activeFilter, setActiveFilter] = useState('all');
+
     const normalizedReworks = reworks.map((rework) => ({
         ...rework,
         normalizedStatus: String(rework.status || '').trim().toLowerCase(),
     }));
+
+    const filteredReworks = normalizedReworks.filter((rework) => {
+        if (activeFilter === 'pending') {
+            return rework.normalizedStatus === 'pending review' || rework.normalizedStatus === 'pending';
+        }
+
+        if (activeFilter === 'resolved') {
+            return rework.normalizedStatus === 'resolved';
+        }
+
+        return true;
+    });
+
+    const summaryCardClass = (filterName, baseClass) => {
+        const isActive = activeFilter === filterName;
+        return `${baseClass} transition-all cursor-pointer ${isActive ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-stone-50 shadow-md' : 'hover:shadow-md hover:border-stone-300'}`;
+    };
 
     return (
         <AuthenticatedLayout
@@ -54,7 +73,7 @@ export default function Index({ auth, reworks = [] }) {
             <div className="py-12 bg-stone-50 min-h-screen">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+                        <button type="button" onClick={() => setActiveFilter('all')} className={summaryCardClass('all', 'rounded-3xl border border-stone-200 bg-white p-6 shadow-sm text-left')}>
                             <div className="flex items-center gap-3">
                                 <div className="rounded-2xl bg-stone-100 p-3 text-stone-700"><Clock3 className="h-5 w-5" /></div>
                                 <div>
@@ -62,8 +81,8 @@ export default function Index({ auth, reworks = [] }) {
                                     <p className="text-3xl font-black text-stone-900">{reworks.length}</p>
                                 </div>
                             </div>
-                        </div>
-                        <div className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
+                        </button>
+                        <button type="button" onClick={() => setActiveFilter('pending')} className={summaryCardClass('pending', 'rounded-3xl border border-amber-200 bg-white p-6 shadow-sm text-left')}>
                             <div className="flex items-center gap-3">
                                 <div className="rounded-2xl bg-amber-100 p-3 text-amber-700"><MessageSquareText className="h-5 w-5" /></div>
                                 <div>
@@ -71,8 +90,8 @@ export default function Index({ auth, reworks = [] }) {
                                     <p className="text-3xl font-black text-stone-900">{normalizedReworks.filter((item) => item.normalizedStatus === 'pending review' || item.normalizedStatus === 'pending').length}</p>
                                 </div>
                             </div>
-                        </div>
-                        <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm md:col-span-2 lg:col-span-1">
+                        </button>
+                        <button type="button" onClick={() => setActiveFilter('resolved')} className={summaryCardClass('resolved', 'rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm text-left md:col-span-2 lg:col-span-1')}>
                             <div className="flex items-center gap-3">
                                 <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700"><Store className="h-5 w-5" /></div>
                                 <div>
@@ -80,17 +99,32 @@ export default function Index({ auth, reworks = [] }) {
                                     <p className="text-3xl font-black text-stone-900">{normalizedReworks.filter((item) => item.normalizedStatus === 'resolved').length}</p>
                                 </div>
                             </div>
-                        </div>
+                        </button>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {normalizedReworks.length ? normalizedReworks.map((rework) => {
+                        {filteredReworks.length ? filteredReworks.map((rework) => {
                             const status = rework.normalizedStatus;
                             const statusLabel = status === 'accepted' ? 'Approved' : status === 'resolved' ? 'Resolved' : 'Pending';
+
+                            const firstImage = rework.proof_images && Array.isArray(rework.proof_images) && rework.proof_images.length ? rework.proof_images[0] : null;
+                            const imageSrc = firstImage ? (String(firstImage).startsWith('http') ? firstImage : `/storage/${firstImage}`) : null;
 
                             return (
                                 <div key={rework.id} className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm flex flex-col justify-between">
                                     <div className="space-y-4">
+                                        {imageSrc ? (
+                                            <div className="overflow-hidden rounded-xl">
+                                                <img src={imageSrc} alt="Proof image" className="h-40 w-full object-cover" />
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-hidden rounded-xl">
+                                                <div className="h-40 w-full bg-stone-50 flex items-center justify-center text-stone-400">
+                                                    <Camera className="h-8 w-8" />
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">{rework.order?.tailoringShop?.shop_name || 'Assigned Shop'}</p>

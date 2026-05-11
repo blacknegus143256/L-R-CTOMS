@@ -11,7 +11,7 @@ class OrderRework extends Model
         'order_id',
         'reason_category',
         'customer_notes',
-        'tailor_response_notes',
+        'tailor_notes',
         'status',
         'proof_images',
     ];

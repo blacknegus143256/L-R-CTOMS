@@ -114,20 +114,19 @@ const { props } = usePage();
             dayjs(order.updated_at).isAfter(dayjs(order.created_at))
         );
     };
-    
-    
-        const stats = {
-            all: ordersList.length,
-            requested: ordersList.filter(o => o.status === 'Requested').length,
-            quoted: ordersList.filter(o => o.status === 'Quoted').length,
-            confirmed: ordersList.filter(o => o.status === 'Confirmed').length,
-            pendingPayment: ordersList.filter(o => o.status === 'Confirmed' && normalizePaymentStatus(o.payment_status) === 'Pending').length,
-            readyForProduction: ordersList.filter(o => o.status === 'Ready for Production').length,
-            readyToPickUp: ordersList.filter(o => ['Ready forPickup', 'Ready for Pickup', 'Ready to Pick Up', 'Ready'].includes(o.status)).length,
-            rush: ordersList.filter(o => o.is_rush).length,
-            inProgress: ordersList.filter(o => ['Confirmed', 'Accepted', 'Appointment Scheduled', 'In Progress', 'Ready'].includes(o.status)).length,
-            completed: ordersList.filter(o => o.status === 'Completed').length,
-        };
+    // Use global stats calculated by the backend so pagination doesn't break counts
+    const stats = props.stats || {
+        all: 0,
+        requested: 0,
+        quoted: 0,
+        confirmed: 0,
+        pendingPayment: 0,
+        readyForProduction: 0,
+        inProgress: 0,
+        readyToPickUp: 0,
+        rush: 0,
+        completed: 0,
+    };
     
         const tabs = [
             { id: 'All', label: 'All Orders', count: stats.all },

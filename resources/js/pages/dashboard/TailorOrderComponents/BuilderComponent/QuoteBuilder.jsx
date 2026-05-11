@@ -347,7 +347,7 @@ const QuoteBuilder = ({
                                                         <ImageOff className="w-5 h-5" />
                                                     </div>
                                                 )}
-                                                <div className="flex-1 min-w-0 space-y-1">
+                                                <div className="flex-1 space-y-1.5 min-w-0">
                                                     <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block truncate">{mat.category || 'Material'}</span>
                                                     <span className="block font-bold text-white text-sm sm:text-base leading-tight truncate">{mat.name}</span>
                                                     {mat.notes && (
@@ -356,8 +356,8 @@ const QuoteBuilder = ({
                                                     <span className="block text-xs sm:text-sm font-bold text-stone-300 truncate">₱{Number(mat.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} / {mat.unit || 'unit'}</span>
 
                                                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 mt-2 border-t border-stone-600/50">
-                                                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider">Quantity</span>
-                                                        <div className="flex items-center gap-2 max-w-full">
+                                                        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Quantity</span>
+                                                        <div className="flex items-center gap-2 min-w-0">
                                                             <input
                                                                 disabled={isLocked}
                                                                 type="number"
@@ -373,9 +373,9 @@ const QuoteBuilder = ({
                                                                         updateMaterial(index, { quantity: 1 });
                                                                     }
                                                                 }}
-                                                                className={`w-16 sm:w-20 bg-stone-950 border border-stone-600/50 rounded-lg px-2 py-1.5 text-white text-xs sm:text-sm font-bold text-center focus:ring-emerald-500 focus:border-emerald-500 outline-none ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                                className={`w-16 sm:w-20 bg-stone-950 border border-stone-600/50 rounded-lg px-2 py-1.5 text-white text-sm font-bold text-center focus:ring-emerald-500 focus:border-emerald-500 outline-none shrink-0 ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                                                             />
-                                                            <span className="text-stone-400 text-[10px] sm:text-xs font-bold truncate max-w-[60px]">{mat.unit || 'unit'}</span>
+                                                            <span className="text-stone-400 text-xs font-bold truncate flex-shrink-0 max-w-[60px]">{mat.unit || 'unit'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -542,7 +542,7 @@ const QuoteBuilder = ({
                         <div className="flex justify-between items-end pt-1">
                             <span className="text-sm font-black text-stone-200 uppercase tracking-widest">Total Quote</span>
                             <span className="text-3xl font-black text-emerald-400">
-                                ₱{(effectiveLaborPrice + calculateSubtotal() + getInitialItemsTotal() + Number(rushFee || 0)).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                ₱{(Number(effectiveLaborPrice || 0) + calculateSubtotal() + getInitialItemsTotal() + Number(rushFee || 0)).toLocaleString(undefined, {minimumFractionDigits: 2})}
                             </span>
                         </div>
                     </div>

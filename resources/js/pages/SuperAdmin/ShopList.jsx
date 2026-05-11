@@ -3,10 +3,12 @@ import { Head } from '@inertiajs/react';
 import { router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import { confirmDialog } from '@/utils/dialog';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { FiSearch } from 'react-icons/fi';
 
-export default function ShopList({ auth, shops }) {
-    const [docFilter, setDocFilter] = useState('all');
+export default function ShopList({ auth, shops, stats = {}, filters = {} }) {
+    const [searchTerm, setSearchTerm] = useState(filters.search || '');
+    const [docFilter, setDocFilter] = useState(filters.filter || 'all');
     const [reviewingDocument, setReviewingDocument] = useState(null);
     const [reviewStatus, setReviewStatus] = useState('approved');
     const [reviewReason, setReviewReason] = useState('');
@@ -16,6 +18,11 @@ export default function ShopList({ auth, shops }) {
     const [rejectionReason, setRejectionReason] = useState('');
     const [rejectionError, setRejectionError] = useState('');
     const [isRejecting, setIsRejecting] = useState(false);
+
+    useEffect(() => {
+        setSearchTerm(filters.search || '');
+        setDocFilter(filters.filter || 'all');
+    }, [filters.search, filters.filter]);
 
     const formatTextLines = (text, wordsPerLine = 4) => {
         if (!text || text === 'N/A') return <span className="text-stone-400 italic">N/A</span>;
@@ -107,27 +114,59 @@ export default function ShopList({ auth, shops }) {
         });
     };
 
-    const counts = useMemo(() => {
-        const all = shops?.length || 0;
-        const complete = (shops || []).filter(hasCompleteDocs).length;
-        const missing = all - complete;
+    const shopsData = shops?.data || [];
+    const paginationLinks = shops?.links || [];
 
-        return { all, complete, missing };
-    }, [shops]);
+    const executeSearch = ({ search = searchTerm, filter = docFilter, page = 1 } = {}) => {
+        router.get(route('super.shops.index'), {
+            search,
+            filter,
+            page,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    };
 
-    const filteredShops = useMemo(() => {
-        if (docFilter === 'complete') {
-            return (shops || []).filter(hasCompleteDocs);
+    const handleFilterChange = (nextFilter) => {
+        setDocFilter(nextFilter);
+        executeSearch({ filter: nextFilter, page: 1 });
+    };
+
+    const handleSearchSubmit = (e) => {
+        e?.preventDefault?.();
+        executeSearch({ page: 1 });
+    };
+
+    const handlePaginationClick = (url) => {
+        if (!url) {
+            return;
         }
 
-        if (docFilter === 'missing') {
-            return (shops || []).filter((shop) => !hasCompleteDocs(shop));
+        router.visit(url, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
+
+    const handleApprove = async (shop) => {
+        const docsApproved =
+            shop.gov_id_status === 'approved' &&
+            shop.bir_2303_status === 'approved' &&
+            shop.dti_permit_status === 'approved';
+
+        if (!docsApproved) {
+            await confirmDialog({
+                title: 'Action Required',
+                message: 'You cannot approve this shop yet. Please review and approve all three required legal documents (Gov ID, BIR 2303, DTI/Permit) first.',
+                confirmText: 'Understood',
+                cancelText: '',
+                type: 'info',
+            });
+            return;
         }
 
-        return shops || [];
-    }, [docFilter, shops]);
-
-    const handleApprove = async (id) => {
         const confirmed = await confirmDialog({
             title: 'Approve Shop',
             message: 'Are you sure you want to approve this shop?',
@@ -137,7 +176,7 @@ export default function ShopList({ auth, shops }) {
         });
 
         if (confirmed) {
-            router.post(route('super.shops.approve', id));
+            router.post(route('super.shops.approve', shop.id));
         }
     };
     const openRejectModal = (shop) => {
@@ -200,28 +239,54 @@ export default function ShopList({ auth, shops }) {
                     <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <h3 className="text-lg font-bold mb-4">Tailoring Shops List</h3>
 
-                        <div className="mb-5 flex flex-wrap items-center gap-2">
+                        <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                                    <input
+                                        type="search"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                handleSearchSubmit(e);
+                                            }
+                                        }}
+                                        placeholder="Search by shop name, owner name, or email"
+                                        className="w-full rounded-xl border border-stone-200 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-stone-800 shadow-sm outline-none transition-colors placeholder:text-stone-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-slate-800"
+                                >
+                                    Search
+                                </button>
+                            </form>
+
+                            <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
-                                onClick={() => setDocFilter('all')}
+                                onClick={() => handleFilterChange('all')}
                                 className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${docFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}
                             >
-                                All ({counts.all})
+                                All ({stats.all ?? 0})
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setDocFilter('complete')}
+                                onClick={() => handleFilterChange('complete')}
                                 className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${docFilter === 'complete' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}
                             >
-                                Docs Complete ({counts.complete})
+                                Docs Complete ({stats.complete ?? 0})
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setDocFilter('missing')}
+                                onClick={() => handleFilterChange('missing')}
                                 className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${docFilter === 'missing' ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-800 hover:bg-rose-200'}`}
                             >
-                                Docs Missing ({counts.missing})
+                                Docs Missing ({stats.missing ?? 0})
                             </button>
+                            </div>
                         </div>
 
                         <div className="overflow-x-auto w-full">
@@ -238,7 +303,7 @@ export default function ShopList({ auth, shops }) {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredShops.map((shop) => {
+                                {shopsData.map((shop) => {
                                     // Safely extract and lowercase the status to prevent case-sensitivity bugs
                                     const shopStatus = (shop.status?.name || shop.status || '').toString().toLowerCase();
                                     
@@ -317,7 +382,7 @@ export default function ShopList({ auth, shops }) {
                                                 {shopStatus === 'pending' && (
                                                     <>
                                                         <button
-                                                            onClick={() => handleApprove(shop.id)}
+                                                            onClick={() => handleApprove(shop)}
                                                             className="inline-flex items-center justify-center rounded bg-blue-600 px-3 py-2 font-bold text-white hover:bg-blue-700"
                                                         >
                                                             Approve
@@ -340,7 +405,7 @@ export default function ShopList({ auth, shops }) {
                                                 )}
                                                 {shopStatus === 'rejected' && (
                                                     <button
-                                                        onClick={() => handleApprove(shop.id)}
+                                                        onClick={() => handleApprove(shop)}
                                                         className="inline-flex items-center justify-center rounded bg-green-600 px-3 py-2 font-bold text-white hover:bg-green-700"
                                                     >
                                                         Re-evaluate (Approve)
@@ -351,16 +416,39 @@ export default function ShopList({ auth, shops }) {
                                     </tr>
                                     );
                                 })}
-                                {filteredShops.length === 0 && (
+                                {shopsData.length === 0 && (
                                     <tr>
                                         <td colSpan={7} className="px-6 py-8 text-center text-sm font-medium text-stone-500">
-                                            No shops match this document filter.
+                                            No shops match the current search or document filter.
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
                         </div>
+
+                        {paginationLinks.length > 3 && (
+                            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                                {paginationLinks.map((link, index) => {
+                                    const isDisabled = !link.url;
+
+                                    return (
+                                        <button
+                                            key={`${link.label}-${index}`}
+                                            type="button"
+                                            onClick={() => handlePaginationClick(link.url)}
+                                            disabled={isDisabled}
+                                            className={`min-w-10 rounded-lg border px-3 py-2 text-sm font-bold transition-colors ${
+                                                link.active
+                                                    ? 'border-indigo-600 bg-indigo-600 text-white'
+                                                    : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                                            } ${isDisabled ? 'cursor-not-allowed opacity-50 hover:bg-white' : ''}`}
+                                            dangerouslySetInnerHTML={{ __html: link.label }}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         <Modal show={!!reviewingDocument} maxWidth="lg" onClose={closeReviewModal}>
                             <form onSubmit={submitReview} className="p-6">

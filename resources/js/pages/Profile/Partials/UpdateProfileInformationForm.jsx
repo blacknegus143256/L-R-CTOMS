@@ -55,13 +55,15 @@ const { data, setData, post, errors, processing, recentlySuccessful } =
         setData('avatar', null);
     };
 
-    const handleMapSave = ({ lat, lng, street }) => {
+    const handleMapSave = ({ lat, lng, street, barangay }) => {
         setData((formData) => ({
             ...formData,
             latitude: lat ?? formData.latitude,
             longitude: lng ?? formData.longitude,
             // If the map returns a street, use it. Otherwise, keep what we had.
             street: street || formData.street,
+            // Now it actually catches the barangay from the map!
+            barangay: barangay || formData.barangay,
         }));
     };
 
@@ -109,7 +111,7 @@ const { data, setData, post, errors, processing, recentlySuccessful } =
                             className="hidden" 
                             onChange={handleAvatarChange} 
                         />
-                        <p className="text-xs text-stone-500 mt-2 font-medium">JPG, PNG, GIF or WebP. Max size of 2MB.</p>
+                        <p className="text-xs text-stone-500 mt-2 font-medium">JPG, PNG, GIF or WebP. Max size of 5MB.</p>
                         {avatarError && <p className="mt-2 text-xs font-semibold text-rose-600">{avatarError}</p>}
                     </div>
                 </div>

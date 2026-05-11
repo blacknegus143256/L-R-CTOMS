@@ -40,6 +40,17 @@ class DashboardController extends Controller
         // Fetch the shop details based on the provided ID
         $shop = \App\Models\TailoringShop::findOrFail($id);
 
+        // Ensure all required documents are approved
+        if (
+            $shop->gov_id_status !== 'approved' ||
+            $shop->bir_2303_status !== 'approved' ||
+            $shop->dti_permit_status !== 'approved'
+        ) {
+            return back()->withErrors([
+                'message' => 'Cannot approve shop. All legal documents must be reviewed and approved first.',
+            ]);
+        }
+
         $approvedId = ShopStatus::where('name', 'Approved')->value('id');
         $shop->update(['shop_status_id' => $approvedId]);
 

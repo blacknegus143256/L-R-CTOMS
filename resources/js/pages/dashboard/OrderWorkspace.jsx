@@ -4,18 +4,17 @@ import ReportModal from '@/Components/ReportModal';
 import { buildMapUrl } from '@/utils/map';
 import { Head, Link, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { ArrowLeft, Package, FileText, Camera, Phone, MapPin, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Package, FileText, Camera, Phone, MapPin, ClipboardList, Clock3, CheckCircle2, AlertTriangle } from 'lucide-react';
 import OrderTracking from './OrderComponents/OrderTracking.jsx';
 import OrderDetails from './OrderComponents/OrderDetails.jsx';
 import OrderShowcase from './OrderComponents/OrderShowcase.jsx';
-import { TbCurrencyPeso } from 'react-icons/tb';
 
 /**
  * OrderWorkspace Component
  * A dedicated full-screen page for customers to view the complete context of a single order.
  * Replaces the old "Mega-Modal" to provide a clean, tabbed interface for Tracking, Details, and Showcase.
  */
-export default function OrderWorkspace({ auth, order }) {
+export default function OrderWorkspace({ auth, order, globalMeasurements = {} }) {
     const { props, url } = usePage();
     const parsedUrl = new URL(url, 'http://localhost');
     const requestedTab = (parsedUrl.searchParams.get('tab') || '').trim().toLowerCase();
@@ -47,11 +46,18 @@ export default function OrderWorkspace({ auth, order }) {
     const [customerMeasurements, setCustomerMeasurements] = useState(() => {
         const pendingMeasures = (currentOrder.order_measurements || [])
             .filter((measurement) => !measurement.measurement_value)
-            .map((measurement) => ({
-                name: measurement.measurement_name,
-                value: '',
-                unit: measurement.unit || 'inches',
-            }));
+            .map((measurement) => {
+                // Try to auto-fill from global measurements if available
+                const globalValue = globalMeasurements[measurement.measurement_name]?.value || 
+                                   globalMeasurements[measurement.measurement_name]; // Handle both nested and direct value
+                
+                return {
+                    name: measurement.measurement_name,
+                    value: globalValue || '',
+                    unit: measurement.unit || 'inches',
+                    isAutoFilled: !!globalValue,
+                };
+            });
 
         if (pendingMeasures.length > 0) {
             return pendingMeasures;
@@ -63,16 +69,24 @@ export default function OrderWorkspace({ auth, order }) {
     useEffect(() => {
         const pendingMeasures = (currentOrder.order_measurements || [])
             .filter((measurement) => !measurement.measurement_value)
-            .map((measurement) => ({
-                name: measurement.measurement_name,
-                value: '',
-                unit: measurement.unit || 'inches',
-            }));
+            .map((measurement) => {
+                // Auto-fill from global measurements if available
+                const globalValue = globalMeasurements[measurement.measurement_name]?.value || 
+                                   globalMeasurements[measurement.measurement_name];
+                
+                return {
+                    name: measurement.measurement_name,
+                    value: globalValue || '',
+                    unit: measurement.unit || 'inches',
+                    isAutoFilled: !!globalValue,
+                };
+            });
 
         setCustomerMeasurements(pendingMeasures);
-    }, [currentOrder, setCustomerMeasurements]);
+    }, [currentOrder, globalMeasurements]);
     const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [reworkSubmissionSignal, setReworkSubmissionSignal] = useState(0);
     const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' });
     const reportInitialDetails = `Regarding Order #${currentOrder.id}: `;
 
@@ -155,11 +169,74 @@ export default function OrderWorkspace({ auth, order }) {
         });
     };
 
+    const formatShortDate = (value) => {
+        if (!value) return 'Unknown date';
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return 'Unknown date';
+
+        return date.toLocaleDateString('en-PH', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    };
+
+    const getReworkStatusMeta = (status) => {
+        const normalized = String(status || '').trim().toLowerCase();
+
+        if (['pending', 'pending review'].includes(normalized)) {
+            return {
+                label: 'Pending Review',
+                badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+                Icon: Clock3,
+            };
+        }
+
+        if (['approved', 'accepted', 'in progress'].includes(normalized)) {
+            return {
+                label: 'Accepted',
+                badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+                Icon: AlertTriangle,
+            };
+        }
+
+        if (['resolved', 'completed'].includes(normalized)) {
+            return {
+                label: 'Resolved',
+                badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                Icon: CheckCircle2,
+            };
+        }
+
+        if (['rejected', 'declined'].includes(normalized)) {
+            return {
+                label: 'Rejected',
+                badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+                Icon: AlertTriangle,
+            };
+        }
+
+        return {
+            label: 'Pending Review',
+            badgeClass: 'bg-stone-100 text-stone-700 border-stone-200',
+            Icon: Clock3,
+        };
+    };
+
+    const toProofImageUrl = (path) => {
+        if (!path) return null;
+        return String(path).startsWith('http') ? path : `/storage/${path}`;
+    };
+
+    const handleSubmitNewClaim = () => {
+        setActiveTab('details');
+        setActiveHighlight('rework');
+        setReworkSubmissionSignal((value) => value + 1);
+    };
+
     // Safe status normalization for bulletproof timeline + button logic
-    const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested')
-        .toString()
-        .trim()
-        .toLowerCase();
+    const rawStatus = (currentOrder.status?.name || currentOrder.status || 'Requested').toString().trim().toLowerCase();
 
     /**
      * Statuses Configuration Array
@@ -415,6 +492,8 @@ const handleAcceptQuote = (e) => {
                             setIsAcceptingQuote={setIsAcceptingQuote} 
                             onAcceptQuote={handleAcceptQuote}
                             reworkRef={reworkRef}
+                            globalMeasurements={globalMeasurements}
+                            reworkSubmissionSignal={reworkSubmissionSignal}
                         />
                     )}
 
@@ -465,23 +544,102 @@ const handleAcceptQuote = (e) => {
                         >
                             <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm">
                                 <h3 className="text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] mb-2">Post-Completion Rework</h3>
-                                {currentOrder?.rework_request ? (
-                                    <>
-                                        <p className="text-lg font-black text-stone-900">Rework {currentOrder.rework_request.status}</p>
-                                        <p className="text-sm text-stone-700 mt-1"><span className="font-bold">Category:</span> {currentOrder.rework_request.reason_category}</p>
-                                        <p className="text-sm text-stone-700 mt-1"><span className="font-bold">Your Notes:</span> {currentOrder.rework_request.customer_notes}</p>
-                                        {!!currentOrder.rework_request?.proof_images?.length && (
-                                            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                {currentOrder.rework_request.proof_images.map((img, idx) => (
-                                                    <img key={`rework-proof-${idx}`} src={img?.startsWith('http') ? img : `/storage/${img}`} alt="Rework proof" className="w-full h-24 object-cover rounded-xl border border-amber-200 bg-white" />
-                                                ))}
+                                {reworkRequest ? (() => {
+                                    const statusMeta = getReworkStatusMeta(reworkRequest?.status);
+                                    const StatusIcon = statusMeta.Icon;
+                                    const proofImages = Array.isArray(reworkRequest?.proof_images) ? reworkRequest.proof_images : [];
+                                    const normalizedStatus = String(reworkRequest?.status || '').trim().toLowerCase();
+                                    const isRejected = ['rejected', 'declined'].includes(normalizedStatus);
+                                    const isAccepted = ['approved', 'accepted', 'in progress'].includes(normalizedStatus);
+                                    const statusHelperText = (() => {
+                                        if (['pending', 'pending review'].includes(normalizedStatus)) return 'Your claim is under shop review.';
+                                        if (['approved', 'accepted'].includes(normalizedStatus)) return 'The tailor has accepted your claim. Please drop off the garment at the shop so they can begin the rework.';
+                                        if (['in progress', 'in_progress'].includes(normalizedStatus)) return 'The tailor has received your garment and is currently working on the fix.';
+                                        if (['ready for pickup', 'ready_for_pickup', 'ready_for_pickup'].includes(normalizedStatus)) return 'Your rework is finished! The garment is ready to be picked up.';
+                                        if (['resolved', 'completed'].includes(normalizedStatus)) return 'This rework claim has been successfully resolved and closed.';
+                                        if (['rejected', 'declined'].includes(normalizedStatus)) return 'Your claim was declined by the shop. Please read their notes above.';
+                                        return 'Your claim is under shop review.';
+                                    })();
+
+                                    return (
+                                        <div className="space-y-5">
+                                            <div className="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-600">Customer Claim Details</p>
+                                                        <p className="mt-2 text-lg font-black text-stone-900">Rework Claim</p>
+                                                    </div>
+                                                    <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wider ${statusMeta.badgeClass}`}>
+                                                        <StatusIcon className="h-3.5 w-3.5" />
+                                                        {statusMeta.label}
+                                                    </span>
+                                                </div>
+
+                                                <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+                                                    <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                                                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Customer Notes</p>
+                                                        <p className="mt-2 text-sm leading-6 text-stone-700">{reworkRequest.customer_notes || 'No customer notes provided.'}</p>
+                                                    </div>
+
+                                                    <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                                                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Claim Summary</p>
+                                                        <div className="mt-3 space-y-2 text-sm text-stone-700">
+                                                            <p><span className="font-bold text-stone-900">Category:</span> {reworkRequest.reason_category || 'General'}</p>
+                                                            <p><span className="font-bold text-stone-900">Submitted:</span> {formatShortDate(reworkRequest.created_at)}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {proofImages.length > 0 && (
+                                                    <div className="mt-5">
+                                                        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">Proof Images</p>
+                                                        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                                                            {proofImages.map((img, idx) => (
+                                                                <img
+                                                                    key={`customer-rework-proof-${reworkRequest.id || 'claim'}-${idx}`}
+                                                                    src={toProofImageUrl(img)}
+                                                                    alt={`Rework proof ${idx + 1}`}
+                                                                    className="h-24 w-full rounded-xl border border-rose-200 bg-white object-cover"
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        {currentOrder.rework_request.tailor_response_notes && (
-                                            <p className="text-sm text-stone-700 mt-4"><span className="font-bold">Tailor Response:</span> {currentOrder.rework_request.tailor_response_notes}</p>
-                                        )}
-                                    </>
-                                ) : (
+
+                                            {/* Official Shop Resolution Notes */}
+                                            {reworkRequest.tailor_notes && (
+                                                <section className={`mt-5 rounded-2xl border p-5 shadow-sm ${['rejected', 'declined'].includes(normalizedStatus) ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                                                    <p className={`inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] ${['rejected', 'declined'].includes(normalizedStatus) ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                                        <FileText className="h-3.5 w-3.5" />
+                                                        Official Shop Resolution
+                                                    </p>
+                                                    <p className="mt-3 text-sm leading-6 text-stone-800">
+                                                        {reworkRequest.tailor_notes}
+                                                    </p>
+                                                </section>
+                                            )}
+
+                                            {isRejected && (
+                                                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+                                                    <p className="text-sm font-semibold text-rose-800">This claim is closed. If you still need help, submit a new claim or appeal with a fresh request.</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSubmitNewClaim}
+                                                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-black text-white hover:bg-rose-700"
+                                                    >
+                                                        Submit a New Claim / Appeal
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <div className="border-t border-stone-200 pt-4">
+                                                <p className="text-xs font-black uppercase tracking-[0.2em] text-stone-500">Status</p>
+                                                <p className="mt-2 text-sm text-stone-600">{statusHelperText}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })() : (
                                     <p className="text-sm text-stone-600">Open the Details tab to submit a rework request once the order is completed.</p>
                                 )}
                             </section>

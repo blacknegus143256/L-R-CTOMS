@@ -7,6 +7,8 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderMeasurement;
+use App\Models\User;
+use App\Models\UserMeasurement;
 use App\Models\OrderStatus as OrderStatusLookup;
 use App\Models\TailoringShop;
 use App\Notifications\OrderUpdatedNotification;
@@ -63,6 +65,54 @@ class CustomerOrderController extends Controller
     }
 
     /**
+     * Sync measurements from order to the customer's global profile.
+     * Updates or creates UserMeasurement records for profile-based sizing.
+     */
+    private function syncToUserMeasurements(?User $user, array $measurements): void
+    {
+        if (!$user) {
+            return;
+        }
+
+        try {
+            foreach ($measurements as $measurement) {
+                // Skip if they didn't actually provide a value
+                if (empty($measurement['value'])) {
+                    continue;
+                }
+
+                $unit = $measurement['unit'] ?? request()?->input('unit') ?? 'in';
+                
+                // Normalize unit string
+                if (is_string($unit)) {
+                    $unit = trim($unit);
+                    $unit = $unit !== '' ? $unit : 'in';
+                } else {
+                    $unit = 'in';
+                }
+
+                UserMeasurement::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'measurement_name' => $measurement['name'],
+                    ],
+                    [
+                        'value' => $measurement['value'],
+                        'unit' => $unit,
+                        'last_verified_at' => now(),
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            // Log but don't fail the order if measurements can't be saved to global profile
+            Log::warning('Failed to sync measurements to user profile', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * Customer places a new order.
      * POST /api/shops/{shop}/orders
      * 
@@ -87,7 +137,7 @@ class CustomerOrderController extends Controller
             'material_source' => 'required|in:customer,shop',
             'is_rush' => 'nullable|boolean',
             'rush_fee' => 'nullable|numeric|min:0',
-            'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:2048',
+            'design_image' => 'nullable|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
             'attributes' => 'nullable|array',
 
             'attributes.*' => 'integer|exists:attribute_types,id',
@@ -375,6 +425,9 @@ class CustomerOrderController extends Controller
 
     $this->syncOrderMeasurements($order, $validated['submitted_measurements']);
 
+    // --- PHASE 2: SYNC TO GLOBAL CUSTOMER PROFILE ---
+    $this->syncToUserMeasurements($order->user, $validated['submitted_measurements']);
+
     // Reload persisted measurements so subsequent responses include the latest values
     $order->load('order_measurements');
 
@@ -394,6 +447,18 @@ class CustomerOrderController extends Controller
                 'measurement_submitted'
             ));
         }
+    }
+
+    // Log timeline entry for customer-submitted measurements (migration-safe)
+    if (\Illuminate\Support\Facades\Schema::hasTable('order_logs')) {
+        \Illuminate\Support\Facades\DB::table('order_logs')->insert([
+            'order_id' => $order->id,
+            'user_id' => $request->user()?->id,
+            'action' => 'measurements_submitted',
+            'description' => 'Customer submitted their requested measurements.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     return back()->with('success', 'Measurements submitted successfully.');
@@ -469,6 +534,18 @@ class CustomerOrderController extends Controller
                 'Customer has accepted the quote for Order #' . $order->id . '. Awaiting payment.',
                 'quote_accepted'
             ));
+        }
+
+        // Log timeline entry for quote acceptance (migration-safe)
+        if (\Illuminate\Support\Facades\Schema::hasTable('order_logs')) {
+            \Illuminate\Support\Facades\DB::table('order_logs')->insert([
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'action' => 'quote_accepted',
+                'description' => 'Customer accepted the quote and confirmed the order details.',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
 
         return response()->json([
@@ -596,8 +673,33 @@ class CustomerOrderController extends Controller
         $orderData = $order->toArray();
         $orderData['shop'] = $order->tailoringShop;
 
+        // Fetch the authenticated user's global measurements for auto-fill
+        $globalMeasurements = [];
+        if ($user) {
+            try {
+                $globalMeasurements = UserMeasurement::where('user_id', $user->id)
+                    ->get(['measurement_name', 'value', 'unit', 'last_verified_at'])
+                    ->mapWithKeys(fn($m) => [
+                        $m->measurement_name => [
+                            'value' => $m->value,
+                            'unit' => $m->unit,
+                            'lastVerified' => $m->last_verified_at,
+                        ]
+                    ])
+                    ->toArray();
+            } catch (\Exception $e) {
+                // Silently fail and return empty measurements if query fails
+                $globalMeasurements = [];
+                Log::warning('Failed to fetch global measurements for customer', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
         return Inertia::render('dashboard/OrderWorkspace', [
-            'order' => $orderData
+            'order' => $orderData,
+            'globalMeasurements' => $globalMeasurements,
         ]);
     }
 }
