@@ -1,24 +1,11 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Stitch Central..."
-
-# ---------------------------------------------------------
-# THE SECRET FILE FIX: Move the Render .env file into Laravel
-# ---------------------------------------------------------
-if [ -f /etc/secrets/.env ]; then
-	echo "📄 Found Render Secret .env file! Copying to Laravel..."
-	cp /etc/secrets/.env /var/www/html/.env
-	chown www-data:www-data /var/www/html/.env
-fi
-
-echo "🔐 Fixing directory permissions..."
-chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+echo "🚀 Starting FitCraft (CTOMS)..."
 
 echo "🗑️  Clearing caches..."
-php artisan cache:clear
-php artisan config:clear
+php artisan cache:clear || true
+php artisan config:clear || true
 
 echo "📝 Caching configuration..."
 php artisan config:cache
@@ -28,5 +15,12 @@ php artisan view:cache
 echo "📦 Running database migrations..."
 php artisan migrate --force
 
-echo "✅ Stitch Central is running!"
+# ---------------------------------------------------------
+# THE MAGIC FIX: Grant permissions AFTER Root creates the files
+# ---------------------------------------------------------
+echo "🔐 Handing over permissions to Apache..."
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+echo "✅ CTOMS is live!"
 exec apache2-foreground
