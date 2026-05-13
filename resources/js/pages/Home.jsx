@@ -110,7 +110,7 @@ function ReplaceShopModal({ pendingShop, selectedShops, onReplace, onCancel }) {
 
 
 
-export default function Home({ auth, categories: initialCategories, services: initialServices, shops: initialShops, uniqueServiceCategories: initialUniqueCategories }) {
+export default function Home({ auth, categories: initialCategories, services: initialServices, shops: initialShops, serviceCategories: initialServiceCategories = [], uniqueServiceCategories: initialUniqueCategories = [] }) {
 
     const currentUser = auth.user;
 
@@ -220,6 +220,10 @@ export default function Home({ auth, categories: initialCategories, services: in
         });
         return Array.from(cats);
     }, [services]);
+
+    const availableServiceCategories = initialServiceCategories.length > 0
+        ? initialServiceCategories
+        : (initialUniqueCategories.length > 0 ? initialUniqueCategories : uniqueServiceCategories);
 
     const getShopInitials = useCallback((name) => {
         if (!name) return 'TS';
@@ -354,7 +358,7 @@ export default function Home({ auth, categories: initialCategories, services: in
             {/* 2. DISCOVERY CAROUSEL */}
                 <motion.div variants={slideFromRight}>
                     <ServiceCarousel
-                        categories={initialUniqueCategories?.length ? initialUniqueCategories : uniqueServiceCategories}
+                        categories={availableServiceCategories}
                         toggle={toggleServiceCategory}
                         selected={selectedServiceCategories}
                     />
@@ -375,9 +379,11 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
                     >
                         <MaterialFilters
                             categories={categories}
+                            serviceCategories={availableServiceCategories}
                             selectedAttributes={selectedAttributes}
                             selectedServiceCategories={selectedServiceCategories}
                             toggleAttribute={toggleAttribute}
+                            toggleServiceCategory={toggleServiceCategory}
                             toggleDropdown={toggleDropdown}
                             openDropdowns={openDropdowns}
                             clearFilters={clearFilters}

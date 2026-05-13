@@ -2,9 +2,11 @@ import React from 'react';
 
 export default function MaterialFilters({
     categories,
+    serviceCategories,
     selectedAttributes,
     selectedServiceCategories,
     toggleAttribute,
+    toggleServiceCategory,
     toggleDropdown,
     openDropdowns,
     clearFilters,
@@ -21,6 +23,29 @@ export default function MaterialFilters({
                     )}
                 </div>
                 <div className="space-y-2">
+                    {serviceCategories.length > 0 && (
+                        <div className="border border-stone-200 rounded-lg overflow-hidden">
+                            <div className="px-3 py-2 bg-stone-50 border-b border-stone-200">
+                                <span className="font-medium text-stone-700 text-sm">
+                                    Services {selectedServiceCategories.length > 0 && `(${selectedServiceCategories.length})`}
+                                </span>
+                            </div>
+                            <div className="p-2 bg-white max-h-48 overflow-y-auto">
+                                {serviceCategories.map((category) => (
+                                    <label key={category} className="flex items-center gap-2 py-1.5 px-2 hover:bg-stone-50 rounded cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedServiceCategories.includes(category)}
+                                            onChange={() => toggleServiceCategory(category)}
+                                            className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+                                        />
+                                        <span className="text-sm text-stone-700">{category}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {categories.map((cat) => {
                         const attrs = cat.attribute_types || [];
                         const selectedCount = attrs.filter((a) => selectedAttributes.includes(a.id)).length;
