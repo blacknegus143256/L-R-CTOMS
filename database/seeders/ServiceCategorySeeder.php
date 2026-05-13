@@ -19,7 +19,7 @@ class ServiceCategorySeeder extends Seeder
         ];
 
         foreach ($categories as $category) {
-            ServiceCategory::firstOrCreate(['slug' => $category['slug']], $category);
+            ServiceCategory::updateOrCreate(['slug' => $category['slug']], $category);
         }
     }
 }

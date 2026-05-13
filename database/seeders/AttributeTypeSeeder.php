@@ -99,16 +99,17 @@ class AttributeTypeSeeder extends Seeder
         foreach ($categories as $slug => $data) {
 
             // Create category
-            $category = AttributeCategory::firstOrCreate(
+            $category = AttributeCategory::updateOrCreate(
                 ['slug' => $slug],
                 ['name' => $data['name']]
             );
 
             // Create types under category
             foreach ($data['types'] as $typeName) {
-                $category->attributeTypes()->firstOrCreate([
-                    'name' => $typeName
-                ]);
+                $category->attributeTypes()->updateOrCreate(
+                    ['name' => $typeName],
+                    []
+                );
             }
         }
     }

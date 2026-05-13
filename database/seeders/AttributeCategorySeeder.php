@@ -2,13 +2,11 @@
 namespace Database\Seeders;
 
 use App\Models\AttributeCategory;
-use App\Models\AttributeTypes;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class AttributeCategorySeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
         $categories = [
             'Fabric',
@@ -20,9 +18,9 @@ class AttributeCategorySeeder extends Seeder
         ];
 
         foreach ($categories as $category) {
-            DB::table('attribute_categories')->updateOrInsert(
-                ['name' => $category],
-                ['slug' => strtolower($category)]
+            AttributeCategory::updateOrCreate(
+                ['slug' => strtolower($category)],
+                ['name' => $category]
             );
         }
     }

@@ -22,7 +22,7 @@ class OrderStatusSeeder extends Seeder
         ];
 
         foreach ($statuses as $status) {
-            OrderStatus::firstOrCreate(
+            OrderStatus::updateOrCreate(
                 ['name' => $status],
                 ['description' => null]
             );

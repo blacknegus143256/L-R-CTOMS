@@ -20,7 +20,7 @@ class ShopStatusSeeder extends Seeder
         ];
 
         foreach ($statuses as $status) {
-            ShopStatus::firstOrCreate(
+            ShopStatus::updateOrCreate(
                 ['name' => $status['name']],
                 ['description' => $status['description']]
             );

@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\TailoringShop;
+use App\Models\ShopStatus;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,32 +17,33 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        $user = User::factory()->create([
-            'name' => 'Shop Manager',
+        $user = User::firstOrCreate([
             'email' => 'shop@example.com',
+        ], [
+            'name' => 'Shop Manager',
+            'password' => bcrypt('password'),
+            'role' => 'store_admin',
         ]);
         
         $this->call([
+            ShopStatusSeeder::class,
             UserRoleSeeder::class,
             OrderStatusSeeder::class,
             PaymentStatusSeeder::class,
-            ShopStatusSeeder::class,
             ServiceCategorySeeder::class,
-            TailoringShopSeeder::class,
-            SchedulingDatabaseSeeder::class,
             AttributeCategorySeeder::class,
             AttributeTypeSeeder::class,
         ]);
         
-        TailoringShop::create([
+        TailoringShop::firstOrCreate([
+            'user_id' => $user->id,
+        ], [
             'user_id' => $user->id,
             'shop_name' => 'Example Tailoring Shop',
             'contact_person' => 'John Doe',
             'contact_role' => 'Manager',
             'is_active' => true,
-            'shop_status_id' => \App\Models\ShopStatus::where('name', 'Approved')->value('id'),
+            'shop_status_id' => ShopStatus::where('name', 'Approved')->value('id'),
         ]);
     }
 }

@@ -18,7 +18,7 @@ class PaymentStatusSeeder extends Seeder
         ];
 
         foreach ($statuses as $status) {
-            PaymentStatus::firstOrCreate(
+            PaymentStatus::updateOrCreate(
                 ['name' => $status],
                 ['description' => null]
             );

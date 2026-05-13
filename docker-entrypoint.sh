@@ -49,7 +49,9 @@ run_artisan_step "Cache views" view:cache
 
 echo "📦 Running database migrations..."
 run_artisan_step "Run migrations" migrate --force
-
+# ADD THIS NEW SECTION:
+echo "🌱 Seeding the database..."
+php artisan db:seed --force
 # ---------------------------------------------------------
 # THE MAGIC FIX: Grant permissions AFTER Root creates the files
 # ---------------------------------------------------------
