@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', 'Stitch Central  -', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('Stitch Central') }}</title>
+        <title inertia>{{ config('app.name', 'Stitch Central') }}</title>
 
         <!-- Fonts -->
         <link rel="icon" href="/images/logostitch.png" type="image/png">
@@ -12,7 +12,7 @@
         <!-- Scripts -->
         @routes
         @viteReactRefresh
-@vite(['resources/css/app.css', 'resources/css/electric-orchid.css', 'resources/js/app.jsx', "resources/js/Pages/{$page['component']}.jsx"])
+@vite(['resources/css/app.css', 'resources/css/electric-orchid.css', 'resources/js/app.jsx'])
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
