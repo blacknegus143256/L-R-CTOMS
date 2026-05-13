@@ -1,5 +1,5 @@
 # Stage 1 - Build Frontend (Vite)
-FROM node:18 AS frontend
+FROM node:22 AS frontend
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ WORKDIR /var/www
 COPY . .
 
 # Copy frontend build
-COPY --from=frontend /app/public/build ./public/build || true
+COPY --from=frontend /app/public/build ./public/build
 
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
