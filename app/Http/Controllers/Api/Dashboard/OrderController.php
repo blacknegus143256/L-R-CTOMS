@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use App\Enums\OrderStatus;
 use App\Notifications\OrderUpdatedNotification;
+use App\Notifications\NewOrderReceivedNotification;
+use App\Notifications\OrderUpdateNotification;
 use App\Models\OrderService;
 use App\Models\UserMeasurement;
 
@@ -420,11 +422,7 @@ class OrderController extends Controller
                 ->exists();
 
             if (! $recentShopNotification) {
-                $shop->user->notify(new OrderUpdatedNotification(
-                    $latestOrder,
-                    "New order request #{$latestOrder->id} from {$user->name}.",
-                    'new_order_received'
-                ));
+                $shop->user->notify(new NewOrderReceivedNotification($latestOrder));
             }
         }
 
@@ -715,6 +713,12 @@ class OrderController extends Controller
             'Tailor updated order status to ' . ($validated['status'] ?? $order->status) . '.'
         );
 
+        // Notify customer if order moved to Ready for Pickup
+        $newStatus = $order->status instanceof \App\Enums\OrderStatus ? $order->status->value : (string) $order->status;
+        if ($newStatus === 'Ready for Pickup' && $order->user) {
+            $order->user->notify(new \App\Notifications\OrderUpdateNotification($order, 'ready_for_pickup'));
+        }
+
         return back()->with('success', 'Order updated successfully.');
     }
 
@@ -988,13 +992,12 @@ class OrderController extends Controller
                 ->whereNull('read_at')
                 ->exists();
 
-            if (!$recentNotification) {
-                $order->user->notify(new OrderUpdatedNotification(
-                    $order,
-                    "Your quote for order #{$order->id} is ready! Review and confirm to proceed.",
-                    'quote_sent'
-                ));
-            }
+                if (!$recentNotification) {
+                    $order->user->notify(new OrderUpdateNotification(
+                        $order,
+                        'quote_sent'
+                    ));
+                }
         }
 
         return redirect()->back()->with('message', 'Quote and requirements sent successfully!');

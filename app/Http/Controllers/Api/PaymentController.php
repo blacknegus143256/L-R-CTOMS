@@ -252,6 +252,12 @@ class PaymentController extends Controller
                 'payment_received'
             ));
 
+            // Notify the customer that payment was verified
+            $order->user?->notify(new \App\Notifications\OrderUpdateNotification(
+                $order,
+                'payment_verified'
+            ));
+
             // Check if order is ready for production (now that payment is updated)
             $this->checkReadyForProduction($order);
 
@@ -386,6 +392,12 @@ class PaymentController extends Controller
                 $order,
                 'Manual payment proof approved for Order #' . $order->id . '. The funds are now marked as ' . $paymentStatus . '.',
                 'payment_received'
+            ));
+
+            // Notify customer
+            $order->user?->notify(new \App\Notifications\OrderUpdateNotification(
+                $order,
+                'payment_verified'
             ));
 
             $this->checkReadyForProduction($order);
@@ -537,6 +549,12 @@ class PaymentController extends Controller
             $order,
             'Cash payment of ₱' . number_format($amountPaid, 2) . ' was recorded for Order #' . $order->id . '.',
             'payment_received'
+        ));
+
+        // Notify customer
+        $order->user?->notify(new \App\Notifications\OrderUpdateNotification(
+            $order,
+            'payment_verified'
         ));
 
         if (method_exists($this, 'checkReadyForProduction')) {

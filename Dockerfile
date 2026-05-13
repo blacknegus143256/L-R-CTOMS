@@ -49,9 +49,24 @@ COPY --from=frontend /app/public/build ./public/build
 RUN composer install --no-dev --optimize-autoloader
 
 # Set permissions for Laravel to write cache and sessions
+# 1. Force create all required Laravel directories
+RUN mkdir -p /var/www/html/storage/framework/cache/data \
+    /var/www/html/storage/framework/views \
+    /var/www/html/storage/framework/sessions \
+    /var/www/html/storage/logs \
+    /var/www/html/bootstrap/cache
+
+# 2. Assign ownership of those folders to the Apache web server
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# 3. Give proper read/write permissions
 RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# 4. Bind Apache to Render's dynamic PORT variable (Fixes the port timeout)
+RUN sed -i "s/80/\${PORT:-80}/g" /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
+
+# 5. Start the server (Ultra-light boot)
+CMD apache2-foreground
 # Apache automatically exposes port 80 and starts itself, so no CMD is needed!
 EXPOSE 80
 

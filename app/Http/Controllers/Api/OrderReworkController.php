@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderRework;
 use App\Notifications\OrderUpdatedNotification;
+use App\Notifications\ReworkRequestedNotification;
+use App\Notifications\OrderUpdateNotification;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -67,11 +69,7 @@ class OrderReworkController extends Controller
         ]);
 
         if ($order->tailoringShop?->user) {
-            $order->tailoringShop->user->notify(new OrderUpdatedNotification(
-                $order,
-                "A rework was requested for order #{$order->id}.",
-                'rework_requested'
-            ));
+            $order->tailoringShop->user->notify(new ReworkRequestedNotification($rework));
         }
 
         return back()->with('message', 'Rework request submitted successfully.');
@@ -101,10 +99,10 @@ class OrderReworkController extends Controller
         ]);
 
         if ($order->user) {
-            $order->user->notify(new OrderUpdatedNotification(
+            $order->user->notify(new OrderUpdateNotification(
                 $order,
-                "Your rework request for order #{$order->id} was accepted. Bring your item back to the shop for reworking.",
-                'rework_updated'
+                'rework_accepted',
+                $tailorNotes
             ));
         }
 
@@ -131,12 +129,10 @@ class OrderReworkController extends Controller
         ]);
 
         if ($order->user) {
-            $order->user->notify(new OrderUpdatedNotification(
+            $order->user->notify(new OrderUpdateNotification(
                 $order,
-                "Your rework request for order #{$order->id} was rejected.",
-                'rework_updated',
-                $validated['tailor_notes'],
-                $shop?->shop_name
+                'rework_rejected',
+                $tailorNotes
             ));
         }
 
