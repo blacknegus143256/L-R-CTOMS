@@ -56,5 +56,5 @@ RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 EXPOSE 80
 
 # Temporary fix: Run migrate:fresh to wipe and rebuild the database cleanly
-# Lightweight Boot: Normal migrate, fix permissions, start server
-CMD php artisan migrate --force && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && apache2-foreground
+# Ultra-light boot: Fix permissions and start server only. No database commands.
+CMD chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache && apache2-foreground

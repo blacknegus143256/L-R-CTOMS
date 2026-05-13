@@ -9,6 +9,7 @@ use App\Models\Report;
 use App\Models\TailoringShop;
 use App\Models\User;
 use App\Models\ShopStatus;
+use App\Notifications\ShopApprovedNotification;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -52,7 +53,13 @@ class DashboardController extends Controller
         }
 
         $approvedId = ShopStatus::where('name', 'Approved')->value('id');
+        $wasApproved = (int) $shop->shop_status_id === (int) $approvedId;
         $shop->update(['shop_status_id' => $approvedId]);
+
+        if (! $wasApproved) {
+            $shop->loadMissing('user');
+            $shop->user?->notify(new ShopApprovedNotification($shop));
+        }
 
         return redirect()->back()->with('message', 'Shop approved successfully!');
     }

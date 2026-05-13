@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\TailoringShop;
 use App\Models\ShopStatus;
+use App\Notifications\ShopApprovedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
@@ -177,7 +178,13 @@ class ShopController extends Controller {
 
         if ($allApproved) {
             $approvedId = ShopStatus::where('name', 'Approved')->value('id');
+            $wasApproved = (int) $shop->shop_status_id === (int) $approvedId;
             $shop->update(['shop_status_id' => $approvedId]);
+
+            if (! $wasApproved) {
+                $shop->loadMissing('user');
+                $shop->user?->notify(new ShopApprovedNotification($shop));
+            }
         } else {
             $pendingId = ShopStatus::where('name', 'Pending')->value('id');
             $shop->update(['shop_status_id' => $pendingId]);
