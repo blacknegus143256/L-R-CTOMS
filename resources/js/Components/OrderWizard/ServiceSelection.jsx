@@ -1,5 +1,6 @@
 import React from 'react';
 import { Zap } from 'lucide-react';
+import { SERVICE_PLACEHOLDER_IMAGE } from '@/utils/servicePlaceholder';
 
 export default function ServiceSelection({ shop, onServiceSelect, disabled = false }) {
   return (
@@ -35,12 +36,11 @@ export default function ServiceSelection({ shop, onServiceSelect, disabled = fal
             {/* Service Image Banner */}
             <div className="h-32 mx-auto mb-4 relative bg-stone-100 rounded-2xl overflow-hidden group-hover:scale-105 transition-transform">
               <img 
-                src={(service.image || service.image_url || service.service_image) ? ((service.image || service.image_url || service.service_image).startsWith('http') ? (service.image || service.image_url || service.service_image) : `/storage/${service.image || service.image_url || service.service_image}`) : '/images/default-service.jpg'} 
+                src={(service.image || service.image_url || service.service_image) ? ((service.image || service.image_url || service.service_image).startsWith('http') ? (service.image || service.image_url || service.service_image) : `/storage/${service.image || service.image_url || service.service_image}`) : SERVICE_PLACEHOLDER_IMAGE} 
                 alt={service.service_name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.target.onerror = null; 
-                  e.target.src = '/images/default-service.jpg';
+                  e.currentTarget.src = SERVICE_PLACEHOLDER_IMAGE;
                 }}
               />
               <div className="absolute top-4 right-4">

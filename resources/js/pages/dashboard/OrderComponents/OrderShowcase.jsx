@@ -1,6 +1,7 @@
 import React from 'react';
 import { Camera } from 'lucide-react';
 import { TbCurrencyPeso } from 'react-icons/tb';
+import { SERVICE_PLACEHOLDER_IMAGE } from '@/utils/servicePlaceholder';
 const OrderShowcase = ({ currentOrder }) => {
     return (
         <div className="space-y-6">
@@ -24,8 +25,7 @@ const OrderShowcase = ({ currentOrder }) => {
                                 alt={`Progress photo ${idx + 1}`} 
                                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                 onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src = '/images/default-service.jpg';
+                                    e.currentTarget.src = SERVICE_PLACEHOLDER_IMAGE;
                                 }}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-stone-900/80 via-stone-900/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">

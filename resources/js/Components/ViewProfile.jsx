@@ -3,6 +3,7 @@ import { Zap, MapPin, ChevronRight, ImageOff, X, CalendarDays, Ruler } from 'luc
 import { buildMapUrl } from '@/utils/map';
 import { Link, usePage } from '@inertiajs/react';
 import useRequireAuth from '@/hooks/useRequireAuth';
+import { SERVICE_PLACEHOLDER_IMAGE } from '@/utils/servicePlaceholder';
 
 export default function ViewProfile({ shop, onClose, onPlaceOrder }) {
     if (!shop) return null;
@@ -144,12 +145,11 @@ return (
     {/* Service Image Banner */}
     <div className="h-32 w-full relative bg-stone-100 overflow-hidden shrink-0">
         <img 
-            src={(service.image || service.image_url || service.service_image) ? ((service.image || service.image_url || service.service_image).startsWith('http') ? (service.image || service.image_url || service.service_image) : `/storage/${service.image || service.image_url || service.service_image}`) : '/images/default-service.jpg'} 
+            src={(service.image || service.image_url || service.service_image) ? ((service.image || service.image_url || service.service_image).startsWith('http') ? (service.image || service.image_url || service.service_image) : `/storage/${service.image || service.image_url || service.service_image}`) : SERVICE_PLACEHOLDER_IMAGE} 
             alt={displayName}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             onError={(e) => {
-                e.target.onerror = null; 
-                e.target.src = '/images/default-service.jpg';
+                e.currentTarget.src = SERVICE_PLACEHOLDER_IMAGE;
             }}
         />
         <div className="absolute top-3 left-3">

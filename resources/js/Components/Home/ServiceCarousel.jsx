@@ -9,6 +9,11 @@ export default function ServiceCarousel({
   isPaused: externalPaused = false 
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const fallbackImage =
+    'data:image/svg+xml;charset=UTF-8,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520"><rect width="800" height="520" fill="#f5f5f4"/><rect x="40" y="40" width="720" height="440" rx="36" fill="#ffffff" stroke="#e7e5e4" stroke-width="6"/><path d="M200 330c70-120 150-120 220 0 35-80 95-120 180-120 40 0 80 12 120 36" fill="none" stroke="#a855f7" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/><circle cx="250" cy="215" r="28" fill="#4568dc" opacity="0.9"/><circle cx="550" cy="190" r="28" fill="#b06ab3" opacity="0.9"/><text x="400" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#57534e">Service image unavailable</text></svg>'
+    );
 
   const carouselRef = useRef(null);
   const scroll = (direction) => {
@@ -19,14 +24,18 @@ export default function ServiceCarousel({
   };
 
   const getServiceImage = (categoryName) => {
+    const normalized = (categoryName || '').toString().trim().toLowerCase();
     const mapping = {
-        'Alterations': '/images/Alterations.jpg',
-        'Custom Sewing': '/images/CUSTOM-SEWING.png',
-        // 'Formal Wear': '/images/Formal Wear.jpg',
-        'Embroidery': '/images/Embroidery.jpg',
-        'Repairs': '/images/Repairs.jpg',
+        'alterations': '/images/Alterations.jpg',
+        'alteration': '/images/Alterations.jpg',
+        'custom sewing': '/images/CUSTOM-SEWING.png',
+        'custom-sewing': '/images/CUSTOM-SEWING.png',
+        'formal wear': '/images/Formal Wear.jpg',
+        'formal-wear': '/images/Formal Wear.jpg',
+        'embroidery': '/images/Embroidery.jpg',
+        'repairs': '/images/Repairs.jpg',
     };
-    return mapping[categoryName] || '/images/default-service.jpg';
+    return mapping[normalized] || fallbackImage;
   };
 
   const isSelected = (category) => selected.includes(category);
@@ -65,8 +74,9 @@ export default function ServiceCarousel({
                   alt={category}
                   className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
                   onError={(e) => {
-                    e.target.onerror = null; 
-                    e.target.src = '/images/default-service.jpg';
+                    if (e.currentTarget.dataset.fallbackApplied === 'true') return;
+                    e.currentTarget.dataset.fallbackApplied = 'true';
+                    e.currentTarget.src = fallbackImage;
                   }}
                 />
               </div>

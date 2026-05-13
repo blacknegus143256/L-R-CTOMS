@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Zap, Flag, ChevronRight, CalendarDays, Ruler, ImageOff, ArrowLeft, MapPin, Phone, Package } from 'lucide-react';
 import ReportModal from '@/Components/ReportModal';
 import { buildMapUrl } from '@/utils/map';
+import { SERVICE_PLACEHOLDER_IMAGE } from '@/utils/servicePlaceholder';
 import { Link, usePage, router } from "@inertiajs/react";
 import { Head } from '@inertiajs/react';
 import OrderModal from "@/Components/OrderModal";
@@ -184,7 +185,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                 imageSrc = `/storage/${rawImage.replace(/^\/+/, '')}`;
             }
         } else {
-            imageSrc = '/images/default-service.jpg';
+            imageSrc = SERVICE_PLACEHOLDER_IMAGE;
         }
         return (
             <div key={s.id} className="bg-white border-2 border-stone-100 hover:border-orchid-blue/40 rounded-[2rem] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-orchid-blue/10 flex flex-col group hover:-translate-y-1">
@@ -196,8 +197,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
                         alt={displayName}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = '/images/default-service.jpg';
+                            e.currentTarget.src = SERVICE_PLACEHOLDER_IMAGE;
                         }}
                     />
                 {/* Overlay Badge */}
