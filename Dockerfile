@@ -9,8 +9,6 @@ RUN npm install
 
 COPY . .
 
-RUN npm run build
-
 
 # Stage 2 - Laravel Backend
 FROM php:8.2-cli
