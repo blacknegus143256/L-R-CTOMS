@@ -61,11 +61,15 @@ RUN php artisan storage:link --force 2>/dev/null || true
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
     chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# ---------------------------------------------------------
+# THE HAMMER: Force Apache to strictly listen on Port 80
+# This completely overwrites the corrupted ports.conf file
+# ---------------------------------------------------------
+RUN echo "Listen 80" > /etc/apache2/ports.conf
+
 # DO NOT generate APP_KEY here - it must come from Render environment variables
 # Ephemeral containers will get a new key and log out all users
 
-# Bind Apache to Render's dynamic PORT variable
-RUN sed -i "s/80/\${PORT:-80}/g" /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
 
 # Entrypoint script to run migrations and start Apache
 COPY docker-entrypoint.sh /usr/local/bin/
