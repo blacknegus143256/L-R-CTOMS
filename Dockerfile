@@ -19,9 +19,8 @@ RUN apt-get update && apt-get install -y \
 
 RUN a2enmod rewrite
 
-# Disable prefork, enable event MPM (more efficient for limited resources)
-RUN a2dismod mpm_prefork || true
-RUN a2enmod mpm_event
+# Keep Prefork MPM (required for non-threadsafe mod_php)
+# Note: Event MPM requires thread-safe PHP, which our PHP isn't compiled for
 
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
@@ -40,16 +39,16 @@ RUN mkdir -p /var/www/html/storage/framework/cache/data \
     /var/www/html/bootstrap/cache
 
 # ---------------------------------------------------------
-# Optimize Apache Event MPM for low-resource environment
-# Event MPM is more efficient than Prefork
+# Optimize Apache Prefork MPM (required for non-threadsafe PHP)
+# Increased workers to handle traffic while staying within memory limits
 # ---------------------------------------------------------
-RUN echo "<IfModule mpm_event_module>\n\
-    StartServers              2\n\
-    MinSpareServers           2\n\
-    MaxSpareServers          10\n\
-    MaxRequestWorkers        100\n\
-    MaxConnectionsPerChild  1000\n\
-</IfModule>" > /etc/apache2/mods-available/mpm_event.conf
+RUN echo "<IfModule mpm_prefork_module>\n\
+    StartServers              5\n\
+    MinSpareServers           5\n\
+    MaxSpareServers          15\n\
+    MaxRequestWorkers         50\n\
+    MaxConnectionsPerChild   500\n\
+</IfModule>" > /etc/apache2/mods-available/mpm_prefork.conf
 
 # Give Apache ownership of the whole app so it stops throwing 500 errors
 RUN chown -R www-data:www-data /var/www/html && \
