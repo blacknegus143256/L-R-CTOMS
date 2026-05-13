@@ -22,14 +22,28 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('order_items', 'attribute_type_id')) {
-            DB::statement(
-                'UPDATE order_items oi
-                 JOIN orders o ON oi.order_id = o.id
-                 JOIN shop_attributes sa ON sa.attribute_type_id = oi.attribute_type_id
-                    AND sa.tailoring_shop_id = o.tailoring_shop_id
-                 SET oi.shop_attribute_id = sa.id
-                 WHERE oi.shop_attribute_id IS NULL'
-            );
+            $driver = Schema::getConnection()->getDriverName();
+
+            if ($driver === 'pgsql') {
+                DB::statement(
+                    "UPDATE order_items oi
+                     SET shop_attribute_id = sa.id
+                     FROM orders o, shop_attributes sa
+                     WHERE oi.order_id = o.id
+                       AND sa.attribute_type_id = oi.attribute_type_id
+                       AND sa.tailoring_shop_id = o.tailoring_shop_id
+                       AND oi.shop_attribute_id IS NULL"
+                );
+            } else {
+                DB::statement(
+                    'UPDATE order_items oi
+                     JOIN orders o ON oi.order_id = o.id
+                     JOIN shop_attributes sa ON sa.attribute_type_id = oi.attribute_type_id
+                        AND sa.tailoring_shop_id = o.tailoring_shop_id
+                     SET oi.shop_attribute_id = sa.id
+                     WHERE oi.shop_attribute_id IS NULL'
+                );
+            }
         }
 
         if (Schema::hasColumn('order_items', 'attribute_type_id')) {
@@ -76,12 +90,24 @@ return new class extends Migration
                 $table->unsignedBigInteger('attribute_type_id')->nullable()->after('order_id');
             });
 
-            DB::statement(
-                'UPDATE order_items oi
-                 JOIN shop_attributes sa ON oi.shop_attribute_id = sa.id
-                 SET oi.attribute_type_id = sa.attribute_type_id
-                 WHERE oi.attribute_type_id IS NULL'
-            );
+            $driver = Schema::getConnection()->getDriverName();
+
+            if ($driver === 'pgsql') {
+                DB::statement(
+                    "UPDATE order_items oi
+                     SET attribute_type_id = sa.attribute_type_id
+                     FROM shop_attributes sa
+                     WHERE oi.shop_attribute_id = sa.id
+                       AND oi.attribute_type_id IS NULL"
+                );
+            } else {
+                DB::statement(
+                    'UPDATE order_items oi
+                     JOIN shop_attributes sa ON oi.shop_attribute_id = sa.id
+                     SET oi.attribute_type_id = sa.attribute_type_id
+                     WHERE oi.attribute_type_id IS NULL'
+                );
+            }
 
             Schema::table('order_items', function (Blueprint $table) {
                 $table->foreign('attribute_type_id')
