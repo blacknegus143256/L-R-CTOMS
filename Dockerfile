@@ -56,4 +56,5 @@ RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 EXPOSE 80
 
 # Temporary fix: Run migrate:fresh to wipe and rebuild the database cleanly
-CMD php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan migrate:fresh --force && apache2-foreground
+# Back to normal: Only run new migrations
+CMD php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan migrate --force && apache2-foreground
