@@ -30,7 +30,11 @@ return new class extends Migration
                 );
             }
 
-            DB::statement('UPDATE orders o JOIN order_statuses os ON os.name = o.status SET o.order_status_id = os.id WHERE o.status IS NOT NULL');
+            if (DB::getDriverName() === 'pgsql') {
+                DB::statement('UPDATE orders o SET order_status_id = os.id FROM order_statuses os WHERE os.name = o.status AND o.status IS NOT NULL');
+            } else {
+                DB::statement('UPDATE orders o JOIN order_statuses os ON os.name = o.status SET o.order_status_id = os.id WHERE o.status IS NOT NULL');
+            }
 
             $requestedId = DB::table('order_statuses')->where('name', 'Requested')->value('id');
             if (! $requestedId) {
@@ -59,7 +63,11 @@ return new class extends Migration
         });
 
         if (Schema::hasColumn('orders', 'order_status_id')) {
-            DB::statement('UPDATE orders o LEFT JOIN order_statuses os ON os.id = o.order_status_id SET o.status = COALESCE(os.name, o.status, "Requested")');
+            if (DB::getDriverName() === 'pgsql') {
+                DB::statement("UPDATE orders o SET status = COALESCE(os.name, o.status, 'Requested') FROM order_statuses os WHERE os.id = o.order_status_id");
+            } else {
+                DB::statement('UPDATE orders o LEFT JOIN order_statuses os ON os.id = o.order_status_id SET o.status = COALESCE(os.name, o.status, "Requested")');
+            }
 
             Schema::table('orders', function (Blueprint $table) {
                 $table->dropConstrainedForeignId('order_status_id');

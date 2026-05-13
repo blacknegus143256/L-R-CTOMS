@@ -30,7 +30,11 @@ return new class extends Migration
                 );
             }
 
-            DB::statement('UPDATE payments p JOIN payment_statuses ps ON ps.name = p.payment_status SET p.payment_status_id = ps.id WHERE p.payment_status IS NOT NULL');
+            if (DB::getDriverName() === 'pgsql') {
+                DB::statement('UPDATE payments p SET payment_status_id = ps.id FROM payment_statuses ps WHERE ps.name = p.payment_status AND p.payment_status IS NOT NULL');
+            } else {
+                DB::statement('UPDATE payments p JOIN payment_statuses ps ON ps.name = p.payment_status SET p.payment_status_id = ps.id WHERE p.payment_status IS NOT NULL');
+            }
 
             $pendingId = DB::table('payment_statuses')->where('name', 'Pending')->value('id');
             if (! $pendingId) {
@@ -59,7 +63,11 @@ return new class extends Migration
         });
 
         if (Schema::hasColumn('payments', 'payment_status_id')) {
-            DB::statement('UPDATE payments p LEFT JOIN payment_statuses ps ON ps.id = p.payment_status_id SET p.payment_status = COALESCE(ps.name, p.payment_status, "Pending")');
+            if (DB::getDriverName() === 'pgsql') {
+                DB::statement("UPDATE payments p SET payment_status = COALESCE(ps.name, p.payment_status, 'Pending') FROM payment_statuses ps WHERE ps.id = p.payment_status_id");
+            } else {
+                DB::statement('UPDATE payments p LEFT JOIN payment_statuses ps ON ps.id = p.payment_status_id SET p.payment_status = COALESCE(ps.name, p.payment_status, "Pending")');
+            }
 
             Schema::table('payments', function (Blueprint $table) {
                 $table->dropConstrainedForeignId('payment_status_id');
