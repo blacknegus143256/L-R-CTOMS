@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     git curl unzip libpq-dev libonig-dev libzip-dev zip \
     && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring zip
 
+# Force PHP to print all fatal crashes directly to the Render Logs
+RUN echo "display_errors = On\nerror_reporting = E_ALL\nlog_errors = On\nerror_log = /dev/stderr" > /usr/local/etc/php/conf.d/debug.ini
+
 RUN a2enmod rewrite
 
 # Keep Prefork MPM (required for non-threadsafe mod_php)
