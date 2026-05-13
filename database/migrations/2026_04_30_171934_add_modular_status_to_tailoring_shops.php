@@ -12,13 +12,25 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tailoring_shops', function (Blueprint $table) {
-            $table->string('gov_id_status')->default('pending')->after('document_gov_id');
-            $table->string('bir_2303_status')->default('pending')->after('document_bir');
-            $table->string('dti_permit_status')->default('pending')->after('document_dti');
+            if (!Schema::hasColumn('tailoring_shops', 'gov_id_status')) {
+                $table->string('gov_id_status')->default('pending')->after('document_gov_id');
+            }
+            if (!Schema::hasColumn('tailoring_shops', 'bir_2303_status')) {
+                $table->string('bir_2303_status')->default('pending')->after('document_bir');
+            }
+            if (!Schema::hasColumn('tailoring_shops', 'dti_permit_status')) {
+                $table->string('dti_permit_status')->default('pending')->after('document_dti');
+            }
 
-            $table->text('gov_id_rejection_reason')->nullable()->after('gov_id_status');
-            $table->text('bir_2303_rejection_reason')->nullable()->after('bir_2303_status');
-            $table->text('dti_permit_rejection_reason')->nullable()->after('dti_permit_status');
+            if (!Schema::hasColumn('tailoring_shops', 'gov_id_rejection_reason')) {
+                $table->text('gov_id_rejection_reason')->nullable()->after('gov_id_status');
+            }
+            if (!Schema::hasColumn('tailoring_shops', 'bir_2303_rejection_reason')) {
+                $table->text('bir_2303_rejection_reason')->nullable()->after('bir_2303_status');
+            }
+            if (!Schema::hasColumn('tailoring_shops', 'dti_permit_rejection_reason')) {
+                $table->text('dti_permit_rejection_reason')->nullable()->after('dti_permit_status');
+            }
         });
     }
 
