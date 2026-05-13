@@ -60,10 +60,6 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('order_items', 'shop_attribute_id')) {
-            DB::statement('ALTER TABLE order_items MODIFY shop_attribute_id BIGINT UNSIGNED NULL');
-        }
-
-        if (Schema::hasColumn('order_items', 'shop_attribute_id')) {
             Schema::table('order_items', function (Blueprint $table) {
                 $table->foreign('shop_attribute_id')
                     ->references('id')

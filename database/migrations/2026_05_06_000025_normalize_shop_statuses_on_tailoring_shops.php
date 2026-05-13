@@ -61,9 +61,11 @@ return new class extends Migration
         }
 
         // Step 4: Make shop_status_id NOT NULL after backfill is complete
-        Schema::table('tailoring_shops', function (Blueprint $table) {
-            $table->foreignId('shop_status_id')->nullable(false)->change();
-        });
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE tailoring_shops ALTER COLUMN shop_status_id SET NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE tailoring_shops MODIFY shop_status_id BIGINT UNSIGNED NOT NULL');
+        }
 
         // Step 5: Drop old columns (only if they exist to handle partial failures)
         if (Schema::hasColumn('tailoring_shops', 'status')) {

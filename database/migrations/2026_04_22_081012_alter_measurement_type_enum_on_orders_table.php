@@ -10,13 +10,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none', 'self_measured', 'workshop_fitting', 'inperson') NOT NULL DEFAULT 'profile'");
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE orders ALTER COLUMN measurement_type TYPE TEXT USING measurement_type::text');
+        } else {
+            DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none', 'self_measured', 'workshop_fitting', 'inperson') NOT NULL DEFAULT 'profile'");
+        }
 
         DB::statement("UPDATE orders SET measurement_type = 'none' WHERE measurement_type IS NULL OR TRIM(measurement_type) = '' OR LOWER(measurement_type) = 'none'");
         DB::statement("UPDATE orders SET measurement_type = 'scheduled' WHERE LOWER(measurement_type) IN ('workshop_fitting', 'inperson')");
         DB::statement("UPDATE orders SET measurement_type = 'profile' WHERE LOWER(measurement_type) = 'self_measured'");
 
-        DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none') NOT NULL DEFAULT 'none'");
+        if (DB::getDriverName() !== 'pgsql') {
+            DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none') NOT NULL DEFAULT 'none'");
+        }
     }
 
     /**
@@ -24,8 +30,16 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none', 'self_measured', 'workshop_fitting', 'inperson') NOT NULL DEFAULT 'profile'");
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE orders ALTER COLUMN measurement_type TYPE TEXT USING measurement_type::text');
+        } else {
+            DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled', 'none', 'self_measured', 'workshop_fitting', 'inperson') NOT NULL DEFAULT 'profile'");
+        }
+
         DB::statement("UPDATE orders SET measurement_type = 'profile' WHERE measurement_type = 'none'");
-        DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled') NOT NULL DEFAULT 'profile'");
+
+        if (DB::getDriverName() !== 'pgsql') {
+            DB::statement("ALTER TABLE orders MODIFY measurement_type ENUM('profile', 'scheduled') NOT NULL DEFAULT 'profile'");
+        }
     }
 };

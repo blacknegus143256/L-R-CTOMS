@@ -1,8 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -11,9 +10,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('order_measurements', function (Blueprint $table) {
-            $table->string('measurement_value')->nullable()->change();
-        });
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE order_measurements ALTER COLUMN measurement_value DROP NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE order_measurements MODIFY measurement_value VARCHAR(255) NULL');
+        }
     }
 
     /**
@@ -21,8 +22,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('order_measurements', function (Blueprint $table) {
-            $table->string('measurement_value')->nullable(false)->change();
-        });
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE order_measurements ALTER COLUMN measurement_value SET NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE order_measurements MODIFY measurement_value VARCHAR(255) NOT NULL');
+        }
     }
 };
