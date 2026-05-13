@@ -86,6 +86,8 @@ class RegisteredUserController extends Controller
                 'shop_status_id' => $defaultStatusId,
                 'is_active'      => true,
             ]);
+
+            $request->session()->put('url.intended', route('store.onboarding'));
         }
 
         // Dispatch Registered event (this now calls our custom sendEmailVerificationNotification)
@@ -93,7 +95,7 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        if ($redirectUrl) {
+        if ($redirectUrl && $validated['role'] !== 'store_admin') {
             $request->session()->put('url.intended', $redirectUrl);
         }
 

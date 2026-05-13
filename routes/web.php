@@ -47,6 +47,7 @@ Route::middleware(['auth', 'verified', 'role:super_admin'])->group(function () {
     Route::get('/super-admin/shops/{shop}/documents/{type}', [App\Http\Controllers\SuperAdmin\ShopController::class, 'document'])->name('super.shops.document');
     Route::post('/super-admin/shops/{shop}/review-document', [App\Http\Controllers\SuperAdmin\ShopController::class, 'reviewDocument'])->name('super.shops.review-document');
     Route::post('/super-admin/shops/{shop}/reject', [App\Http\Controllers\SuperAdmin\ShopController::class, 'reject'])->name('super.shops.reject');
+    Route::post('/super-admin/shops/{shop}/notify-resubmission', [App\Http\Controllers\SuperAdmin\ShopController::class, 'notifyResubmission'])->name('super.shops.notify-resubmission');
     
     Route::post('/super-admin/shops/{id}/approve', [DashboardController::class, 'approve'])->name('super.shops.approve');
     Route::post('/super-admin/shops/{id}/demote', [DashboardController::class, 'demote'])->name('super.shops.demote');
@@ -71,6 +72,9 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
     Route::get('/store/onboarding', [OnboardingController::class, 'show'])->name('store.onboarding');
     Route::patch('/store/onboarding/profile', [OnboardingController::class, 'updateProfile'])->name('store.onboarding.profile.update');
     Route::post('/store/onboarding/submit', [OnboardingController::class, 'submit'])->name('store.onboarding.submit');
+    // Allow onboarding users to view and update shop settings during onboarding
+    Route::get('/store/settings', [ShopSettingsController::class, 'edit'])->name('store.schedule.index');
+    Route::patch('/store/settings', [ShopSettingsController::class, 'update'])->name('store.settings.update');
 });
 
 Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->group(function () {
@@ -78,10 +82,6 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
     Route::post('/store/update-description', [StoreDashboardController::class, 'updateDescription'])->name('store.dashboard.update-description');
     Route::get('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'index'])->name('store.inventory.index');
     Route::get('/store/services', [App\Http\Controllers\Store\InventoryController::class, 'servicesIndex'])->name('store.services.index');
-    
-    // Shop Settings
-    Route::get('/store/settings', [ShopSettingsController::class, 'edit'])->name('store.schedule.index');
-    Route::patch('/store/settings', [ShopSettingsController::class, 'update'])->name('store.settings.update');
     // Store Admin Master Calendar
     Route::get('/store/appointments', [StoreDashboardController::class, 'appointments'])->name('store.appointments');
     

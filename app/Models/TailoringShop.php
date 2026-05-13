@@ -46,6 +46,8 @@ class TailoringShop extends Model
         'slot_duration_minutes',
         'max_bookings_per_slot',
         'max_user_bookings_per_slot',
+        'resubmission_reason',
+        'requires_resubmission',
     ];
 
     protected function casts(): array

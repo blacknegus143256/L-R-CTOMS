@@ -441,9 +441,21 @@ class CustomerOrderController extends Controller
             ->exists();
 
         if (!$recentNotification) {
+            // Build notification message based on fit method
+            $fitMethodName = $order->fitMethod?->name ?? $order->fit_method?->name ?? 'measurement';
+            if (stripos($fitMethodName, 'Self-Measured') !== false) {
+                $notificationMessage = "The customer submitted self-measured measurements for order #{$order->id}.";
+            } elseif (stripos($fitMethodName, 'In-Shop') !== false) {
+                $notificationMessage = "The customer has confirmed in-shop fitting for order #{$order->id}. Please proceed with recording measurements.";
+            } elseif (stripos($fitMethodName, 'Home Visit') !== false) {
+                $notificationMessage = "The customer has confirmed home visit fitting for order #{$order->id}. Please proceed with recording measurements.";
+            } else {
+                $notificationMessage = "The customer submitted measurements for order #{$order->id}.";
+            }
+            
             $order->tailoringShop->user->notify(new OrderUpdatedNotification(
                 $order,
-                "The customer submitted measurements for order #{$order->id}.",
+                $notificationMessage,
                 'measurement_submitted'
             ));
         }

@@ -369,7 +369,7 @@ export default function Dashboard() {
                                 Your fabric inventory is empty.
                             </p>
                             <Link
-                                        href={route('store.inventory', { highlight: item.id })}
+                                href={route('store.inventory.index')}
                                 className="inline-flex items-center rounded-xl bg-sky-600 px-4 py-2 text-xs font-black text-white transition-colors hover:bg-sky-700"
                             >
                                 Add Materials

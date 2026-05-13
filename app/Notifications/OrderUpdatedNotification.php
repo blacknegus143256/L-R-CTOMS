@@ -31,10 +31,12 @@ class OrderUpdatedNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        $baseUrl = "/store/order/{$this->order->id}";
-        $actionUrl = $this->type === 'measurement_submitted'
-            ? $baseUrl . '?action=view_measurements'
-            : $baseUrl;
+        // Determine the base URL based on the user's role
+        if ($notifiable->role === 'store_admin') {
+            $baseUrl = route('store.orders.show', $this->order->id);
+        } else {
+            $baseUrl = route('customer.orders.show', $this->order->id);
+        }
 
         return [
             'order_id' => $this->order->id,
@@ -42,7 +44,7 @@ class OrderUpdatedNotification extends Notification
             'type' => $this->type,
             'reason' => $this->reason,
             'actor' => $this->actor,
-            'url' => $actionUrl,
+            'url' => $baseUrl,
             'order_status' => $this->order->status instanceof \App\Enums\OrderStatus
                 ? $this->order->status->value
                 : (string) $this->order->status,

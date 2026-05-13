@@ -1,9 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router, useForm } from '@inertiajs/react';
-import Modal from '@/Components/Modal';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getImageUploadError } from '@/utils/imageUpload';
-import { MapPin, ExternalLink, CheckCircle, AlertCircle, ChevronDown, ChevronUp, TriangleAlert, ArrowRight, X } from 'lucide-react';
+import { MapPin, ExternalLink, CheckCircle, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MAX_SHIFT_MINUTES = 12 * 60;
@@ -65,16 +64,16 @@ const validateTime = (open, close) => {
 
 export default function ShopSettings({ auth, shop }) {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
-    const [pendingVisit, setPendingVisit] = useState(null);
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
     const [logoError, setLogoError] = useState('');
     const [qrError, setQrError] = useState('');
-    const allowNavigationRef = useRef(false);
-    const urlParams = new URLSearchParams(window.location.search);
-    const isFromOnboarding = urlParams.get('from_onboarding') === 'true';
+    const [isFromOnboarding, setIsFromOnboarding] = useState(false);
 
     useEffect(() => {
+        // Capture the onboarding flag once on mount
+        const urlParams = new URLSearchParams(window.location.search);
+        setIsFromOnboarding(urlParams.get('from_onboarding') === 'true');
+        
         if (window.location.hash === '#weekly-schedule') {
             setIsScheduleOpen(true);
             setTimeout(() => {
@@ -159,49 +158,11 @@ export default function ShopSettings({ auth, shop }) {
     const hasUnsavedChanges = JSON.stringify(normalizeFormState(data)) !== savedSnapshot;
 
     const clearDirtyState = () => {
-        const nextDefaults = {
-            ...data,
-            logo: null,
-            document_qr_code: null,
-        };
-
-        defaults(nextDefaults);
-        setData('logo', null);
-        setData('document_qr_code', null);
-        setSavedSnapshot(JSON.stringify(normalizeFormState(nextDefaults)));
-        setPendingVisit(null);
-        setShowUnsavedChangesModal(false);
-        allowNavigationRef.current = true;
+        // Reset the saved snapshot to match current data
+        setSavedSnapshot(JSON.stringify(normalizeFormState(data)));
     };
 
-     useEffect(() => {
-        const removeBeforeVisitListener = router.on('before', (event) => {
-            if (allowNavigationRef.current) {
-                allowNavigationRef.current = false;
-                return;
-            }
 
-            if (showSuccessModal) {
-                return;
-            }
-
-            if (!hasUnsavedChanges) {
-                return;
-            }
-
-            const visitMethod = String(event.detail.visit?.method || 'get').toLowerCase();
-
-            if (visitMethod === 'get') {
-                event.preventDefault();
-                setPendingVisit(event.detail.visit);
-                setShowUnsavedChangesModal(true);
-            }
-        });
-
-        return () => {
-            removeBeforeVisitListener();
-        };
-    }, [hasUnsavedChanges, showSuccessModal]);
     const updateSchedule = (index, key, value) => {
         const next = [...data.schedules];
         let newOpen = key === 'open_time' ? value : next[index].open_time;
@@ -376,32 +337,17 @@ export default function ShopSettings({ auth, shop }) {
         }
         post(route('store.settings.update'), {
             preserveScroll: true,
+            forceFormData: true,
             onSuccess: () => {
-                clearDirtyState();
                 setShowSuccessModal(true);
+            },
+            onError: (errors) => {
+                console.error('Shop settings update error:', errors);
             },
         });
     };
 
-    const continueUnsavedNavigation = () => {
-        if (!pendingVisit) {
-            setShowUnsavedChangesModal(false);
-            return;
-        }
 
-        setShowUnsavedChangesModal(false);
-        allowNavigationRef.current = true;
-
-        router.visit(pendingVisit.url, {
-            method: pendingVisit.method,
-            data: pendingVisit.data,
-            replace: pendingVisit.replace,
-            preserveScroll: pendingVisit.preserveScroll,
-            preserveState: pendingVisit.preserveState,
-        });
-
-        setPendingVisit(null);
-    };
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -414,6 +360,21 @@ export default function ShopSettings({ auth, shop }) {
                         <p className="mt-2 text-sm text-stone-500 font-medium">
                             Configure booking capacity, weekly schedule, and date-specific exceptions.
                         </p>
+
+                        {shop.requires_resubmission && (
+                            <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-amber-900">Document Resubmission Required</h3>
+                                        <p className="text-sm text-amber-800 mt-1">{shop.resubmission_reason}</p>
+                                        <p className="text-xs text-amber-700 mt-2">
+                                            Please review the feedback above and resubmit the corrected documents in the documents section when you're ready.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <form onSubmit={handleSubmit} className="space-y-10 mt-8" encType="multipart/form-data">
                             <section>
@@ -825,49 +786,71 @@ export default function ShopSettings({ auth, shop }) {
                 </div>
             </div>
 
-            {/* Smart Success Modal */}
+            {/* Success Modal */}
             {showSuccessModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col text-center p-8 relative">
-                        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mb-4">
+                        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
                             <CheckCircle className="w-8 h-8" />
                         </div>
-                        <h2 className="text-2xl font-black text-slate-800 mb-2">Successfully Saved!</h2>
 
-                        {(!shop?.is_active || isFromOnboarding) ? (
-                            <div className="mb-6">
-                                <p className="text-stone-600 text-sm mb-3">
-                                    Congratulations! Your shop details are saved. Your store is currently <strong className="text-amber-600">pending review</strong>.
-                                </p>
-                                <p className="text-stone-500 text-xs">
-                                    Please wait until our admin team approves your shop. Once approved, it will be fully displayed on the system for customers.
-                                </p>
-                            </div>
+                        {isFromOnboarding ? (
+                            <>
+                                <h2 className="text-2xl font-black text-slate-800 mb-3">Congratulations!</h2>
+                                <div className="mb-6 space-y-3 text-left">
+                                    <p className="text-stone-600 text-sm">
+                                        You have successfully completed the onboarding process. Your shop schedule and settings are now saved.
+                                    </p>
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                        <p className="text-amber-900 text-sm font-semibold">
+                                            Your shop is now pending admin approval. Once approved, you'll be able to accept orders from customers.
+                                        </p>
+                                    </div>
+                                    <p className="text-stone-600 text-sm">
+                                        While you wait for approval, you can explore the app and add more services or inventory items to prepare for your future customers.
+                                    </p>
+                                </div>
+                            </>
                         ) : (
-                            <p className="text-stone-600 text-sm mb-6">
-                                Your shop settings have been successfully updated and are live.
-                            </p>
+                            <>
+                                <h2 className="text-2xl font-black text-slate-800 mb-2">Settings Saved!</h2>
+                                <p className="text-stone-600 text-sm mb-6">
+                                    {!shop?.is_active
+                                        ? 'Your settings are saved. Your shop is pending admin approval.'
+                                        : 'Your shop settings have been successfully updated and are live.'
+                                    }
+                                </p>
+                            </>
                         )}
 
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 mt-6">
                             {isFromOnboarding && (
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        clearDirtyState();
                                         setShowSuccessModal(false);
-                                        allowNavigationRef.current = true;
+                                        router.get(route('store.dashboard'));
+                                    }}
+                                    className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition shadow-md"
+                                >
+                                    Explore Dashboard
+                                </button>
+                            )}
+                            {isFromOnboarding && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowSuccessModal(false);
                                         router.get(route('store.onboarding', { startStep: 5 }));
                                     }}
-                                    className="w-full py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-stone-800 transition shadow-md"
+                                    className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition"
                                 >
-                                    Return to Onboarding Wizard
+                                    Return to Onboarding
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={() => {
-                                    clearDirtyState();
                                     setShowSuccessModal(false);
                                 }}
                                 className="w-full py-3 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition"
@@ -879,46 +862,6 @@ export default function ShopSettings({ auth, shop }) {
                 </div>
             )}
 
-            <Modal show={showUnsavedChangesModal} onClose={() => {
-                setShowUnsavedChangesModal(false);
-                setPendingVisit(null);
-            }} maxWidth="sm">
-                <div className="p-6">
-                    <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-amber-100">
-                            <TriangleAlert className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-lg font-black text-stone-900">Unsaved changes</h3>
-                            <p className="mt-1 text-sm text-stone-600">
-                                You have unsaved changes in Shop Settings. If you leave now, your edits will be lost.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setShowUnsavedChangesModal(false);
-                                setPendingVisit(null);
-                            }}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-bold text-stone-700 transition-colors hover:bg-stone-50"
-                        >
-                            <X className="h-4 w-4" />
-                            Stay on page
-                        </button>
-                        <button
-                            type="button"
-                            onClick={continueUnsavedNavigation}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-rose-700"
-                        >
-                            Leave without saving
-                            <ArrowRight className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
-            </Modal>
         </AuthenticatedLayout>
     );
 }

@@ -18,6 +18,10 @@ export default function ShopList({ auth, shops, stats = {}, filters = {} }) {
     const [rejectionReason, setRejectionReason] = useState('');
     const [rejectionError, setRejectionError] = useState('');
     const [isRejecting, setIsRejecting] = useState(false);
+    const [notifyingShop, setNotifyingShop] = useState(null);
+    const [resubmissionReason, setResubmissionReason] = useState('');
+    const [resubmissionError, setResubmissionError] = useState('');
+    const [isNotifying, setIsNotifying] = useState(false);
 
     useEffect(() => {
         setSearchTerm(filters.search || '');
@@ -226,6 +230,47 @@ export default function ShopList({ auth, shops, stats = {}, filters = {} }) {
         }
     };
 
+    const openNotifyResubmissionModal = (shop) => {
+        setNotifyingShop(shop);
+        setResubmissionReason('');
+        setResubmissionError('');
+    };
+
+    const closeNotifyResubmissionModal = () => {
+        setNotifyingShop(null);
+        setResubmissionReason('');
+        setResubmissionError('');
+    };
+
+    const submitNotifyResubmission = (e) => {
+        e.preventDefault();
+
+        if (!notifyingShop) {
+            return;
+        }
+
+        if (!resubmissionReason.trim()) {
+            setResubmissionError('Please provide details about what needs to be resubmitted.');
+            return;
+        }
+
+        setIsNotifying(true);
+        setResubmissionError('');
+
+        router.post(route('super.shops.notify-resubmission', notifyingShop.id), { reason: resubmissionReason }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                closeNotifyResubmissionModal();
+            },
+            onError: (errors) => {
+                setResubmissionError(errors.reason || 'Unable to send resubmission notification.');
+            },
+            onFinish: () => {
+                setIsNotifying(false);
+            },
+        });
+    };
+
 
     return (
         <AuthenticatedLayout
@@ -386,6 +431,12 @@ export default function ShopList({ auth, shops, stats = {}, filters = {} }) {
                                                             className="inline-flex items-center justify-center rounded bg-blue-600 px-3 py-2 font-bold text-white hover:bg-blue-700"
                                                         >
                                                             Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={() => openNotifyResubmissionModal(shop)}
+                                                            className="inline-flex items-center justify-center rounded bg-amber-600 px-3 py-2 font-bold text-white hover:bg-amber-700"
+                                                        >
+                                                            Request Resubmission
                                                         </button>
                                                         <button
                                                             onClick={() => openRejectModal(shop)}
@@ -572,6 +623,61 @@ export default function ShopList({ auth, shops, stats = {}, filters = {} }) {
                                         className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {isRejecting ? 'Rejecting...' : 'Reject Shop'}
+                                    </button>
+                                </div>
+                            </form>
+                        </Modal>
+
+                        <Modal show={!!notifyingShop} maxWidth="lg" onClose={closeNotifyResubmissionModal}>
+                            <form onSubmit={submitNotifyResubmission} className="p-6">
+                                <div className="flex items-start justify-between gap-4 border-b border-stone-200 pb-4">
+                                    <div>
+                                        <h3 className="text-lg font-black text-stone-900">Request Document Resubmission</h3>
+                                        <p className="mt-1 text-sm text-stone-600">
+                                            Notify the shop owner about documents that need to be resubmitted or corrected.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={closeNotifyResubmissionModal}
+                                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-bold text-stone-600 hover:bg-stone-50"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+
+                                <div className="mt-5 grid gap-4">
+                                    <div>
+                                        <label htmlFor="resubmit_reason" className="mb-2 block text-sm font-bold text-stone-700">
+                                            Details for Resubmission
+                                        </label>
+                                        <textarea
+                                            id="resubmit_reason"
+                                            rows={5}
+                                            value={resubmissionReason}
+                                            onChange={(e) => setResubmissionReason(e.target.value)}
+                                            placeholder="e.g., DTI permit needs to be renewed, Gov ID photo quality is too low..."
+                                            className="block w-full rounded-2xl border border-stone-300 px-4 py-3 text-sm shadow-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    {resubmissionError && <p className="text-xs font-semibold text-rose-600">{resubmissionError}</p>}
+                                </div>
+
+                                <div className="mt-6 flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeNotifyResubmissionModal}
+                                        className="rounded-xl border border-stone-300 bg-white px-5 py-2.5 text-sm font-black text-stone-700 hover:bg-stone-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isNotifying}
+                                        className="rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-black text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {isNotifying ? 'Sending...' : 'Send Resubmission Request'}
                                     </button>
                                 </div>
                             </form>

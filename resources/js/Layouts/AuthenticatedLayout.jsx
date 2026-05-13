@@ -150,7 +150,7 @@ export default function AuthenticatedLayout({ header, children }) {
         const basePath = resolveOrderPath(orderId);
         const highlight = getHighlightParam(notification?.data?.type);
         const targetUrl = notification?.data?.url || basePath;
-        const finalUrl = highlight && !notification?.data?.url
+        const finalUrl = highlight
             ? `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}highlight=${encodeURIComponent(highlight)}`
             : targetUrl;
 

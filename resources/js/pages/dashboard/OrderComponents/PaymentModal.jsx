@@ -3,6 +3,8 @@ import axios from 'axios';
 import { AlertCircle, Banknote, CreditCard, Gift, Loader, X } from 'lucide-react';
 import AlertModal from '@/Components/AlertModal';
 import { showAlert } from '@/utils/alert';
+import { confirmDialog } from '@/utils/dialog';
+import { generateReceipt } from '@/utils/receiptGenerator';
 import { getImageUploadError } from '@/utils/imageUpload';
 
 const PaymentModal = ({
@@ -82,11 +84,28 @@ const PaymentModal = ({
                 await axios.post(`/orders/${currentOrder.id}/manual-payment`, payload);
 
                 onClose?.();
-                showAlert({
+                const wantsToPrint = await confirmDialog({
                     title: 'Order Confirmed',
-                    message: 'Your order is confirmed. Please pay the required amount in cash during your shop visit.',
+                    message: 'Your order is confirmed. Please pay the required amount in cash during your shop visit. Would you like to print your receipt now?',
+                    confirmText: 'Print Receipt',
+                    cancelText: 'Close',
                     type: 'success',
                 });
+
+                if (wantsToPrint) {
+                    try {
+                        generateReceipt(currentOrder, shop?.attributes || []);
+                    } catch (error) {
+                        console.error('Failed to generate receipt:', error);
+                        showAlert({
+                            title: 'Print Error',
+                            message: 'We could not generate the receipt right now. Your payment was still recorded successfully.',
+                            type: 'error',
+                        });
+                    }
+                }
+
+                window.location.reload();
                 return;
             } catch (error) {
                 console.error('Cash Payment Intent Error:', error.response || error);
@@ -152,11 +171,28 @@ const PaymentModal = ({
                 });
 
                 onClose?.();
-                showAlert({
+                const wantsToPrint = await confirmDialog({
                     title: 'Payment Submitted',
-                    message: 'Your payment proof has been sent to the tailor for verification.',
+                    message: 'Your payment proof has been sent to the tailor for verification. Would you like to print a copy of your receipt now?',
+                    confirmText: 'Print Receipt',
+                    cancelText: 'Close',
                     type: 'success',
                 });
+
+                if (wantsToPrint) {
+                    try {
+                        generateReceipt(currentOrder, shop?.attributes || []);
+                    } catch (error) {
+                        console.error('Failed to generate receipt:', error);
+                        showAlert({
+                            title: 'Print Error',
+                            message: 'We could not generate the receipt right now. Your payment was still recorded successfully.',
+                            type: 'error',
+                        });
+                    }
+                }
+
+                window.location.reload();
                 return;
             }
 

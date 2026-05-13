@@ -234,7 +234,7 @@ export default function OnboardingWizard({ auth, shop }) {
     const hasRequiredNonFileFields = Boolean(
         documentForm.data.payout_method &&
         documentForm.data.payout_account?.trim() &&
-        documentForm.data.nda_accepted
+        (documentForm.data.nda_accepted || shop?.terms_accepted_at)
     );
     const canSubmitDocuments = rejectedDocuments.length > 0
         ? hasRejectedUpload  // If rejected, need at least one re-upload
@@ -609,24 +609,36 @@ export default function OnboardingWizard({ auth, shop }) {
                             </label>
                             {documentForm.errors.dpa_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.dpa_accepted}</p>} */}
 
-                            <label className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    checked={documentForm.data.nda_accepted}
-                                    onChange={(e) => documentForm.setData('nda_accepted', e.target.checked)}
-                                    className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-                                />
-                                <span className="text-sm font-medium text-stone-700">
-                                    I agree to the{' '}
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveDoc({ key: 'nda_accepted', title: 'Mutual NDA', url: '/documents/mutual-nda.pdf' })}
-                                        className="font-bold text-blue-600 hover:underline"
-                                    >
-                                        Mutual NDA
-                                    </button>
-                                </span>
-                            </label>
+                            {shop?.terms_accepted_at ? (
+                                <div className="flex items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                                    <FiCheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-emerald-900">Mutual NDA Accepted</p>
+                                        <p className="text-xs text-emerald-700 mt-1">
+                                            You agreed to the Mutual NDA on {new Date(shop.terms_accepted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <label className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={documentForm.data.nda_accepted}
+                                        onChange={(e) => documentForm.setData('nda_accepted', e.target.checked)}
+                                        className="h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-medium text-stone-700">
+                                        I agree to the{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDoc({ key: 'nda_accepted', title: 'Mutual NDA', url: '/documents/mutual-nda.pdf' })}
+                                            className="font-bold text-blue-600 hover:underline"
+                                        >
+                                            Mutual NDA
+                                        </button>
+                                    </span>
+                                </label>
+                            )}
                             {documentForm.errors.nda_accepted && <p className="text-xs font-semibold text-rose-600">{documentForm.errors.nda_accepted}</p>}
                         </div>
 

@@ -536,9 +536,19 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
                 ->exists();
 
             if (!$recentNotification) {
+                // Build notification message based on fit method
+                $fitMethodName = $order->fitMethod?->name ?? $order->fit_method?->name ?? 'measurement';
+                if (stripos($fitMethodName, 'In-Shop') !== false) {
+                    $notificationMessage = "The tailor recorded in-shop measurements for order #{$order->id}. Please review if they match your requirements.";
+                } elseif (stripos($fitMethodName, 'Home Visit') !== false) {
+                    $notificationMessage = "The tailor recorded home visit measurements for order #{$order->id}. Please review if they match your requirements.";
+                } else {
+                    $notificationMessage = "Your tailor requested measurements for order #{$order->id}.";
+                }
+                
                 $order->user->notify(new OrderUpdatedNotification(
                     $order,
-                    "Your tailor requested measurements for order #{$order->id}.",
+                    $notificationMessage,
                     'measurement_requested'
                 ));
             }

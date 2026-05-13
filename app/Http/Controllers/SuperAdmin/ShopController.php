@@ -199,4 +199,22 @@ class ShopController extends Controller {
 
         return redirect()->back()->with('message', 'Shop rejected successfully!');
     }
+
+    public function notifyResubmission(Request $request, TailoringShop $shop): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        // Update shop with resubmission notice
+        $shop->update([
+            'resubmission_reason' => $validated['reason'],
+            'requires_resubmission' => true,
+        ]);
+
+        // Create notification for the shop owner
+        $shop->user->notify(new \App\Notifications\DocumentResubmissionRequired($shop, $validated['reason']));
+
+        return redirect()->back()->with('message', 'Resubmission request sent to shop owner successfully!');
+    }
 }

@@ -39,7 +39,7 @@ WORKDIR /var/www
 COPY . .
 
 # Copy frontend build
-COPY --from=frontend /app/dist ./public/dist
+COPY --from=frontend /app/dist ./public/dist || true
 
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
@@ -48,7 +48,7 @@ RUN composer install --no-dev --optimize-autoloader
 RUN php artisan config:clear && \
     php artisan route:clear && \
     php artisan view:clear
-
+RUN npm run build
 # Render requires exposed port
 EXPOSE 10000
 

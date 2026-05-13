@@ -128,7 +128,11 @@ class ShopSettingsController extends Controller
             }
         });
 
-        return back()->with('success', 'Shop settings updated successfully.');
+        $shop->load(['schedules', 'exceptions']);
+
+        return inertia('StoreAdmin/ShopSettings', [
+            'shop' => $shop,
+        ]);
     }
 
     private function normalizeTime(?string $time): ?string

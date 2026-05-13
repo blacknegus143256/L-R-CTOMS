@@ -4,7 +4,7 @@ export default function ApplicationLogo(props) {
     return (
         <img 
             {...props} 
-            src="/images/logostitch.png" 
+            src="/images/StitchLogo.png" 
             alt="CTOMS Logo" 
         />
     );
