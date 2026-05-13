@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libzip-dev \
     zip \
-    && && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring zip
+    &&  docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring zip
 
 # Enable Apache mod_rewrite (Required for Laravel routing)
 RUN a2enmod rewrite
@@ -59,3 +59,5 @@ RUN php artisan config:cache && \
 
 # Apache automatically exposes port 80 and starts itself, so no CMD is needed!
 EXPOSE 80
+
+CMD php artisan migrate --force && apache2-foreground
