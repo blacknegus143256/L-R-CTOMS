@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y \
 
 RUN a2enmod rewrite
 
+# Disable prefork, enable event MPM (more efficient for limited resources)
+RUN a2dismod mpm_prefork || true
+RUN a2enmod mpm_event
+
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
 RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
@@ -36,15 +40,16 @@ RUN mkdir -p /var/www/html/storage/framework/cache/data \
     /var/www/html/bootstrap/cache
 
 # ---------------------------------------------------------
-# THE OOM KILLER FIX: Throttle Apache to survive on 512MB RAM
+# Optimize Apache Event MPM for low-resource environment
+# Event MPM is more efficient than Prefork
 # ---------------------------------------------------------
-RUN echo "<IfModule mpm_prefork_module>\n\
-    StartServers              1\n\
-    MinSpareServers           1\n\
-    MaxSpareServers           3\n\
-    MaxRequestWorkers         10\n\
-    MaxConnectionsPerChild    50\n\
-</IfModule>" > /etc/apache2/mods-available/mpm_prefork.conf
+RUN echo "<IfModule mpm_event_module>\n\
+    StartServers              2\n\
+    MinSpareServers           2\n\
+    MaxSpareServers          10\n\
+    MaxRequestWorkers        100\n\
+    MaxConnectionsPerChild  1000\n\
+</IfModule>" > /etc/apache2/mods-available/mpm_event.conf
 
 # Give Apache ownership of the whole app so it stops throwing 500 errors
 RUN chown -R www-data:www-data /var/www/html && \
