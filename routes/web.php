@@ -29,6 +29,16 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\StoreAdmin\OnboardingController;
 use App\Models\FitMethod;
 
+Route::get('/debug-logs', function () {
+    $logFile = storage_path('logs/laravel.log');
+    if (file_exists($logFile)) {
+        return response()->file($logFile, [
+            'Content-Type' => 'text/plain',
+        ]);
+    }
+    return 'No log file found. Check folder permissions.';
+});
+
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->name('web.payments.webhook');
 
 // Manual payment verification fallback for webhook failures (localhost/dev)
