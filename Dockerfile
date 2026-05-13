@@ -39,7 +39,7 @@ WORKDIR /var/www
 COPY . .
 
 # Copy frontend build
-COPY --from=frontend /app/dist ./public/dist || true
+COPY --from=frontend /app/public/build ./public/build || true
 
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
