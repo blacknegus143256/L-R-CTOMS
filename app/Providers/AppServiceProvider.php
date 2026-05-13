@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,6 +22,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Force HTTPS in production so Render doesn't trigger mixed-content redirects.
+        if (env('APP_ENV') === 'production') {
+            URL::forceScheme('https');
+        }
+
         Vite::useBuildDirectory('build');
         Vite::prefetch(concurrency: 3);
 
