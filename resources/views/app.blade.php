@@ -12,7 +12,7 @@
         <!-- Scripts -->
         @routes
         @viteReactRefresh
-@vite(['resources/css/app.css', 'resources/css/electric-orchid.css', 'resources/js/app.jsx'])
+        @vite(['resources/css/app.css', 'resources/css/electric-orchid.css', 'resources/js/app.jsx'])
         @inertiaHead
     </head>
     <body class="font-sans antialiased">

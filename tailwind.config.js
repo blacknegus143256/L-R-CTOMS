@@ -16,6 +16,8 @@ export default {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },
             colors: {
+                white: '#FCFBF8',
+                paper: '#F6F5F2',
                 orchid: {
                     blue: '#4568dc',
                     purple: '#b06ab3',

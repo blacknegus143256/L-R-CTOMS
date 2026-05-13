@@ -5,7 +5,7 @@ import Footer from '@/Components/Home/Footer';
 
 export default function GuestLayout({ children }) {
     return (
-        <div className="flex min-h-screen flex-col md:flex-row bg-white">
+        <div className="flex min-h-screen flex-col md:flex-row bg-transparent">
             {/* LEFT SIDE: Visual Mesh Layer (60% on Desktop) */}
             <motion.div 
                 initial={{ opacity: 0, x: -50 }}

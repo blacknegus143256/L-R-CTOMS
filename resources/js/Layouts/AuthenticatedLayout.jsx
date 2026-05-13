@@ -217,7 +217,7 @@ export default function AuthenticatedLayout({ header, children }) {
     return (
         <>
             <Toaster position="top-right" />
-            <div className="h-screen bg-stone-50 flex overflow-hidden relative z-0">
+            <div className="h-screen flex overflow-hidden relative z-0">
                 <ImpersonationBanner />
                 {/* Sidebar - Slimmer width (w-60) */}
             <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-slate-50 border-r border-stone-200 shadow-xl transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto transition-transform duration-300 ease-in-out flex flex-col`}>
