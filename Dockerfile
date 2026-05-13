@@ -61,8 +61,8 @@ RUN php artisan storage:link --force 2>/dev/null || true
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
     chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Generate APP_KEY if not set in environment (required for encryption)
-RUN if [ -z "$APP_KEY" ]; then php artisan key:generate --force; fi
+# DO NOT generate APP_KEY here - it must come from Render environment variables
+# Ephemeral containers will get a new key and log out all users
 
 # Bind Apache to Render's dynamic PORT variable
 RUN sed -i "s/80/\${PORT:-80}/g" /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
