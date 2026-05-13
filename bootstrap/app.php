@@ -20,6 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             \App\Http\Middleware\EnforceActiveAccount::class,
         ]);
+        
+        // Add CORS middleware for API routes
+        $middleware->api(append: [
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
+        
         $middleware->validateCsrfTokens(except: [
             'payments/webhook',
             'api/payments/webhook',
