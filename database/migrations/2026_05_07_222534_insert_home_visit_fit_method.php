@@ -12,12 +12,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::table('fit_methods')->insert([
-            'name' => 'Home Visit',
-            'description' => 'A professional tailor visits the customer location for measurements and material pickup.',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('fit_methods')->updateOrInsert(
+            ['name' => 'Home Visit'],
+            [
+                'description' => 'A professional tailor visits the customer location for measurements and material pickup.',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
     }
 
     /**

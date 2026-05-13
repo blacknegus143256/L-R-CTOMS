@@ -17,39 +17,51 @@ return new class extends Migration
 
         foreach ($shops as $shop) {
             if (! empty($shop->document_gov_id)) {
-                DB::table('shop_documents')->insert([
-                    'shop_id' => $shop->id,
-                    'document_type' => 'gov_id',
-                    'file_path' => $shop->document_gov_id,
-                    'status' => $shop->gov_id_status ?: 'pending',
-                    'rejection_reason' => $shop->gov_id_rejection_reason,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+                DB::table('shop_documents')->updateOrInsert(
+                    [
+                        'shop_id' => $shop->id,
+                        'document_type' => 'gov_id',
+                    ],
+                    [
+                        'file_path' => $shop->document_gov_id,
+                        'status' => $shop->gov_id_status ?: 'pending',
+                        'rejection_reason' => $shop->gov_id_rejection_reason,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
             }
 
             if (! empty($shop->document_bir)) {
-                DB::table('shop_documents')->insert([
-                    'shop_id' => $shop->id,
-                    'document_type' => 'bir_2303',
-                    'file_path' => $shop->document_bir,
-                    'status' => $shop->bir_2303_status ?: 'pending',
-                    'rejection_reason' => $shop->bir_2303_rejection_reason,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+                DB::table('shop_documents')->updateOrInsert(
+                    [
+                        'shop_id' => $shop->id,
+                        'document_type' => 'bir_2303',
+                    ],
+                    [
+                        'file_path' => $shop->document_bir,
+                        'status' => $shop->bir_2303_status ?: 'pending',
+                        'rejection_reason' => $shop->bir_2303_rejection_reason,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
             }
 
             if (! empty($shop->document_dti)) {
-                DB::table('shop_documents')->insert([
-                    'shop_id' => $shop->id,
-                    'document_type' => 'dti_permit',
-                    'file_path' => $shop->document_dti,
-                    'status' => $shop->dti_permit_status ?: 'pending',
-                    'rejection_reason' => $shop->dti_permit_rejection_reason,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+                DB::table('shop_documents')->updateOrInsert(
+                    [
+                        'shop_id' => $shop->id,
+                        'document_type' => 'dti_permit',
+                    ],
+                    [
+                        'file_path' => $shop->document_dti,
+                        'status' => $shop->dti_permit_status ?: 'pending',
+                        'rejection_reason' => $shop->dti_permit_rejection_reason,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
             }
         }
 
