@@ -10,7 +10,6 @@ export default defineConfig({
         }),
         react(),
     ],
-    base: "/L-R-CTOMS/",
     server: {
         hmr: {
             host: "localhost",

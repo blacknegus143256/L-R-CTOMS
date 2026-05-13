@@ -1,4 +1,4 @@
-# Stage 1 - Build Frontend (Vite)
+# Stage 1 - Build Frontend
 FROM node:22 AS frontend
 
 WORKDIR /app
@@ -38,7 +38,7 @@ WORKDIR /var/www
 # Copy Laravel files
 COPY . .
 
-# Copy frontend build
+# Copy built frontend assets
 COPY --from=frontend /app/public/build ./public/build
 
 # Install PHP dependencies
@@ -48,9 +48,9 @@ RUN composer install --no-dev --optimize-autoloader
 RUN php artisan config:clear && \
     php artisan route:clear && \
     php artisan view:clear
-RUN npm run build
-# Render requires exposed port
+
+# Render port
 EXPOSE 10000
 
-# Start Laravel server
+# Start Laravel
 CMD php artisan serve --host=0.0.0.0 --port=10000
