@@ -1,41 +1,50 @@
-# Hybrid Topology (Simple Guide)
+# Network Model Used (Simple)
 
-## What Is a Hybrid Topology?
+## Model in Use
 
-A hybrid topology is when you combine two or more different network layouts into one setup.
+CTOMS uses a **hybrid cloud client-server model**:
 
-Instead of using only one topology (like star, mesh, ring, or bus) across the whole network, a hybrid design lets you use each type where it fits best for different departments, floors, branches, or systems.
+- Local development: XAMPP + Laravel + MySQL
+- Production: Render container + Laravel + PostgreSQL
+- Shared external services: payment gateway and email provider
 
-Date reference: Mar 8, 2026
+This is called "hybrid" because one app runs across two infrastructure environments while keeping the same business flow.
 
-## Why Use It?
-
-- Flexibility: each area can use the layout that works best
-- Scalability: easier to grow specific sections without redesigning everything
-- Performance: critical areas can use faster or more reliable designs
-- Reliability: failures in one section may not affect the entire network
-
-## Example
-
-A company can use:
-
-- Star topology inside each office floor (easy device management)
-- Mesh topology between data center routers (high redundancy)
-- Bus or ring in legacy sections that are still in use
-
-This combination creates one hybrid topology.
-
-## Simple Deployment Topology
+## High-Level Topology
 
 ```mermaid
-flowchart TB
-    U[User Browser] --> R[Render Edge / Reverse Proxy]
-    R --> C[Docker Container]
-    C --> A[Apache + Laravel App]
-    A --> D[(PostgreSQL Database)]
-    A --> S[External Services\nPayMongo, Email, Storage]
+flowchart LR
+        U[User Browser] --> E[Render Edge HTTPS]
+        E --> W[Web Container\nApache + Laravel]
+        W --> DB[(PostgreSQL)]
+        W --> M[Email Service\nMailtrap local / Resend prod]
+        W --> P[PayMongo API]
 ```
 
-## Quick Summary
+## Request Flow (Simple)
 
-A hybrid topology combines multiple network topology types into one network architecture so each part of the organization can use the most appropriate design.
+1. Browser sends HTTPS request to Render.
+2. Render forwards request to the Laravel container.
+3. Laravel processes routes/controllers and reads or writes database data.
+4. Laravel returns JSON or Inertia page response to browser.
+5. For specific actions, Laravel also calls external services (email, payments).
+
+## Why This Model Fits CTOMS
+
+- Keeps development simple on local machines.
+- Supports cloud deployment without changing core app logic.
+- Separates responsibilities clearly.
+- Client role: UI and user interaction.
+- Server role: business rules and security.
+- Database role: persistent records.
+- Third-party role: payment and transactional email.
+
+## Security Notes
+
+- Production traffic is HTTPS.
+- App uses environment variables for service credentials.
+- Auth/session handling is managed by Laravel and Sanctum.
+
+## One-Line Summary
+
+CTOMS runs on a hybrid client-server network model: local dev stack for building, Render cloud stack for live traffic, and external APIs for email and payments.

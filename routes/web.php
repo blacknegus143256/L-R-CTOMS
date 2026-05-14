@@ -39,6 +39,11 @@ Route::get('/debug-logs', function () {
     }
     return 'No log file found. Check folder permissions.';
 });
+Route::get('/clear-cache', function() {
+    \Illuminate\Support\Facades\Artisan::call('config:clear');
+    \Illuminate\Support\Facades\Artisan::call('cache:clear');
+    return 'Cache cleared successfully! You can now test the email.';
+});
 
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->name('web.payments.webhook');
 
