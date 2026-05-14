@@ -9,7 +9,7 @@ import OrderModal from "@/Components/OrderModal";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { FiPlus } from 'react-icons/fi';
 
-export default function Shop({ shop, auth, fitMethods = [] }) {
+export default function Shop({ shop, auth, fitMethods = [], holidays = [] }) {
     if (!shop) return null;
 
     const { url } = usePage();
@@ -414,6 +414,7 @@ export default function Shop({ shop, auth, fitMethods = [] }) {
             <OrderModal
                 shop={shop}
                 fitMethods={fitMethods}
+                holidays={holidays}
                 isOpen={showOrderForm}
                 onClose={() => setShowOrderForm(false)}
             />

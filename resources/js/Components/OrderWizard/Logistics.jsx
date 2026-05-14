@@ -8,6 +8,7 @@ import axios from 'axios';
 export default function Logistics({ 
   service,
   shop,
+  holidays = [],
   materialDropoffDate,
   setMaterialDropoffDate,
   materialDropoffTime,
@@ -19,6 +20,9 @@ export default function Logistics({
   if (!service) return null;
 
   const isDroppingOff = materialSource === 'customer';
+  const slotDurationMinutes = Number(shop?.slot_duration_minutes ?? 30);
+  const maxBookingsPerSlot = Number(shop?.max_bookings_per_slot ?? 3);
+  const maxUserBookingsPerSlot = Number(shop?.max_user_bookings_per_slot ?? 3);
 
   const [availableDates, setAvailableDates] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
@@ -68,44 +72,143 @@ export default function Logistics({
   }, [debouncedFetch]);
 
   useEffect(() => {
-    const selectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
+    if (materialDropoffDate) {
+      const nextSelectedDate = new Date(`${materialDropoffDate}T00:00:00`);
+      const nextSelectedDateKey = format(nextSelectedDate, 'yyyy-MM-dd');
+      const currentSelectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
 
-    if (materialDropoffDate && selectedDateKey !== materialDropoffDate) {
-      setSelectedDate(new Date(`${materialDropoffDate}T00:00:00`));
-    }
-
-    if (!materialDropoffDate && selectedDate) {
+      if (currentSelectedDateKey !== nextSelectedDateKey) {
+        setSelectedDate(nextSelectedDate);
+      }
+    } else if (selectedDate) {
       setSelectedDate(null);
     }
 
     if (materialDropoffTime) {
       setSelectedTime(materialDropoffTime);
-    } else {
+    } else if (selectedTime) {
       setSelectedTime(null);
     }
-  }, [materialDropoffDate, materialDropoffTime, selectedDate]);
+  }, [materialDropoffDate, materialDropoffTime]);
 
   const getDaySlots = (dateKey) => {
     const dayData = availableDates[dateKey];
-    if (!dayData) return [];
     
-    // Guard against empty or malformed objects
-    if (typeof dayData === 'object' && !Array.isArray(dayData) && !dayData.slots) {
+    // Try to use API data if available
+    if (dayData) {
+      // Guard against empty or malformed objects
+      if (typeof dayData === 'object' && !Array.isArray(dayData) && !dayData.slots) {
+        // Fall through to buildFallbackSlots
+      }
+      // If the API returns a direct array of objects (New API format)
+      else if (Array.isArray(dayData) && dayData.length > 0 && typeof dayData[0] === 'object') {
+        return dayData.map((slot) => ({
+          ...slot,
+          max_bookings: Number(slot.max_bookings ?? maxBookingsPerSlot),
+          max_user_bookings: Number(slot.max_user_bookings ?? maxUserBookingsPerSlot),
+        }));
+      }
+      // If the API returns an array of strings (Legacy API format fallback)
+      else if (Array.isArray(dayData)) {
+        return dayData.map((time) => ({
+          time,
+          booked_count: 0,
+          slots_left: null,
+          user_booking_count: 0,
+          is_available: true,
+          max_bookings: maxBookingsPerSlot,
+          max_user_bookings: maxUserBookingsPerSlot,
+        }));
+      }
+      // If the API returns { slots: [...] }
+      else if (dayData.slots && Array.isArray(dayData.slots)) {
+        return dayData.slots.map((slot) => ({
+          ...slot,
+          max_bookings: Number(slot.max_bookings ?? maxBookingsPerSlot),
+          max_user_bookings: Number(slot.max_user_bookings ?? maxUserBookingsPerSlot),
+        }));
+      }
+    }
+    
+    // Fallback: Generate slots from weekly schedule if API data missing or invalid
+    return buildFallbackSlots(dateKey);
+  };
+
+  const isDateOpenBySchedule = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const dayOfWeek = date.getDay();
+    const weeklySchedule = shop?.schedules?.find((schedule) => Number(schedule.day_of_week) === dayOfWeek);
+    const exception = shop?.exceptions?.find((item) => String(item.date).slice(0, 10) === dateKey);
+
+    if (exception) {
+      return !exception.is_closed && Boolean(exception.open_time && exception.close_time);
+    }
+
+    if (holidays.includes(dateKey)) {
+      return false;
+    }
+
+    return Boolean(weeklySchedule?.is_open && weeklySchedule.open_time && weeklySchedule.close_time);
+  };
+
+  const buildFallbackSlots = (dateKey) => {
+    const date = new Date(`${dateKey}T00:00:00`);
+    const dayOfWeek = date.getDay();
+    const weeklySchedule = shop?.schedules?.find((schedule) => Number(schedule.day_of_week) === dayOfWeek);
+    const exception = shop?.exceptions?.find((item) => String(item.date).slice(0, 10) === dateKey);
+
+    if (exception) {
+      if (exception.is_closed || !exception.open_time || !exception.close_time) {
+        return [];
+      }
+
+      return generateSlots(dateKey, exception.open_time, exception.close_time);
+    }
+
+    if (holidays.includes(dateKey)) {
       return [];
     }
-    // If the API returns a direct array of objects (New API format)
-    if (Array.isArray(dayData) && dayData.length > 0 && typeof dayData[0] === 'object') {
-      return dayData;
+
+    if (!weeklySchedule?.is_open || !weeklySchedule.open_time || !weeklySchedule.close_time) {
+      return [];
     }
-    // If the API returns an array of strings (Legacy API format fallback)
-    if (Array.isArray(dayData)) {
-      return dayData.map((time) => ({ time, booked_count: 0, slots_left: null, user_booking_count: 0, is_available: true }));
+
+    return generateSlots(dateKey, weeklySchedule.open_time, weeklySchedule.close_time);
+  };
+
+  const generateSlots = (dateKey, openTime, closeTime) => {
+    const start = new Date(`${dateKey}T${String(openTime).slice(0, 5)}:00`);
+    const end = new Date(`${dateKey}T${String(closeTime).slice(0, 5)}:00`);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+      return [];
     }
-    // If the API returns { slots: [...] }
-    if (dayData.slots && Array.isArray(dayData.slots)) {
-      return dayData.slots;
+
+    const slots = [];
+    const current = new Date(start);
+
+    while (true) {
+      const slotEnd = new Date(current);
+      slotEnd.setMinutes(slotEnd.getMinutes() + slotDurationMinutes);
+
+      if (slotEnd > end) {
+        break;
+      }
+
+      slots.push({
+        time: format(current, 'HH:mm'),
+        booked_count: 0,
+        slots_left: maxBookingsPerSlot,
+        user_booking_count: 0,
+        is_available: true,
+        max_bookings: maxBookingsPerSlot,
+        max_user_bookings: maxUserBookingsPerSlot,
+      });
+
+      current.setMinutes(current.getMinutes() + slotDurationMinutes);
     }
-    return [];
+
+    return slots;
   };
 
   const canProceed = !isDroppingOff || (selectedDate && selectedTime);
@@ -182,13 +285,21 @@ export default function Logistics({
                   }
                 }}
                 filterDate={(date) => {
-                  // Allow all dates while loading to prevent date picker from being empty
-                  if (isLoading || Object.keys(availableDates).length === 0) {
-                    return true;
+                  const dateKey = format(date, 'yyyy-MM-dd');
+
+                  if (!isDateOpenBySchedule(date)) {
+                    return false;
                   }
-                  // Once loaded, only allow dates with available slots
-                  const key = format(date, 'yyyy-MM-dd');
-                  return getDaySlots(key).some((slot) => slot.is_available);
+
+                  const daySlots = getDaySlots(dateKey);
+
+                  // If we already have slot data for this date, require at least one available slot.
+                  if (daySlots.length > 0) {
+                    return daySlots.some((slot) => slot.is_available);
+                  }
+
+                  // Otherwise fall back to the weekly schedule so open dates remain selectable.
+                  return true;
                 }}
                 onMonthChange={(date) => {
                   const month = date.getMonth() + 1;
@@ -204,6 +315,9 @@ export default function Logistics({
               <div>
                 <label className="block text-sm font-semibold text-emerald-800 mb-3">
                   Available Material Drop-off Times
+                  <span className="ml-2 text-xs font-medium text-emerald-600">
+                    ({slotDurationMinutes}-minute slots)
+                  </span>
                 </label>
                 {(() => {
                   const dateKey = format(selectedDate, 'yyyy-MM-dd');
@@ -219,7 +333,7 @@ export default function Logistics({
                         const time = slot.time;
                         const isAvailable = slot.is_available;
                         const userBookingCount = Number(slot.user_booking_count ?? 0);
-                        const maxUserBookings = Number(slot.max_user_bookings ?? 3);
+                        const maxUserBookings = Number(slot.max_user_bookings ?? maxUserBookingsPerSlot);
                         const slotsLeft = Number(slot.slots_left ?? 0);
                         const isDisabled = !isAvailable || userBookingCount >= maxUserBookings;
 

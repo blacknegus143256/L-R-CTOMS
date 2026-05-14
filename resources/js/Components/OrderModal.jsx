@@ -12,7 +12,7 @@ import OrderSummary from './OrderWizard/OrderSummary.jsx';
 import OrderSuccessModal from './OrderSuccessModal.jsx';
 import { showNotification } from '../utils/notification';
 
-export default function OrderModal({ shop, fitMethods = [], isOpen, onClose, onSuccess }) {
+export default function OrderModal({ shop, fitMethods = [], holidays = [], isOpen, onClose, onSuccess }) {
   const { data, setData, post, processing, errors, reset } = useForm({
     service_id: '',
     style_tag: '',
@@ -586,6 +586,7 @@ const toggleAttribute = (attrId) => {
                 3: <Logistics 
                       service={service}
                       shop={shop}
+                      holidays={holidays}
                       materialDropoffDate={materialDropoffDate}
                       setMaterialDropoffDate={setMaterialDropoffDate}
                       materialDropoffTime={materialDropoffTime}
@@ -607,6 +608,7 @@ const toggleAttribute = (attrId) => {
                 4: <FitLogistics 
                       service={service}
                       shop={shop}
+                      holidays={holidays}
                       auth={auth}
                       materialSource={materialSource}
                       materialDropoffDate={materialDropoffDate}

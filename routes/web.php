@@ -27,6 +27,7 @@ use App\Http\Controllers\Customer\CustomerDashboardController;
 use App\Http\Controllers\ReworkController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\StoreAdmin\OnboardingController;
+use App\Models\Holiday;
 use App\Models\FitMethod;
 
 Route::get('/debug-logs', function () {
@@ -202,16 +203,26 @@ Route::get('/shop/{shop}',  function ($shop){
             $query->where('name', 'Approved');
         })
         ->where('is_active', true)
-        ->with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory', 'user.profile'])
+        ->with(['services.serviceCategory', 'attributes', 'attributes.attributeCategory', 'user.profile', 'schedules', 'exceptions'])
         ->findOrFail($shop);
 
     $fitMethods = FitMethod::select('id', 'name', 'description')
         ->orderBy('id')
         ->get();
 
+    $holidays = Holiday::query()
+        ->select('date')
+        ->orderBy('date')
+        ->get()
+        ->map(function ($holiday) {
+            return $holiday->date->format('Y-m-d');
+        })
+        ->values();
+
     return Inertia::render('Shop', [
         'shop' => $shop,
         'fitMethods' => $fitMethods,
+        'holidays' => $holidays,
     ]);
 });
 

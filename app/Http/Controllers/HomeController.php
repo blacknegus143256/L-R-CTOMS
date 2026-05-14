@@ -21,7 +21,7 @@ class HomeController extends Controller
                     $query->where('name', 'Approved');
                 })
                 ->where('is_active', true)
-                ->with(['services.serviceCategory', 'attributes', 'user.profile'])
+                ->with(['services.serviceCategory', 'attributes', 'user.profile', 'schedules', 'exceptions'])
                 ->get(),
             'uniqueServiceCategories' => Service::with('serviceCategory')
                 ->get()

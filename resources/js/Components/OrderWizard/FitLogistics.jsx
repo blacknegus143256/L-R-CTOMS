@@ -13,6 +13,7 @@ import { AlertCircle, Calendar, CheckCircle2, Home, MapPin, Ruler, Store, XCircl
 export default function FitLogistics({
   service,
   shop,
+  holidays = [],
   materialSource,
   measurementPreference,
   setMeasurementPreference,
@@ -34,6 +35,9 @@ export default function FitLogistics({
   const isRepair = categorySlug.includes('repairs') || categorySlug.includes('alterations');
   const hasDropoffDate = Boolean(materialDropoffDate);
   const requiresAppointment = Boolean(service?.appointment_required);
+  const slotDurationMinutes = Number(shop?.slot_duration_minutes ?? 30);
+  const maxBookingsPerSlot = Number(shop?.max_bookings_per_slot ?? 3);
+  const maxUserBookingsPerSlot = Number(shop?.max_user_bookings_per_slot ?? 3);
 
   const [useDropoffForFitting, setUseDropoffForFitting] = useState(hasDropoffDate);
   const [availableDates, setAvailableDates] = useState({});
@@ -95,22 +99,24 @@ export default function FitLogistics({
   useEffect(() => () => debouncedFetch.cancel(), [debouncedFetch]);
 
   useEffect(() => {
-    const selectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
+    if (measurementDate) {
+      const nextSelectedDate = new Date(`${measurementDate}T00:00:00`);
+      const nextSelectedDateKey = format(nextSelectedDate, 'yyyy-MM-dd');
+      const currentSelectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
 
-    if (measurementDate && selectedDateKey !== measurementDate) {
-      setSelectedDate(new Date(`${measurementDate}T00:00:00`));
-    }
-
-    if (!measurementDate && selectedDate) {
+      if (currentSelectedDateKey !== nextSelectedDateKey) {
+        setSelectedDate(nextSelectedDate);
+      }
+    } else if (selectedDate) {
       setSelectedDate(null);
     }
 
     if (measurementTime) {
       setSelectedTime(measurementTime);
-    } else {
+    } else if (selectedTime) {
       setSelectedTime(null);
     }
-  }, [measurementDate, measurementTime, selectedDate, setMeasurementDate]);
+  }, [measurementDate, measurementTime]);
 
   useEffect(() => {
     if (requiresAppointment && measurementPreference === 'self_measure') {
@@ -222,16 +228,80 @@ export default function FitLogistics({
     }
   };
 
-  const getDaySlots = (dateKey) => {
-    const dayData = availableDates[dateKey];
-    if (!dayData) return [];
+  const generateSlots = (dateKey, openTime, closeTime) => {
+    const start = new Date(`${dateKey}T${String(openTime).slice(0, 5)}:00`);
+    const end = new Date(`${dateKey}T${String(closeTime).slice(0, 5)}:00`);
 
-    if (typeof dayData === 'object' && !Array.isArray(dayData) && !dayData.slots) {
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
       return [];
     }
 
+    const slots = [];
+    const current = new Date(start);
+
+    while (true) {
+      const slotEnd = new Date(current);
+      slotEnd.setMinutes(slotEnd.getMinutes() + slotDurationMinutes);
+
+      if (slotEnd > end) {
+        break;
+      }
+
+      slots.push({
+        time: format(current, 'HH:mm'),
+        booked_count: 0,
+        slots_left: maxBookingsPerSlot,
+        user_booking_count: 0,
+        is_available: true,
+        max_bookings: maxBookingsPerSlot,
+        max_user_bookings: maxUserBookingsPerSlot,
+      });
+
+      current.setMinutes(current.getMinutes() + slotDurationMinutes);
+    }
+
+    return slots;
+  };
+
+  const buildFallbackSlots = (dateKey) => {
+    const date = new Date(`${dateKey}T00:00:00`);
+    const dayOfWeek = date.getDay();
+    const weeklySchedule = shop?.schedules?.find((schedule) => Number(schedule.day_of_week) === dayOfWeek);
+    const exception = shop?.exceptions?.find((item) => String(item.date).slice(0, 10) === dateKey);
+
+    if (exception) {
+      if (exception.is_closed || !exception.open_time || !exception.close_time) {
+        return [];
+      }
+
+      return generateSlots(dateKey, exception.open_time, exception.close_time);
+    }
+
+    if (holidays.includes(dateKey)) {
+      return [];
+    }
+
+    if (!weeklySchedule?.is_open || !weeklySchedule.open_time || !weeklySchedule.close_time) {
+      return [];
+    }
+
+    return generateSlots(dateKey, weeklySchedule.open_time, weeklySchedule.close_time);
+  };
+
+  const getDaySlots = (dateKey) => {
+    const dayData = availableDates[dateKey];
+    if (!dayData) return buildFallbackSlots(dateKey);
+
+    if (typeof dayData === 'object' && !Array.isArray(dayData) && !dayData.slots) {
+      return buildFallbackSlots(dateKey);
+    }
+
     if (Array.isArray(dayData) && dayData.length > 0 && typeof dayData[0] === 'object') {
-      return dayData;
+      return dayData.map((slot) => ({
+        ...slot,
+        max_bookings: Number(slot.max_bookings ?? maxBookingsPerSlot),
+        max_user_bookings: Number(slot.max_user_bookings ?? maxUserBookingsPerSlot),
+      }));
     }
 
     if (Array.isArray(dayData)) {
@@ -241,14 +311,37 @@ export default function FitLogistics({
         slots_left: null,
         user_booking_count: 0,
         is_available: true,
+        max_bookings: maxBookingsPerSlot,
+        max_user_bookings: maxUserBookingsPerSlot,
       }));
     }
 
     if (dayData.slots && Array.isArray(dayData.slots)) {
-      return dayData.slots;
+      return dayData.slots.map((slot) => ({
+        ...slot,
+        max_bookings: Number(slot.max_bookings ?? maxBookingsPerSlot),
+        max_user_bookings: Number(slot.max_user_bookings ?? maxUserBookingsPerSlot),
+      }));
     }
 
-    return [];
+    return buildFallbackSlots(dateKey);
+  };
+
+  const isDateOpenBySchedule = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const dayOfWeek = date.getDay();
+    const weeklySchedule = shop?.schedules?.find((schedule) => Number(schedule.day_of_week) === dayOfWeek);
+    const exception = shop?.exceptions?.find((item) => String(item.date).slice(0, 10) === dateKey);
+
+    if (exception) {
+      return !exception.is_closed && Boolean(exception.open_time && exception.close_time);
+    }
+
+    if (holidays.includes(dateKey)) {
+      return false;
+    }
+
+    return Boolean(weeklySchedule?.is_open && weeklySchedule.open_time && weeklySchedule.close_time);
   };
 
   const handleSelfMeasured = () => {
@@ -528,6 +621,9 @@ export default function FitLogistics({
                       ? 'The tailor will travel to your location for measurements and material pickup.'
                       : 'Choose a shop appointment that works for you.'}
                   </p>
+                  <p className="mt-1 text-[11px] font-semibold text-blue-600">
+                    Slot duration: {slotDurationMinutes} minutes
+                  </p>
                 </div>
               </div>
 
@@ -551,13 +647,19 @@ export default function FitLogistics({
                     }
                   }}
                   filterDate={(date) => {
-                    // Allow all dates while loading to prevent date picker from being empty
-                    if (isLoading || Object.keys(availableDates).length === 0) {
-                      return true;
-                    }
-                    // Once loaded, only allow dates with available slots
                     const key = format(date, 'yyyy-MM-dd');
-                    return getDaySlots(key).some((slot) => slot.is_available);
+
+                    if (!isDateOpenBySchedule(date)) {
+                      return false;
+                    }
+
+                    const daySlots = getDaySlots(key);
+
+                    if (daySlots.length > 0) {
+                      return daySlots.some((slot) => slot.is_available);
+                    }
+
+                    return true;
                   }}
                   onMonthChange={(date) => {
                     debouncedFetch(date.getMonth() + 1, date.getFullYear());
@@ -585,7 +687,7 @@ export default function FitLogistics({
                           const time = slot.time;
                           const isAvailable = slot.is_available;
                           const userBookingCount = Number(slot.user_booking_count ?? 0);
-                          const maxUserBookings = Number(slot.max_user_bookings ?? 3);
+                          const maxUserBookings = Number(slot.max_user_bookings ?? maxUserBookingsPerSlot);
                           const slotsLeft = Number(slot.slots_left ?? 0);
                           const isDisabled = !isAvailable || userBookingCount >= maxUserBookings;
 
