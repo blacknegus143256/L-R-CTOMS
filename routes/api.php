@@ -41,7 +41,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 
 // Auth (sanctum)
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+Route::middleware(['auth:sanctum', 'verified'])->get('/user', function (Request $request) {
     $user = $request->user();
     $shops = [];
     if ($user->shop) {
@@ -53,8 +53,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     ]);
 });
 
-// Auth (sanctum protected)
-Route::middleware('auth:sanctum')->group(function () {
+// Auth (sanctum protected, email-verified)
+Route::middleware(['auth:sanctum', 'verified'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
     Route::get('/notifications', [NotificationController::class, 'index']);

@@ -221,19 +221,19 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 // Suspended account page (public)
 Route::inertia('/account-suspended', 'Suspended')->name('account.suspended');
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    
-    // Checkout - quiet API endpoint for phone/location saves
+
+    // Checkout - quiet API endpoint for phone/location saves (requires verified email)
     Route::patch('/api/checkout/save-profile', [ProfileController::class, 'updateLogistics'])->name('checkout.save-profile');
-    // Create a report (authenticated users)
+
+    // Create a report (authenticated + verified users)
     Route::post('/reports', [App\Http\Controllers\ReportController::class, 'store'])->name('reports.store');
-    
-    // Allow any authenticated user to leave impersonation (controller enforces security)
+
+    // Allow any authenticated+verified user to leave impersonation (controller enforces security)
     Route::post('/leave-impersonation', [App\Http\Controllers\SuperAdmin\ImpersonationController::class, 'leaveImpersonation'])
-        ->middleware('auth')
         ->name('super.leave-impersonation');
 });
 
