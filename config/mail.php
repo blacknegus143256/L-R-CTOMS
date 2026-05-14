@@ -14,8 +14,8 @@ return [
     |
     */
 
-    // Local uses SMTP (Mailtrap), non-local uses Resend.
-    'default' => env('APP_ENV') === 'local' ? 'smtp' : 'resend',
+    // Use the configured mailer from the environment (smtp for Gmail/Mailtrap, resend only if explicitly set).
+    'default' => env('MAIL_MAILER', 'smtp'),
 
     /*
     |--------------------------------------------------------------------------
