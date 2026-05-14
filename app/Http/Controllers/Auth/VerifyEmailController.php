@@ -7,7 +7,9 @@ use App\Notifications\VerifyEmailCodeNotification;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Throwable;
 
 class VerifyEmailController extends Controller
 {
@@ -26,9 +28,20 @@ class VerifyEmailController extends Controller
             'email_verification_code_expires_at' => now()->addMinutes(15),
         ])->save();
 
-        $user->notify(new VerifyEmailCodeNotification($code));
+        try {
+            $user->notify(new VerifyEmailCodeNotification($code));
+        } catch (Throwable $throwable) {
+            Log::warning('Verification code email delivery failed; exposing code in session fallback.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
 
-        return back()->with('status', 'verification-code-sent');
+        return back()->with([
+            'status' => 'verification-code-sent',
+            'verification_code' => $code,
+        ]);
     }
 
     public function verifyCode(Request $request): RedirectResponse

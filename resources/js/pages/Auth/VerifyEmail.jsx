@@ -5,7 +5,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 
-export default function VerifyEmail({ auth, status }) {
+export default function VerifyEmail({ auth, status, verificationCode }) {
     const { user } = auth;
     const { data, setData, post, processing, errors, reset } = useForm({
         code: '',
@@ -32,6 +32,18 @@ export default function VerifyEmail({ auth, status }) {
             {status === 'verification-code-sent' && (
                 <div className="mb-4 text-sm font-medium text-green-600">
                     A new verification code has been sent to the email address you provided during registration.
+                </div>
+            )}
+
+            {verificationCode && (
+                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p className="font-bold">Verification code available in the app</p>
+                    <p className="mt-1">
+                        Your code is <span className="font-black tracking-[0.35em]">{verificationCode}</span>.
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-amber-700">
+                        This fallback appears when email delivery is unavailable on the deployed environment.
+                    </p>
                 </div>
             )}
 

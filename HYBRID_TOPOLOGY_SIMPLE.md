@@ -25,21 +25,15 @@ A company can use:
 
 This combination creates one hybrid topology.
 
-## Simple Visual
+## Simple Deployment Topology
 
-```text
-                    [Internet]
-                        |
-                  [Core Router]
-                    /         \
-           (Mesh Links)     (Mesh Links)
-                  /             \
-           [Data Center A]   [Data Center B]
-                 |                 |
-            [Switch A]         [Switch B]
-             /  |  \           /  |  \
-           PC  PC  PC        PC  PC  PC
-          (Star)            (Star)
+```mermaid
+flowchart TB
+    U[User Browser] --> R[Render Edge / Reverse Proxy]
+    R --> C[Docker Container]
+    C --> A[Apache + Laravel App]
+    A --> D[(PostgreSQL Database)]
+    A --> S[External Services\nPayMongo, Email, Storage]
 ```
 
 ## Quick Summary
