@@ -27,6 +27,14 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        // Trust Render's proxy headers so URL generation uses forwarded HTTPS scheme/port.
+        \Illuminate\Support\Facades\Request::setTrustedProxies(
+            ['*'],
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
+        );
+
         Vite::useBuildDirectory('build');
         Vite::prefetch(concurrency: 3);
 
