@@ -551,6 +551,11 @@ export default function FitLogistics({
                     }
                   }}
                   filterDate={(date) => {
+                    // Allow all dates while loading to prevent date picker from being empty
+                    if (isLoading || Object.keys(availableDates).length === 0) {
+                      return true;
+                    }
+                    // Once loaded, only allow dates with available slots
                     const key = format(date, 'yyyy-MM-dd');
                     return getDaySlots(key).some((slot) => slot.is_available);
                   }}
