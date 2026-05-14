@@ -23,4 +23,12 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 *.zip
-public/images/
+public/images/*
+!public/images/Alterations.jpg
+!public/images/CUSTOM-SEWING.png
+!public/images/Embroidery.jpg
+!public/images/Repairs.jpg
+!public/images/Formal Wear.jpg
+!public/images/Tailorcut.jpg
+!public/images/StitchLogo.png
+!public/images/logostitch.png
