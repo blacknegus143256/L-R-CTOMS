@@ -22,18 +22,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Force HTTPS in production so Render doesn't trigger mixed-content redirects.
+        // Force HTTPS in production so Render doesn't trigger Mixed Content errors
         if (env('APP_ENV') === 'production') {
-            URL::forceScheme('https');
+            \Illuminate\Support\Facades\URL::forceScheme('https');
         }
-
-        // Trust Render's proxy headers so URL generation uses forwarded HTTPS scheme/port.
-        \Illuminate\Support\Facades\Request::setTrustedProxies(
-            ['*'],
-            \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
-            \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT |
-            \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
-        );
 
         Vite::useBuildDirectory('build');
         Vite::prefetch(concurrency: 3);
