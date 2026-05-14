@@ -24,18 +24,21 @@ export default function Logistics({
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   const fetchAvailability = async (month, year) => {
     if (!shop?.id || !isDroppingOff) return;
 
     try {
       setIsLoading(true);
+      setFetchError(null);
       const response = await axios.get(`/api/shops/${shop.id}/availability`, {
         params: { month, year },
       });
       setAvailableDates(response.data || {});
     } catch (error) {
       console.error('Failed to fetch material drop-off availability:', error);
+      setFetchError('Unable to load availability. Please try again later.');
       setAvailableDates({});
     } finally {
       setIsLoading(false);
@@ -147,6 +150,13 @@ export default function Logistics({
           <p className="text-lg font-semibold text-emerald-800 mb-4">
             Since you are providing your own materials, please schedule your material drop-off below.
           </p>
+
+          {fetchError && (
+            <div className="mb-6 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl">
+              <p className="text-rose-800 font-medium">{fetchError}</p>
+            </div>
+          )}
+
           <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100 border-2 border-emerald-200 rounded-3xl animate-fade-in-up">
             <label className="block text-sm font-semibold text-emerald-800 mb-4">
               Select Material Drop-off Date & Time <span className="text-amber-600">*</span>

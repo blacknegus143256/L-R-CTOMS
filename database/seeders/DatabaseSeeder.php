@@ -33,8 +33,9 @@ class DatabaseSeeder extends Seeder
             ServiceCategorySeeder::class,
             AttributeCategorySeeder::class,
             AttributeTypeSeeder::class,
+            ShopScheduleSeeder::class,
         ]);
-        
+
         TailoringShop::firstOrCreate([
             'user_id' => $user->id,
         ], [
