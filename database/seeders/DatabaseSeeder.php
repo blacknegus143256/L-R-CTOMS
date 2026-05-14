@@ -33,9 +33,9 @@ class DatabaseSeeder extends Seeder
             ServiceCategorySeeder::class,
             AttributeCategorySeeder::class,
             AttributeTypeSeeder::class,
-            ShopScheduleSeeder::class,
         ]);
 
+        // Create default shop first
         TailoringShop::firstOrCreate([
             'user_id' => $user->id,
         ], [
@@ -46,5 +46,8 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
             'shop_status_id' => ShopStatus::where('name', 'Approved')->value('id'),
         ]);
+
+        // Then seed shop schedules (now that shops exist)
+        $this->call(ShopScheduleSeeder::class);
     }
 }
