@@ -25,6 +25,11 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
             'role' => $request->role ?? 'customer',
         ]);
+
+        // Ensure profile exists for newly created user
+        $user->profile()->updateOrCreate([
+            'user_id' => $user->id,
+        ], []);
         
         Auth::login($user);
 
@@ -55,6 +60,11 @@ class AuthController extends Controller
 
         $user->tokens()->where('name', 'dashboard')->delete();
         Auth::login($user);
+
+        // Ensure profile exists (in case legacy user doesn't have one)
+        $user->profile()->updateOrCreate([
+            'user_id' => $user->id,
+        ], []);
         
         $token = $user->createToken('dashboard')->plainTextToken;
 
