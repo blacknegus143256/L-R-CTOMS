@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildMapUrl } from '@/utils/map';
 import { router, usePage } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Scale, ChevronUp, Trash2 } from 'lucide-react';
+import { X, Scale, ChevronUp, Trash2, Scissors } from 'lucide-react';
 import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
@@ -369,13 +369,181 @@ export default function Home({ auth, categories: initialCategories, services: in
             {/* 4. MAIN INTERACTION AREA (SIDEBAR + TABLE) */}
             <motion.div 
     variants={riseSpring}
-className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
+className="space-y-8 px-4 max-w-7xl w-full mx-auto mt-6 flex-grow pb-32 lg:pb-24">
 
-                <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+                <div className="grid items-start gap-6 lg:grid-cols-[280px_1fr]">
+                    {/* COMPARISON ENGINE */}
+                    <main className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 lg:order-2">
+                        {filteredShops.length === 0 ? (
+                            <motion.div
+                                variants={fadeUp}
+                                className="md:col-span-2 xl:col-span-3"
+                            >
+                                <div className="w-full h-full min-h-[50vh] flex flex-col items-center justify-center">
+                                    <div className="rounded-3xl border border-stone-200 bg-stone-50 p-12 text-center text-stone-500 shadow-sm w-full max-w-2xl">
+                                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-inner">
+                                            <Scissors className="w-7 h-7 text-stone-400" />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-stone-800">No shops found</h3>
+                                        <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-500">
+                                            {(() => {
+                                                const searchTerm = search.trim();
+                                                const serviceSummary = selectedServiceCategories.join(', ');
+                                                const materialSummary = selectedAttributeNames.join(', ');
+
+                                                if (!serviceSummary && !materialSummary && searchTerm) {
+                                                    return `No shops match the search "${searchTerm}".`;
+                                                }
+
+                                                if (!serviceSummary && !materialSummary) {
+                                                    return 'No shops are available right now.';
+                                                }
+
+                                                const fragments = [];
+
+                                                if (searchTerm) {
+                                                    fragments.push(`matching the search "${searchTerm}"`);
+                                                }
+
+                                                if (serviceSummary) {
+                                                    fragments.push(`offering ${serviceSummary}`);
+                                                }
+
+                                                if (materialSummary) {
+                                                    fragments.push(`with ${materialSummary}`);
+                                                }
+
+                                                return `We couldn't find any shops ${fragments.join(', ')}.`;
+                                            })()}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={clearFilters}
+                                            className="mt-8 inline-flex items-center justify-center rounded-2xl bg-stone-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-stone-700"
+                                        >
+                                            Clear Filters
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ) : (
+                            filteredShops.map((shop) => {
+                                // Find ALL services the shop offers that match ANY of the selected categories
+                                const matchingServices = selectedServiceCategories.length > 0 
+                                    ? shop.services.filter(s => selectedServiceCategories.includes(s.service_category?.name))
+                                    : [];
+                                // Hide services from the pill list if they are already being showcased in the carousel
+                                const servicesWithoutImages = matchingServices.filter(s => !s.image);
+                                
+                                const mapUrl = shop.google_maps_link || buildMapUrl(shop.user?.profile?.latitude, shop.user?.profile?.longitude);
+                                
+                                return (
+                                    <motion.div
+                                        key={shop.id}
+                                        variants={fadeUp}
+                                        className="group overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-orchid-200 hover:shadow-xl"
+                                    >
+                                        {/* Integrated Flowbite-Style Image Carousel */}
+                                        <ShopCoverCarousel 
+                                            shop={shop} 
+                                            selectedAttributes={selectedAttributes} 
+                                            selectedServiceCategories={selectedServiceCategories}
+                                            getShopInitials={getShopInitials}
+                                            categories={categories}
+                                        />
+                                        <div className="p-6 pt-5">
+                                            <div className="mb-3 flex items-center gap-3">
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200 bg-stone-100 text-xs font-bold text-stone-600 shadow-sm">
+                                                    {shop.user?.profile?.avatar_url ? (
+                                                        <img
+                                                            src={`/storage/${shop.user.profile.avatar_url}`}
+                                                            alt={shop.user?.name || shop.shop_name}
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <span>{getShopInitials(shop.user?.name || shop.shop_name)}</span>
+                                                    )}
+                                                </div>
+                                                <h3 className="truncate text-xl font-bold text-stone-900 transition-colors group-hover:text-orchid-600">
+                                                    {shop.shop_name}
+                                                </h3>
+                                            </div>
+                                            
+                                            <div className="mb-4">
+                                                <div className="mt-1 mb-2 flex items-center gap-1.5">
+                                                    <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                    </svg>
+                                                    {mapUrl ? (
+                                                        <a 
+                                                            href={mapUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="cursor-pointer truncate text-sm font-medium text-stone-900 hover:text-emerald-700 hover:underline"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            title={shop.google_maps_link ? "Open in Google Street View" : "View on Google Maps"}
+                                                        >
+                                                            {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-sm font-medium text-stone-600">
+                                                            {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'Location not available'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {servicesWithoutImages.length > 0 ? (
+                                                    servicesWithoutImages.map(ms => (
+                                                        <div key={ms.id} className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-[10px] font-bold text-emerald-800">
+                                                            {ms.service_category?.name} - {ms.service_name}: ₱{ms.price}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    matchingServices.length === 0 && (
+                                                        <div className="rounded-full bg-stone-100 px-3 py-1 text-[10px] font-bold text-stone-700">
+                                                            View Services
+                                                        </div>
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Footer */}
+                                        <div className="flex items-center gap-3 border-t border-stone-100 p-4 sm:p-6">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleCompareClick(shop);
+                                                }}
+                                                className={`flex-1 flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
+                                                    selectedForCompare.find(s => s.id === shop.id)
+                                                        ? 'border-orchid-200 bg-orchid-50 text-orchid-700 shadow-inner'
+                                                        : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50'
+                                                }`}
+                                            >
+                                                <Scale className="w-4 h-4" /> {selectedForCompare.find(s => s.id === shop.id) ? 'Added' : 'Compare'}
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleViewProfile(shop.id)}
+                                                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orchid-blue to-orchid-purple px-4 py-3 font-bold text-white"
+                                            >
+                                                Profile
+                                                <FiArrowRight className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                );
+                            })
+                        )}
+                    </main>
+
                     {/* SIDEBAR */}
                     <motion.div 
                         variants={unrollLeft}
-                        className="sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto pr-4 lg:pr-0 -mr-4 lg:mr-0 scrollbar-thin scrollbar-thumb-stone-400 scrollbar-track-transparent"
+                        className="sticky top-6 order-first self-start max-h-[calc(100vh-3rem)] overflow-y-auto pr-4 lg:order-1 lg:pr-0 lg:-mr-4 lg:ml-0 scrollbar-thin scrollbar-thumb-stone-400 scrollbar-track-transparent"
                     >
                         <MaterialFilters
                             categories={categories}
@@ -389,120 +557,6 @@ className="space-y-8 px-4 max-w-7xl mx-auto mt-6 flex-grow pb-32 lg:pb-24">
                             clearFilters={clearFilters}
                         />
                     </motion.div>
-
-                    {/* COMPARISON ENGINE */}
-<main className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredShops.map((shop) => {
-              // Find ALL services the shop offers that match ANY of the selected categories
-              const matchingServices = selectedServiceCategories.length > 0 
-                ? shop.services.filter(s => selectedServiceCategories.includes(s.service_category?.name))
-                : [];
-              // Hide services from the pill list if they are already being showcased in the carousel
-              const servicesWithoutImages = matchingServices.filter(s => !s.image);
-              
-              const mapUrl = shop.google_maps_link || buildMapUrl(shop.user?.profile?.latitude, shop.user?.profile?.longitude);
-              
-              return (
-                <motion.div
-                  key={shop.id}
-                  variants={fadeUp}
-                  className="group bg-white rounded-2xl shadow-md hover:shadow-xl overflow-hidden transition-all duration-300 border border-stone-100 hover:border-orchid-200 hover:-translate-y-1"
-                >
-                  {/* Integrated Flowbite-Style Image Carousel */}
-<ShopCoverCarousel 
-                      shop={shop} 
-                      selectedAttributes={selectedAttributes} 
-                      selectedServiceCategories={selectedServiceCategories}
-                      getShopInitials={getShopInitials}
-                      categories={categories}
-                  />
-                  <div className="p-6 pt-5">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200 bg-stone-100 text-xs font-bold text-stone-600 shadow-sm">
-                            {shop.user?.profile?.avatar_url ? (
-                                <img
-                                    src={`/storage/${shop.user.profile.avatar_url}`}
-                                    alt={shop.user?.name || shop.shop_name}
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                <span>{getShopInitials(shop.user?.name || shop.shop_name)}</span>
-                            )}
-                        </div>
-                        <h3 className="text-xl font-bold text-stone-900 truncate group-hover:text-orchid-600 transition-colors">
-                            {shop.shop_name}
-                        </h3>
-                    </div>
-                    
-    <div className="mb-4">
-    <div className="flex items-center gap-1.5 mt-1 mb-2">
-        <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-        </svg>
-{mapUrl ? (
-    <a 
-        href={mapUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-stone-900 font-medium truncate hover:text-emerald-700 hover:underline cursor-pointer"
-        onClick={(e) => e.stopPropagation()}
-        title={shop.google_maps_link ? "Open in Google Street View" : "View on Google Maps"}
-    >
-        {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
-    </a>
-) : (
-    <span className="text-sm text-stone-600 font-medium">
-         {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'Location not available'}
-    </span>
-)}
-    </div>
-</div>
-                    <div className="flex flex-wrap gap-2">
-                        {servicesWithoutImages.length > 0 ? (
-                            servicesWithoutImages.map(ms => (
-                                <div key={ms.id} className="px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    {ms.service_category?.name} - {ms.service_name}: ₱{ms.price}
-                                </div>
-                            ))
-                        ) : (
-                            matchingServices.length === 0 && (
-                                <div className="px-3 py-1 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700">
-                                    View Services
-                                </div>
-                            )
-                        )}
-                    </div>
-                  </div>
-                  
-                  {/* Footer */}
-                  <div className="border-t border-stone-100 p-4 sm:p-6 flex items-center gap-3">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleCompareClick(shop);
-                        }}
-                        className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${
-                            selectedForCompare.find(s => s.id === shop.id)
-                                ? 'bg-orchid-50 border-orchid-200 text-orchid-700 shadow-inner'
-                                : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50 hover:border-stone-300'
-                        }`}
-                    >
-                        <Scale className="w-4 h-4" /> {selectedForCompare.find(s => s.id === shop.id) ? 'Added' : 'Compare'}
-                    </button>
-
-                    <button
-                        onClick={() => handleViewProfile(shop.id)}
-                        className="flex-1 bg-gradient-to-r from-orchid-blue to-orchid-purple text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2"
-                    >
-                        Profile
-                        <FiArrowRight className="w-4 h-4" />
-                    </button>
-                </div>
-                </motion.div>
-              );
-            })}
-          </main>
                 </div>
             </motion.div>
 
