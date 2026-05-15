@@ -7,8 +7,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_insert');
-        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_update');
+        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_insert ON shop_attributes;');
+        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_update ON shop_attributes;');
 
         DB::unprepared(<<<'SQL'
             CREATE TRIGGER shop_attributes_force_availability_before_insert
@@ -35,7 +35,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_insert');
-        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_update');
+        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_insert ON shop_attributes;');
+        DB::unprepared('DROP TRIGGER IF EXISTS shop_attributes_force_availability_before_update ON shop_attributes;');
     }
 };
