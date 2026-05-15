@@ -338,16 +338,18 @@ export default function Shop({ shop, auth, fitMethods = [], holidays = [] }) {
                                                         const price = Number(attr.pivot?.price || attr.price || 0);
                                                         const unit = attr.pivot?.unit || attr.unit || 'unit';
                                                         const imageUrl = attr.pivot?.image_url || attr.image_url;
+                                                        const stockQuantity = Number(attr.pivot?.stock_quantity || 0);
+                                                        const isActuallyAvailable = Boolean(attr.pivot?.isActuallyAvailable ?? attr.pivot?.is_actually_available);
 
                                                         return (
-                                                            <div key={attr.pivot?.id || `${attr.id}-${idx}`} className="group bg-white border-2 border-stone-100 rounded-[1.5rem] overflow-hidden hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col hover:-translate-y-1">
+                                                            <div key={attr.pivot?.id || `${attr.id}-${idx}`} className={`group bg-white border-2 border-stone-100 rounded-[1.5rem] overflow-hidden hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col hover:-translate-y-1 ${isActuallyAvailable ? '' : 'opacity-75'}`}>
                                                                 {/* Image */}
                                                                 <div className="h-40 bg-stone-100 relative overflow-hidden flex-shrink-0">
                                                                     {imageUrl ? (
                                                                         <img 
                                                                             src={`/storage/${imageUrl}`} 
                                                                             alt={displayName} 
-                                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                                                                            className={`w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ${isActuallyAvailable ? '' : 'grayscale opacity-70'}`} 
                                                                             onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
                                                                         />
                                                                     ) : (
@@ -356,7 +358,10 @@ export default function Shop({ shop, auth, fitMethods = [], holidays = [] }) {
                                                                             <span className="text-[10px] font-black uppercase tracking-widest opacity-60">No Image</span>
                                                                         </div>
                                                                     )}
-                                                                    {!attr.pivot?.is_available && (
+                                                                    <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${isActuallyAvailable ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                                                                        {isActuallyAvailable ? 'Available' : 'Out of Stock'}
+                                                                    </div>
+                                                                    {!isActuallyAvailable && (
                                                                         <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
                                                                             <span className="px-3 py-1 bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full">Out of Stock</span>
                                                                         </div>

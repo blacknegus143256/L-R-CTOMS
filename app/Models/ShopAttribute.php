@@ -33,7 +33,17 @@ class ShopAttribute extends Model
     protected $appends = [
         'name',
         'attributeCategory',
+        'isActuallyAvailable',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $shopAttribute) {
+            if ((float) ($shopAttribute->stock_quantity ?? 0) <= 0) {
+                $shopAttribute->is_available = false;
+            }
+        });
+    }
 
     public function tailoringShop(): BelongsTo
     {
@@ -55,5 +65,10 @@ class ShopAttribute extends Model
         $category = $this->attributeType?->attributeCategory;
 
         return $category ? $category->toArray() : null;
+    }
+
+    public function getIsActuallyAvailableAttribute(): bool
+    {
+        return (bool) $this->is_available && (float) ($this->stock_quantity ?? 0) > 0;
     }
 }

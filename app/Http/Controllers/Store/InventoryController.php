@@ -161,14 +161,16 @@ $request->validate([
             $image_url = $path;
         }
 
+        $stockQuantity = (float) $request->input('stock_quantity', 0);
+
         $shop->attributes()->attach($request->attribute_type_id, [
             'item_name' => $request->item_name ?? '',
             'price' => $request->price,
             'unit' => $request->unit,
             'notes' => $request->notes ?? '',
-            'is_available' => true,
+            'is_available' => $request->boolean('is_available', true) && $stockQuantity > 0,
             'image_url' => $image_url,
-            'stock_quantity' => $request->input('stock_quantity', 0),
+            'stock_quantity' => $stockQuantity,
         ]);
             
         return redirect()->back()->with('message', 'New attribute added to your inventory!');
@@ -206,14 +208,16 @@ $request->validate([
             $image_url = $path;
         }
 
+        $stockQuantity = (float) $request->input('stock_quantity', 0);
+
         // Build the update array
         $updateData = [
             'price' => $request->price,
             'unit' => $request->unit,
             'item_name' => $request->item_name ?? '',
             'notes' => $request->notes ?? '',
-            'is_available' => $request->boolean('is_available', true),
-            'stock_quantity' => $request->input('stock_quantity', 0),
+            'is_available' => $request->boolean('is_available', true) && $stockQuantity > 0,
+            'stock_quantity' => $stockQuantity,
         ];
         
         // Only update image if a new one was provided

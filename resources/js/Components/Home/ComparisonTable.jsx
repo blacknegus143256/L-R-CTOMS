@@ -2,12 +2,13 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { createComparisonData } from '@/utils/comparisonEngine';
 import { usePage, router } from '@inertiajs/react';
 import PrimaryButton from '@/Components/PrimaryButton';
+import useDirections from '@/hooks/useDirections';
 import { 
   SectionHeader, 
   ContentRow,
   HeaderCell 
 } from './RowComponents';
-import { MapPin, X, Zap } from 'lucide-react';
+import { Loader2, MapPin, X, Zap } from 'lucide-react';
 
 /**
  * Dumb ComparisonTable - Pure UI layer over pre-computed engine data
@@ -27,6 +28,7 @@ export default function ComparisonTable({
 }) {
   const [selectedRow, setSelectedRow] = useState(null);
   const { auth } = usePage().props;
+  const { fetchBrowserLocation, handleGetDirections, isLocating, browserLocation } = useDirections(auth);
   const customerLat = auth?.user?.profile?.latitude;
   const customerLng = auth?.user?.profile?.longitude;
 
@@ -42,16 +44,18 @@ export default function ComparisonTable({
 
   const handleRowClick = useCallback((row) => {
     setSelectedRow(row);
-  }, []);
+    const customerLat = auth?.user?.profile?.latitude;
+    const customerLng = auth?.user?.profile?.longitude;
+    const hasSavedCoordinates =
+      customerLat !== undefined &&
+      customerLat !== null &&
+      customerLng !== undefined &&
+      customerLng !== null;
 
-  const callbacks = useMemo(() => ({
-    onViewProfile,
-    onSwapShop,
-    onOpenLocationMap,
-    onPlaceOrder,
-    onGhostClick,
-    onRowClick: handleRowClick
-  }), [onViewProfile, onSwapShop, onOpenLocationMap, onPlaceOrder, onGhostClick, handleRowClick]);
+    if (!hasSavedCoordinates && !browserLocation) {
+      void fetchBrowserLocation();
+    }
+  }, [auth, browserLocation, fetchBrowserLocation]);
 
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
@@ -72,27 +76,57 @@ export default function ComparisonTable({
   }, []);
 
   const getShopDistanceKm = useCallback((coordinates) => {
+    const originLat = customerLat ?? browserLocation?.lat;
+    const originLng = customerLng ?? browserLocation?.lng;
+
     if (
-      customerLat === undefined ||
-      customerLat === null ||
-      customerLng === undefined ||
-      customerLng === null ||
-      !coordinates?.lat ||
-      !coordinates?.lng
+      originLat === undefined ||
+      originLat === null ||
+      originLng === undefined ||
+      originLng === null ||
+      coordinates?.lat === undefined ||
+      coordinates?.lat === null ||
+      coordinates?.lng === undefined ||
+      coordinates?.lng === null
+    ) {
+      return null;
+    }
+
+    const originLatNum = Number(originLat);
+    const originLngNum = Number(originLng);
+    const targetLatNum = Number(coordinates.lat);
+    const targetLngNum = Number(coordinates.lng);
+
+    if (
+      Number.isNaN(originLatNum) ||
+      Number.isNaN(originLngNum) ||
+      Number.isNaN(targetLatNum) ||
+      Number.isNaN(targetLngNum)
     ) {
       return null;
     }
 
     const R = 6371;
-    const dLat = (coordinates.lat - customerLat) * Math.PI / 180;
-    const dLon = (coordinates.lng - customerLng) * Math.PI / 180;
+    const dLat = (targetLatNum - originLatNum) * Math.PI / 180;
+    const dLon = (targetLngNum - originLngNum) * Math.PI / 180;
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(customerLat * Math.PI / 180) * Math.cos(coordinates.lat * Math.PI / 180) *
+      Math.cos(originLatNum * Math.PI / 180) * Math.cos(targetLatNum * Math.PI / 180) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
     return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
-  }, [customerLat, customerLng]);
+  }, [browserLocation, customerLat, customerLng]);
+
+  const callbacks = useMemo(() => ({
+    onViewProfile,
+    onSwapShop,
+    onOpenLocationMap,
+    onPlaceOrder,
+    onGhostClick,
+    handleGetDirections,
+    isLocating,
+    onRowClick: handleRowClick
+  }), [handleGetDirections, isLocating, onViewProfile, onSwapShop, onOpenLocationMap, onPlaceOrder, onGhostClick, handleRowClick]);
 
 const groupedRows = useMemo(() => {
   const tree = [];
@@ -294,6 +328,8 @@ const groupedRows = useMemo(() => {
                   const isAvailable = cell && cell.isAvailable;
                   const isService = selectedRow.section === 'services';
                   const isLocation = selectedRow.section === 'location';
+                  const coordinates = cell?.meta?.coordinates || null;
+                  const distance = isLocation ? getShopDistanceKm(coordinates) : null;
                   // Grab all items if available, otherwise fallback to the single raw item
                   const itemsToRender = cell?.meta?.allItems || (cell?.meta?.raw ? [cell.meta.raw] : []);
 
@@ -312,7 +348,61 @@ const groupedRows = useMemo(() => {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {isService && itemsToRender.map((item, idx) => (
+                          {isLocation ? (
+                            <div className="space-y-4 flex flex-col h-full">
+                              {coordinates?.lat !== undefined && coordinates?.lng !== undefined ? (
+                                <iframe
+                                  title={`${shop.shop_name} map preview`}
+                                  src={`https://maps.google.com/maps?q=${Number(coordinates.lat)},${Number(coordinates.lng)}&z=15&output=embed`}
+                                  className="w-full h-48 rounded-xl border border-stone-200 bg-stone-100"
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer-when-downgrade"
+                                />
+                              ) : (
+                                <div className="w-full h-48 rounded-xl border border-dashed border-stone-200 bg-stone-50 flex items-center justify-center text-sm font-medium text-stone-400">
+                                  Map preview unavailable
+                                </div>
+                              )}
+
+                              <div className="space-y-3">
+                                <div className="flex items-start gap-2">
+                                  <MapPin className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />
+                                  <p className="text-base font-bold text-stone-800">{cell.displayValue}</p>
+                                </div>
+
+                                {isLocating ? (
+                                  <div className="text-xs text-stone-400 animate-pulse">Calculating distance...</div>
+                                ) : distance !== null ? (
+                                  <div className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                                    <MapPin className="h-3 w-3" />
+                                    {distance} km away
+                                  </div>
+                                ) : null}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGetDirections(coordinates.lat, coordinates.lng);
+                                  }}
+                                  disabled={isLocating}
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-70"
+                                >
+                                  {isLocating ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Finding you...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <MapPin className="h-4 w-4" />
+                                      Get Directions
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          ) : isService && itemsToRender.map((item, idx) => (
                             <div key={idx} className="space-y-4 flex flex-col h-full">
                               {item.image ? (
                                 <img
@@ -368,7 +458,7 @@ const groupedRows = useMemo(() => {
                               </div>
                             </div>
                           ))}
-                          {!isService && (
+                          {!isService && !isLocation && (
                             <div className="space-y-4">
                               {itemsToRender.map((item, idx) => {
                                 // Prefer pivot values (shop-specific) for attributes, fall back to raw
@@ -381,9 +471,20 @@ const groupedRows = useMemo(() => {
                                 const itemPrice = Number(pivot?.price ?? item?.price ?? cell?.meta?.price ?? rawFromCell.pivot?.price ?? 0);
                                 const title = pivot?.item_name || item?.item_name || item?.name || cell?.meta?.itemName || rawFromCell.pivot?.item_name || rawFromCell.name || cell.displayValue;
                                 const notes = pivot?.notes || item?.notes || rawFromCell.notes || rawFromCell.pivot?.notes;
+                                const stockQuantity = Number(pivot?.stock_quantity ?? item?.stock_quantity ?? cell?.meta?.stock_quantity ?? rawFromCell.pivot?.stock_quantity ?? rawFromCell.stock_quantity ?? 0);
+                                const isActuallyAvailable = Boolean(
+                                  pivot?.isActuallyAvailable ??
+                                  pivot?.is_actually_available ??
+                                  item?.isActuallyAvailable ??
+                                  item?.is_actually_available ??
+                                  rawFromCell.pivot?.isActuallyAvailable ??
+                                  rawFromCell.pivot?.is_actually_available ??
+                                  rawFromCell.isActuallyAvailable ??
+                                  rawFromCell.is_actually_available
+                                );
 
                                 return (
-                                  <div key={`${shop.id}-mat-${idx}`} className="space-y-4 flex flex-col h-full relative">
+                                  <div key={`${shop.id}-mat-${idx}`} className={`space-y-4 flex flex-col h-full relative ${isActuallyAvailable ? '' : 'opacity-75'}`}>
                                     <div className="absolute top-6 right-6">
                                       <p className="text-2xl font-black text-emerald-600 bg-white/90 px-3 py-1 rounded-xl shadow">₱{Number(pivot?.price || item?.price || cell?.meta?.price || rawFromCell.pivot?.price || itemPrice || 0).toFixed(2)}</p>
                                     </div>
@@ -392,7 +493,7 @@ const groupedRows = useMemo(() => {
                                       <img
                                         src={imageUrl}
                                         alt={title || 'Material'}
-                                        className="w-full h-48 object-cover rounded-xl bg-stone-100"
+                                        className={`w-full h-48 object-cover rounded-xl bg-stone-100 ${isActuallyAvailable ? '' : 'grayscale opacity-70'}`}
                                       />
                                     ) : (
                                       <div className="w-full h-48 rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 text-sm font-medium">
@@ -406,6 +507,10 @@ const groupedRows = useMemo(() => {
                                       </div>
                                       <p className="text-sm text-stone-600 mt-1">{cell.displayValue}</p>
 
+                                      <div className={`mt-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${isActuallyAvailable ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-stone-200 bg-stone-100 text-stone-600'}`}>
+                                        {isActuallyAvailable ? 'Available' : 'Out of Stock'}
+                                      </div>
+
                                       <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100">
                                         <div>
                                           <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Unit</p>
@@ -413,9 +518,9 @@ const groupedRows = useMemo(() => {
                                         </div>
                                         <div>
                                           <p className="text-[10px] font-bold uppercase text-stone-400 tracking-wider">Availability</p>
-                                          <p className="text-sm font-semibold text-stone-700 mt-1">{(pivot?.is_available ?? item?.is_available ?? rawFromCell.pivot?.is_available ?? rawFromCell.is_available) ? 'Available' : 'Unavailable'}</p>
-                                          {((pivot?.stock_quantity ?? pivot?.stock_qty ?? item?.stock_quantity ?? rawFromCell.pivot?.stock_quantity ?? rawFromCell.stock_quantity) !== undefined) && (
-                                            <p className="text-xs text-stone-500 mt-1">Stock: {pivot?.stock_quantity ?? pivot?.stock_qty ?? item?.stock_quantity ?? rawFromCell.pivot?.stock_quantity ?? rawFromCell.stock_quantity}</p>
+                                          <p className={`text-sm font-semibold mt-1 ${isActuallyAvailable ? 'text-stone-700' : 'text-stone-500'}`}>{isActuallyAvailable ? 'Available' : 'Unavailable'}</p>
+                                          {stockQuantity !== undefined && (
+                                            <p className="text-xs text-stone-500 mt-1">Stock: {stockQuantity}</p>
                                           )}
                                         </div>
                                       </div>

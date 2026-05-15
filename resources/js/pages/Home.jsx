@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildMapUrl } from '@/utils/map';
 import { router, usePage } from '@inertiajs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Scale, ChevronUp, Trash2, Scissors } from 'lucide-react';
+import { Loader2, X, Scale, ChevronUp, Trash2, Scissors } from 'lucide-react';
 import ViewProfile from '@/Components/ViewProfile';
 import "maplibre-gl/dist/maplibre-gl.css";
 import LocationMapModal from "@/Components/LocationMapModal";
 import HeroSearch from '@/Components/Home/HeroSearch';
+import useDirections from '@/hooks/useDirections';
 
 import ServiceCarousel from '@/Components/Home/ServiceCarousel';
 
@@ -113,6 +114,7 @@ function ReplaceShopModal({ pendingShop, selectedShops, onReplace, onCancel }) {
 export default function Home({ auth, categories: initialCategories, services: initialServices, shops: initialShops, serviceCategories: initialServiceCategories = [], uniqueServiceCategories: initialUniqueCategories = [] }) {
 
     const currentUser = auth.user;
+    const { handleGetDirections, isLocating } = useDirections(auth);
 
     const categories = initialCategories || [];
     const services = initialServices || [];
@@ -129,6 +131,7 @@ export default function Home({ auth, categories: initialCategories, services: in
     const [search, setSearch] = useState('');
     const [locationModalOpen, setLocationModalOpen] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState(null);
+    const [loadingShopId, setLoadingShopId] = useState(null);
 
     const [showModal, setShowModal] = useState(false);
     const [selectedShop, setSelectedShop] = useState(null);
@@ -234,8 +237,6 @@ export default function Home({ auth, categories: initialCategories, services: in
             .slice(0, 2)
             .toUpperCase();
     }, []);
-
-
 
     const toggleAttribute = (id) => {
         setSelectedAttributes((prev) =>
@@ -476,16 +477,35 @@ className="space-y-8 px-4 max-w-7xl w-full mx-auto mt-6 flex-grow pb-32 lg:pb-24
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                                     </svg>
                                                     {mapUrl ? (
-                                                        <a 
-                                                            href={mapUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="cursor-pointer truncate text-sm font-medium text-stone-900 hover:text-emerald-700 hover:underline"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            title={shop.google_maps_link ? "Open in Google Street View" : "View on Google Maps"}
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex cursor-pointer items-center gap-2 truncate text-sm font-medium text-stone-900 hover:text-emerald-700 hover:underline"
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setLoadingShopId(shop.id);
+                                                                try {
+                                                                    await handleGetDirections(
+                                                                        shop.user?.profile?.latitude,
+                                                                        shop.user?.profile?.longitude
+                                                                    );
+                                                                } finally {
+                                                                    setLoadingShopId(null);
+                                                                }
+                                                            }}
+                                                            title="Get directions in Google Maps"
                                                         >
-                                                            {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}
-                                                        </a>
+                                                            {(loadingShopId === shop.id && isLocating) ? (
+                                                                <>
+                                                                    <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                                                                    <span>Calculating route...</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <FiMapPin className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                                                                    <span>{shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'View on Map'}</span>
+                                                                </>
+                                                            )}
+                                                        </button>
                                                     ) : (
                                                         <span className="text-sm font-medium text-stone-600">
                                                             {shop.user?.profile?.barangay ? `${shop.user.profile.street ? shop.user.profile.street + ', ' : ''}${shop.user.profile.barangay}` : 'Location not available'}

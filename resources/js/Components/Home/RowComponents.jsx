@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Scale, X, Zap } from 'lucide-react';
+import { ChevronDown, Navigation2, Loader2, Scale, X, Zap } from 'lucide-react';
 import PrimaryButton from '@/Components/PrimaryButton';
 import { router, usePage } from '@inertiajs/react';
 
@@ -101,27 +101,33 @@ export function DataCell({ cell }) {
 }
 
 // Location Cell
-export function LocationCell({ cell, onOpenLocationMap, allLocationData }) {
+export function LocationCell({ cell, handleGetDirections, isLocating }) {
   const { displayValue, meta } = cell;
   const { hasCoords, coordinates } = meta || {};
+  const shopCoordinates = coordinates || null;
+  const canRoute = hasCoords && shopCoordinates?.lat !== undefined && shopCoordinates?.lng !== undefined;
 
   return (
     <div className="flex flex-col gap-1">
       <span className="text-sm font-medium">{displayValue}</span>
-      {hasCoords && (
+      {canRoute && (
         <button
           type="button"
-          onClick={() => onOpenLocationMap(allLocationData || [{
-            lat: coordinates.lat,
-            lng: coordinates.lng,
-            shopName: meta.shopName,
-            street: meta.raw?.street,
-            barangay: meta.raw?.barangay,
-            google_maps_link: meta?.raw?.google_maps_link || meta?.shop?.google_maps_link || meta?.google_maps_link
-          }])}
-          className="text-xs bg-stone-100/90 px-2 py-1 rounded-full text-stone-600 hover:bg-stone-200 transition w-fit"
+          onClick={() => handleGetDirections?.(shopCoordinates)}
+          disabled={isLocating}
+          className="inline-flex w-fit items-center gap-1.5 rounded-full bg-stone-100/90 px-2 py-1 text-xs text-stone-600 transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          Pinpoint
+          {isLocating ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Finding you...
+            </>
+          ) : (
+            <>
+              <Navigation2 className="h-3.5 w-3.5" />
+              Get Directions
+            </>
+          )}
         </button>
       )}
     </div>
@@ -185,7 +191,7 @@ export function ContentRow({ row, data, callbacks }) {
 
     switch (matchingCell.meta?.type) {
       case 'location':
-        return <LocationCell cell={matchingCell} allLocationData={allLocationData} {...cellCallbacks} />;
+        return <LocationCell cell={matchingCell} {...cellCallbacks} />;
       case 'service':
       case 'rush-availability':
       case 'attribute':
