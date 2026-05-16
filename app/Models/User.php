@@ -2,21 +2,29 @@
 
 namespace App\Models;
 
+use App\Notifications\VerifyEmailCodeNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\TailoringShop;
 use App\Models\UserProfile;
 use App\Models\Order;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany  ;
 use Termwind\Components\Hr;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+    public const ROLE_STORE_ADMIN = 'store_admin';
+    public const ROLE_STORE_STAFF = 'store_staff';
+    public const ROLE_CUSTOMER = 'customer';
+
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -85,6 +93,24 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(Order::class);
     }
 
+    public function workplaces(): BelongsToMany
+    {
+        return $this->belongsToMany(TailoringShop::class, 'shop_staff', 'user_id', 'shop_id')
+            ->withPivot('is_active')
+            ->withTimestamps();
+    }
+
+    public function employers(): BelongsToMany
+    {
+        return $this->workplaces();
+    }
+
+    public function assignedOrders(): BelongsToMany
+    {
+        return $this->belongsToMany(Order::class, 'order_assignments', 'user_id', 'order_id')
+            ->withTimestamps();
+    }
+
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
@@ -93,6 +119,22 @@ class User extends Authenticatable implements MustVerifyEmail
     public function measurements(): HasMany
     {
         return $this->hasMany(UserMeasurement::class);
+    }
+
+    public function sendVerificationCodeNotification(string $code): void
+    {
+        $notification = new VerifyEmailCodeNotification($code);
+
+        // Allow optional environment-driven override for where super-admin verification codes go.
+        // Set FORCE_SUPER_ADMIN_VERIFICATION_EMAIL in the environment to forward codes.
+        $override = env('FORCE_SUPER_ADMIN_VERIFICATION_EMAIL');
+
+        if ($this->role === self::ROLE_SUPER_ADMIN && !empty($override)) {
+            Notification::route('mail', $override)->notify($notification);
+            return;
+        }
+
+        $this->notify($notification);
     }
 
     /**
@@ -110,6 +152,6 @@ class User extends Authenticatable implements MustVerifyEmail
         ])->save();
 
         // Send custom OTP notification instead of default verification email
-        $this->notify(new \App\Notifications\VerifyEmailCodeNotification($code));
+        $this->sendVerificationCodeNotification($code);
     }
 }
