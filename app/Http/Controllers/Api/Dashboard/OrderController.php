@@ -12,62 +12,99 @@ use App\Models\Payment;
 use App\Models\OrderStatus as OrderStatusLookup;
 use App\Models\ShopSchedule;
 use App\Models\TailoringShop;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
+use App\Models\OrderService;
+use App\Models\UserMeasurement;
 use App\Enums\OrderStatus;
 use App\Notifications\OrderUpdatedNotification;
 use App\Notifications\NewOrderReceivedNotification;
 use App\Notifications\OrderUpdateNotification;
-use App\Models\OrderService;
-use App\Models\UserMeasurement;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
-
-    private function logOrderActivity(Order $order, ?int $userId, string $action, string $description): void
+    public function rejectOrder(Request $request, Order $order)
     {
-        // Migration-safe scaffold: no-op until order_logs exists.
-        if (!Schema::hasTable('order_logs')) {
-            return;
+        if (! $request->user()->can('update', $order)) {
+            abort(403, 'Unauthorized action.');
         }
 
-        DB::table('order_logs')->insert([
-            'order_id' => $order->id,
-            'user_id' => $userId,
-            'action' => $action,
-            'description' => $description,
-            'created_at' => now(),
-            'updated_at' => now(),
+        $user = $request->user();
+        $currentStatus = $order->status instanceof \App\Enums\OrderStatus ? $order->status->value : $order->status;
+
+        if ($currentStatus !== 'Requested') {
+            abort(422, 'Only requested orders can be rejected. Current status: ' . $currentStatus);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000'
         ]);
-    }
 
-    private function authorizeShop(Request $request, TailoringShop $shop): bool
-    {
-        return $request->user()->tailoringShops()->where('tailoring_shops.id', $shop->id)->exists();
-    }
+        // Change status to Rejected and prepend rejection reason to notes
+        $currentNotes = $order->notes ?? '';
+        $order->update([
+            'order_status_id' => OrderStatusLookup::idByName(\App\Enums\OrderStatus::REJECTED->value),
+            'notes' => $currentNotes ? "REJECTED BY SHOP: {$validated['reason']}\n\n{$currentNotes}" : "REJECTED BY SHOP: {$validated['reason']}"
+        ]);
 
-    private function calculateShopDeadline($shopId, $startDate, $daysToAdd)
-    {
-        $date = $startDate->copy();
-        $daysAdded = 0;
-        // Fetch the shop's schedule and key by day of week (0 = Sunday, 1 = Monday)
-        $schedule = ShopSchedule::where('shop_id', $shopId)->get()->keyBy('day_of_week');
+        $this->logOrderActivity(
+            $order,
+            $user?->id,
+            'order_rejected',
+            'Tailor rejected the order. Reason: ' . $validated['reason']
+        );
 
-        while ($daysAdded < $daysToAdd) {
-            $date->addDay();
-            $dayOfWeek = $date->dayOfWeek;
-            // Only increment daysAdded if the shop is explicitly open on this day
-            if (isset($schedule[$dayOfWeek]) && $schedule[$dayOfWeek]->is_open) {
-                $daysAdded++;
-            }
+        if ($order->user) {
+            $order->user->notify(new OrderUpdatedNotification(
+                $order,
+                'Your order #' . $order->id . ' was rejected by the shop.',
+                'order_rejected',
+                $validated['reason'],
+                'Shop'
+            ));
         }
-        return $date->startOfDay();
+
+        return redirect()->back()->with('message', 'Order has been rejected.');
+    }
+
+    public function assignStaff(Request $request, Order $order)
+    {
+        $this->authorizeOwnerForOrderAssignment($request, $order);
+
+        $validated = $request->validate([
+            'assigned_staff_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('users', 'id'),
+                Rule::exists('shop_staff', 'user_id')->where(function ($query) use ($order) {
+                    $query->where('shop_id', $order->tailoring_shop_id)
+                        ->where('is_active', true);
+                }),
+            ],
+        ]);
+
+        $assignmentIds = empty($validated['assigned_staff_id'])
+            ? []
+            : [(int) $validated['assigned_staff_id']];
+
+        $order->assignments()->sync($assignmentIds);
+
+        $this->logOrderActivity(
+            $order,
+            $request->user()?->id,
+            'staff_assigned',
+            'Order assigned staff updated.'
+        );
+
+        return redirect()
+            ->route('store.orders.show', $order)
+            ->with('success', 'Assigned staff updated successfully.');
     }
 
     public function index(Request $request, TailoringShop $shop)
@@ -95,7 +132,7 @@ class OrderController extends Controller
         }
 
         $order->load([
-            'customer:id,name,email,',
+            'customer:id,name,email',
             'customer.profile',
             'user:id,name,email',
             'user.profile',
@@ -593,10 +630,11 @@ class OrderController extends Controller
 
     public function showWeb(Request $request, Order $order)
     {
-        $shop = $order->tailoringShop;
-        if (!$shop || !$request->user()->tailoringShops()->where('tailoring_shops.id', $shop->id)->exists()) {
+        if (! $request->user()->can('view', $order)) {
             abort(403, 'Unauthorized.');
         }
+
+        $shop = $order->tailoringShop;
 
         // Load the order relationships
         $order->load([
@@ -622,6 +660,12 @@ class OrderController extends Controller
         ]);
 
         $categories = AttributeCategory::orderBy('name')->get(['id', 'name']);
+
+        // Fetch active staff members for assignment dropdown
+        $staffMembers = $shop->activeStaff()
+            ->select('users.id', 'users.name', 'users.email')
+            ->orderBy('users.name')
+            ->get();
 
         // Fetch the customer's global measurements for auto-fill
         $customerId = $order->user_id ?? $order->customer_id;
@@ -655,6 +699,8 @@ class OrderController extends Controller
             'shop' => $shop,
             'categories' => $categories,
             'globalMeasurements' => $globalMeasurements,
+            'staffMembers' => $staffMembers,
+            'canManageFinancials' => true,
         ]);
     }
 
@@ -730,7 +776,9 @@ class OrderController extends Controller
         $this->checkReadyForProduction($order);
         $this->logOrderActivity($order, $request->user()?->id, 'materials_received', 'Tailor marked customer materials as received.');
 
-        return back()->with('success', 'Materials marked as received.');
+        return redirect()
+            ->route('store.orders.show', $order)
+            ->with('success', 'Materials marked as received.');
     }
 
     public function markMeasurementsTaken(Request $request, Order $order)
@@ -741,11 +789,17 @@ class OrderController extends Controller
         $this->checkReadyForProduction($order);
         $this->logOrderActivity($order, $request->user()?->id, 'measurements_taken', 'Tailor marked in-shop measurements as taken.');
 
-        return back()->with('success', 'Measurements marked as taken.');
+        return redirect()
+            ->route('store.orders.show', $order)
+            ->with('success', 'Measurements marked as taken.');
     }
 
     public function updatePaymentStatus(Request $request, Order $order)
     {
+        if ($order->tailoringShop?->user_id !== $request->user()?->id) {
+            abort(403, 'Only the shop owner can update payment status.');
+        }
+
         $this->authorizeShopForOrder($request, $order);
 
         $validated = $request->validate([
@@ -762,7 +816,6 @@ class OrderController extends Controller
             ]
         );
 
-        $this->checkReadyForProduction($order);
         $this->logOrderActivity(
             $order,
             $request->user()?->id,
@@ -770,7 +823,43 @@ class OrderController extends Controller
             'Tailor updated payment status to ' . $validated['payment_status'] . '.'
         );
 
+        $this->checkReadyForProduction($order);
+
         return back()->with('success', 'Payment status updated successfully.');
+    }
+
+    private function authorizeShop(Request $request, TailoringShop $shop): bool
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($shop->user_id === $user->id) {
+            return true;
+        }
+
+        return $shop->staff()
+            ->where('users.id', $user->id)
+            ->wherePivot('is_active', true)
+            ->exists();
+    }
+
+    protected function logOrderActivity(Order $order, ?int $userId, string $action, string $description): void
+    {
+        $order->logs()->create([
+            'user_id' => $userId,
+            'action' => $action,
+            'description' => $description,
+        ]);
+    }
+
+    private function authorizeOwnerForOrderAssignment(Request $request, Order $order): void
+    {
+        if ($order->tailoringShop?->user_id !== $request->user()?->id) {
+            abort(403, 'Only the shop owner can assign staff.');
+        }
     }
 
     private function authorizeShopForOrder(Request $request, Order $order): void
@@ -825,12 +914,11 @@ class OrderController extends Controller
      */
     public function acceptOrder(Request $request, Order $order)
     {
-        $user = $request->user();
-        
-        // Ensure the user owns the shop for this order
-        if ($order->tailoringShop->user_id !== $user->id) {
+        if (! $request->user()->can('update', $order)) {
             abort(403, 'Unauthorized action.');
         }
+
+        $user = $request->user();
 
         // Safely get the string value whether it's an Enum object or a raw string
         $currentStatus = $order->status instanceof \App\Enums\OrderStatus ? $order->status->value : $order->status;
@@ -849,64 +937,14 @@ class OrderController extends Controller
     }
 
     /**
-     * Tailor rejects a requested order.
-     * PATCH /store/orders/{order}/reject
-     */
-    public function rejectOrder(Request $request, Order $order)
-    {
-        $user = $request->user();
-        
-        if ($order->tailoringShop->user_id !== $user->id) {
-            abort(403, 'Unauthorized action.');
-        }
-
-        $currentStatus = $order->status instanceof \App\Enums\OrderStatus ? $order->status->value : $order->status;
-
-        if ($currentStatus !== 'Requested') {
-            abort(422, 'Only requested orders can be rejected. Current status: ' . $currentStatus);
-        }
-
-        $validated = $request->validate([
-            'reason' => 'required|string|max:1000'
-        ]);
-
-        // Change status to Rejected and prepend rejection reason to notes
-        $currentNotes = $order->notes ?? '';
-        $order->update([
-            'order_status_id' => OrderStatusLookup::idByName(\App\Enums\OrderStatus::REJECTED->value),
-            'notes' => $currentNotes ? "REJECTED BY SHOP: {$validated['reason']}\n\n{$currentNotes}" : "REJECTED BY SHOP: {$validated['reason']}"
-        ]);
-
-        $this->logOrderActivity(
-            $order,
-            $user?->id,
-            'order_rejected',
-            'Tailor rejected the order. Reason: ' . $validated['reason']
-        );
-
-        if ($order->user) {
-            $order->user->notify(new OrderUpdatedNotification(
-                $order,
-                'Your order #' . $order->id . ' was rejected by the shop.',
-                'order_rejected',
-                $validated['reason'],
-                'Shop'
-            ));
-        }
-
-        return redirect()->back()->with('message', 'Order has been rejected.');
-    }
-
-    /**
      * Tailor submits the final quote and required materials.
      * PATCH /store/orders/{order}/quote
      */
     public function quote(Request $request, Order $order)
     {
         $user = $request->user();
-        
-        // Ensure the user owns the shop for this order
-        if ($order->tailoringShop->user_id !== $user->id) {
+
+        if (! $user->can('viewFinancials', $order->tailoringShop)) {
             abort(403, 'Unauthorized action.');
         }
 

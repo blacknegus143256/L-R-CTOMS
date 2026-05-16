@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Notifications\VerifyEmailCodeNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -57,6 +56,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('store.dashboard'));
         }
 
+        if (in_array($user->role, ['store_staff', 'staff'], true)) {
+            return redirect()->intended(route('staff.dashboard'));
+        }
+
         return redirect()->intended(route('dashboard'));
     }  
     /**
@@ -99,6 +102,6 @@ class AuthenticatedSessionController extends Controller
             'email_verification_code_expires_at' => now()->addMinutes(15),
         ])->save();
 
-        $user->notify(new VerifyEmailCodeNotification($code));
+        $user->sendVerificationCodeNotification($code);
     }
 }

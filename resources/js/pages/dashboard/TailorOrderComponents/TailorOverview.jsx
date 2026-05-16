@@ -84,6 +84,7 @@ const TailorOverview = ({
     const [printLoading, setPrintLoading] = useState(false);
     const [tailorInputs, setTailorInputs] = useState({});
     const [isSubmittingMeasurements, setIsSubmittingMeasurements] = useState(false);
+    const [materialsReceivedState, setMaterialsReceivedState] = useState(Boolean(currentOrder.materials_received));
     
     const orderMeasurements = currentOrder.order_measurements || [];
     const fittingAppointment = currentOrder.appointments?.find((a) => a.status === 'confirmed' && a.type === 'fitting');
@@ -135,6 +136,10 @@ const TailorOverview = ({
         }
     }, [shouldHighlightMeasurements]);
 
+    useEffect(() => {
+        setMaterialsReceivedState(Boolean(currentOrder.materials_received));
+    }, [currentOrder?.id, currentOrder?.materials_received]);
+
     // Auto-fill tailor inputs from customer's global measurement profile
     useEffect(() => {
         const initialInputs = {};
@@ -149,6 +154,13 @@ const TailorOverview = ({
     const markMaterialsReceived = () => {
         router.patch(route('store.orders.materials-received', currentOrder.id), {}, {
             preserveScroll: true,
+            onSuccess: () => {
+                setMaterialsReceivedState(true);
+                showNotification?.success('Materials marked as received.');
+            },
+            onError: () => {
+                showNotification?.error('Failed to mark materials as received.');
+            },
         });
     };
 

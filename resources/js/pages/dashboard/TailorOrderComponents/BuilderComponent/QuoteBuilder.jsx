@@ -26,7 +26,8 @@ const QuoteBuilder = ({
     calculateSubtotal,
     handleSendQuote,
     isSubmittingQuote,
-    isQuoteLocked
+    isQuoteLocked,
+    canManageFinancials = true
 }) => {
     const [materialSearch, setMaterialSearch] = useState('');
     const [expandedCategories, setExpandedCategories] = useState({});
@@ -391,185 +392,192 @@ const QuoteBuilder = ({
                     </button>
                 </div>
 
-                {/* Labor & Totals */}
-                <div className="space-y-6">
-                    <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2">
-                            Base Labor Cost (₱)
-                            {isFixedPrice && (
-                                <span className="bg-stone-800 text-stone-400 px-2 py-0.5 rounded text-[9px]">Fixed Price</span>
-                            )}
-                        </label>
-                        <input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            value={effectiveLaborPrice === 0 ? '' : effectiveLaborPrice}
-                            onChange={(e) => setLaborPrice(e.target.value)}
-                            onBlur={() => {
-                                if (effectiveLaborPrice === '' || Number(effectiveLaborPrice) < 0) {
-                                    const baseServicePrice = Number(currentOrder?.orderServices?.[0]?.price) || Number(currentOrder?.service?.price) || 0;
-                                    setLaborPrice(baseServicePrice);
-                                } else {
-                                    setLaborPrice(Number(effectiveLaborPrice));
-                                }
-                            }}
-                            disabled={isLaborLocked}
-                            placeholder="0"
-                            className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
-                                isLaborLocked 
-                                    ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80' 
-                                    : 'bg-stone-800 border border-stone-700 text-white focus:ring-emerald-500 focus:border-emerald-500' 
-                            }`}
-                        />
-                    </div>
-
-                    {currentOrder?.is_rush && (
+                {canManageFinancials ? (
+                    <div className="space-y-6">
                         <div>
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-rose-300 flex items-center gap-2 mb-2">
-                                Rush Order Surcharge (₱)
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2">
+                                Base Labor Cost (₱)
+                                {isFixedPrice && (
+                                    <span className="bg-stone-800 text-stone-400 px-2 py-0.5 rounded text-[9px]">Fixed Price</span>
+                                )}
                             </label>
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={rushFee === 0 ? '' : rushFee}
-                                onChange={(e) => setRushFee(e.target.value)}
+                            <input 
+                                type="number" 
+                                min="0" 
+                                step="0.01" 
+                                value={effectiveLaborPrice === 0 ? '' : effectiveLaborPrice}
+                                onChange={(e) => setLaborPrice(e.target.value)}
                                 onBlur={() => {
-                                    if (rushFee === '' || Number(rushFee) < 0) {
-                                        setRushFee(0);
+                                    if (effectiveLaborPrice === '' || Number(effectiveLaborPrice) < 0) {
+                                        const baseServicePrice = Number(currentOrder?.orderServices?.[0]?.price) || Number(currentOrder?.service?.price) || 0;
+                                        setLaborPrice(baseServicePrice);
+                                    } else {
+                                        setLaborPrice(Number(effectiveLaborPrice));
                                     }
                                 }}
-                                disabled={isLocked}
+                                disabled={isLaborLocked}
                                 placeholder="0"
                                 className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
-                                    isLocked
-                                        ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
-                                        : 'bg-stone-800 border border-stone-700 text-white focus:ring-rose-400 focus:border-rose-400'
-                                }`}
-                            />
-                            <p className="text-[11px] text-stone-400 mt-1">Applied only when customer requested rush order.</p>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-2 mb-2">
-                            Estimated Production Time (Days)
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <input
-                                type="number"
-                                min={1}
-                                step="1"
-                                value={productionMinDays ?? ''}
-                                onChange={(e) => {
-                                    const nextMin = e.target.value === '' ? '' : Number(e.target.value);
-                                    setProductionMinDays(nextMin);
-
-                                    if (
-                                        nextMin !== '' &&
-                                        productionMaxDays !== '' &&
-                                        Number(nextMin) > Number(productionMaxDays)
-                                    ) {
-                                        setProductionMaxDays(Number(nextMin));
-                                    }
-                                }}
-                                required
-                                disabled={isQuoteLocked}
-                                placeholder="Min days"
-                                className={`w-full rounded-xl px-4 py-3 font-bold text-sm transition-colors ${
-                                    isQuoteLocked
-                                        ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
-                                        : 'bg-stone-800 border border-stone-700 text-white focus:ring-cyan-400 focus:border-cyan-400'
-                                }`}
-                            />
-                            <input
-                                type="number"
-                                min={productionMinDays || 1}
-                                step="1"
-                                value={productionMaxDays ?? ''}
-                                onChange={(e) => {
-                                    const nextMax = e.target.value === '' ? '' : Number(e.target.value);
-
-                                    if (
-                                        nextMax === '' ||
-                                        productionMinDays === '' ||
-                                        Number(nextMax) >= Number(productionMinDays)
-                                    ) {
-                                        setProductionMaxDays(nextMax);
-                                    }
-                                }}
-                                required
-                                disabled={isQuoteLocked}
-                                placeholder="Max days"
-                                className={`w-full rounded-xl px-4 py-3 font-bold text-sm transition-colors ${
-                                    isQuoteLocked
-                                        ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
-                                        : 'bg-stone-800 border border-stone-700 text-white focus:ring-cyan-400 focus:border-cyan-400'
+                                    isLaborLocked 
+                                        ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80' 
+                                        : 'bg-stone-800 border border-stone-700 text-white focus:ring-emerald-500 focus:border-emerald-500' 
                                 }`}
                             />
                         </div>
-                    </div>
-                    
-                    <div className="pt-6 border-t border-stone-700 space-y-3">
-                        <div className="flex justify-between items-end">
-                            <span className="text-sm font-bold text-stone-400">Initial Items Subtotal</span>
-                            <span className="text-base font-bold text-stone-300">
-                                ₱{getInitialItemsTotal().toLocaleString(undefined, {minimumFractionDigits: 2})}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-end">
-                            <span className="text-sm font-bold text-emerald-500/80">Added Materials Subtotal</span>
-                            <span className="text-base font-bold text-emerald-400/80">
-                                + ₱{calculateSubtotal().toLocaleString(undefined, {minimumFractionDigits: 2})}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-end">
-                            <span className="text-sm font-bold text-cyan-300">Labor Subtotal</span>
-                            <span className="text-base font-bold text-cyan-300">
-                                + ₱{Number(effectiveLaborPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </span>
-                        </div>
+
                         {currentOrder?.is_rush && (
-                            <div className="flex justify-between items-end">
-                                <span className="text-sm font-bold text-rose-300">Rush Surcharge</span>
-                                <span className="text-base font-bold text-rose-300">
-                                    + ₱{Number(rushFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </span>
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-rose-300 flex items-center gap-2 mb-2">
+                                    Rush Order Surcharge (₱)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={rushFee === 0 ? '' : rushFee}
+                                    onChange={(e) => setRushFee(e.target.value)}
+                                    onBlur={() => {
+                                        if (rushFee === '' || Number(rushFee) < 0) {
+                                            setRushFee(0);
+                                        }
+                                    }}
+                                    disabled={isLocked}
+                                    placeholder="0"
+                                    className={`w-full rounded-xl px-4 py-3 font-bold text-lg transition-colors ${
+                                        isLocked
+                                            ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
+                                            : 'bg-stone-800 border border-stone-700 text-white focus:ring-rose-400 focus:border-rose-400'
+                                    }`}
+                                />
+                                <p className="text-[11px] text-stone-400 mt-1">Applied only when customer requested rush order.</p>
                             </div>
                         )}
-                        <div className="w-full h-px bg-stone-700/50 my-2"></div>
-                        <div className="flex justify-between items-end pt-1">
-                            <span className="text-sm font-black text-stone-200 uppercase tracking-widest">Total Quote</span>
-                            <span className="text-3xl font-black text-emerald-400">
-                                ₱{(Number(effectiveLaborPrice || 0) + calculateSubtotal() + getInitialItemsTotal() + Number(rushFee || 0)).toLocaleString(undefined, {minimumFractionDigits: 2})}
-                            </span>
+
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-2 mb-2">
+                                Estimated Production Time (Days)
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input
+                                    type="number"
+                                    min={1}
+                                    step="1"
+                                    value={productionMinDays ?? ''}
+                                    onChange={(e) => {
+                                        const nextMin = e.target.value === '' ? '' : Number(e.target.value);
+                                        setProductionMinDays(nextMin);
+
+                                        if (
+                                            nextMin !== '' &&
+                                            productionMaxDays !== '' &&
+                                            Number(nextMin) > Number(productionMaxDays)
+                                        ) {
+                                            setProductionMaxDays(Number(nextMin));
+                                        }
+                                    }}
+                                    required
+                                    disabled={isQuoteLocked}
+                                    placeholder="Min days"
+                                    className={`w-full rounded-xl px-4 py-3 font-bold text-sm transition-colors ${
+                                        isQuoteLocked
+                                            ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
+                                            : 'bg-stone-800 border border-stone-700 text-white focus:ring-cyan-400 focus:border-cyan-400'
+                                    }`}
+                                />
+                                <input
+                                    type="number"
+                                    min={productionMinDays || 1}
+                                    step="1"
+                                    value={productionMaxDays ?? ''}
+                                    onChange={(e) => {
+                                        const nextMax = e.target.value === '' ? '' : Number(e.target.value);
+
+                                        if (
+                                            nextMax === '' ||
+                                            productionMinDays === '' ||
+                                            Number(nextMax) >= Number(productionMinDays)
+                                        ) {
+                                            setProductionMaxDays(nextMax);
+                                        }
+                                    }}
+                                    required
+                                    disabled={isQuoteLocked}
+                                    placeholder="Max days"
+                                    className={`w-full rounded-xl px-4 py-3 font-bold text-sm transition-colors ${
+                                        isQuoteLocked
+                                            ? 'bg-stone-900 border border-stone-800 text-stone-400 cursor-not-allowed opacity-80'
+                                            : 'bg-stone-800 border border-stone-700 text-white focus:ring-cyan-400 focus:border-cyan-400'
+                                    }`}
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="pt-6 border-t border-stone-700 space-y-3">
+                            <div className="flex justify-between items-end">
+                                <span className="text-sm font-bold text-stone-400">Initial Items Subtotal</span>
+                                <span className="text-base font-bold text-stone-300">
+                                    ₱{getInitialItemsTotal().toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end">
+                                <span className="text-sm font-bold text-emerald-500/80">Added Materials Subtotal</span>
+                                <span className="text-base font-bold text-emerald-400/80">
+                                    + ₱{calculateSubtotal().toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-end">
+                                <span className="text-sm font-bold text-cyan-300">Labor Subtotal</span>
+                                <span className="text-base font-bold text-cyan-300">
+                                    + ₱{Number(effectiveLaborPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            {currentOrder?.is_rush && (
+                                <div className="flex justify-between items-end">
+                                    <span className="text-sm font-bold text-rose-300">Rush Surcharge</span>
+                                    <span className="text-base font-bold text-rose-300">
+                                        + ₱{Number(rushFee || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="w-full h-px bg-stone-700/50 my-2"></div>
+                            <div className="flex justify-between items-end pt-1">
+                                <span className="text-sm font-black text-stone-200 uppercase tracking-widest">Total Quote</span>
+                                <span className="text-3xl font-black text-emerald-400">
+                                    ₱{(Number(effectiveLaborPrice || 0) + calculateSubtotal() + getInitialItemsTotal() + Number(rushFee || 0)).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="rounded-2xl border border-dashed border-stone-700 bg-stone-950/70 px-5 py-6 text-sm text-stone-400">
+                        Pricing and quote controls are restricted to the shop owner.
+                    </div>
+                )}
             </div>
 
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.preventDefault();
-                    if (handleSendQuote) handleSendQuote(e);
-                }}
-                disabled={isSubmittingQuote || isQuoteLocked}
-                className={`w-full mt-8 py-4 font-black text-lg rounded-xl transition-all shadow-lg ${
-                    isQuoteLocked 
-                        ? 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700' 
-                        : 'bg-emerald-500 text-stone-900 hover:bg-emerald-400 disabled:opacity-50'
-                }`}
-            >
-                {isQuoteLocked ? (
-                    <span className="inline-flex items-center justify-center gap-2"><Lock className="w-4 h-4" /> Quote Finalized / Locked</span>
-                ) : isSubmittingQuote ? (
-                    'Sending...'
-                ) : (
-                    <span className="inline-flex items-center justify-center gap-2"><Send className="w-4 h-4" /> Send Financial Quote</span>
-                )}
-            </button>
+            {canManageFinancials && (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        if (handleSendQuote) handleSendQuote(e);
+                    }}
+                    disabled={isSubmittingQuote || isQuoteLocked}
+                    className={`w-full mt-8 py-4 font-black text-lg rounded-xl transition-all shadow-lg ${
+                        isQuoteLocked 
+                            ? 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700' 
+                            : 'bg-emerald-500 text-stone-900 hover:bg-emerald-400 disabled:opacity-50'
+                    }`}
+                >
+                    {isQuoteLocked ? (
+                        <span className="inline-flex items-center justify-center gap-2"><Lock className="w-4 h-4" /> Quote Finalized / Locked</span>
+                    ) : isSubmittingQuote ? (
+                        'Sending...'
+                    ) : (
+                        <span className="inline-flex items-center justify-center gap-2"><Send className="w-4 h-4" /> Send Financial Quote</span>
+                    )}
+                </button>
+            )}
         </div>
     );
 };

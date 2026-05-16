@@ -44,12 +44,20 @@ class UserRoleSeeder extends Seeder
             'shop_status_id' => $approvedStatusId,
         ]);
 
+        $storeStaff = User::updateOrCreate([
+            'email' => 'staff@gmail.com',
+        ], [
+            'name' => 'Shop Staff John',
+            'password' => Hash::make('Admin123'),
+            'role' => 'store_staff',
+        ]);
+
         // 4. Create or update a Regular Customer
         User::updateOrCreate([
             'email' => 'sample@gmail.com',
         ], [
             'name' => 'Customer Juan',
-            'password' => Hash::make('Sample123'),
+            'password' => Hash::make('Admin123'),
             'role' => 'customer',
         ]);
     }

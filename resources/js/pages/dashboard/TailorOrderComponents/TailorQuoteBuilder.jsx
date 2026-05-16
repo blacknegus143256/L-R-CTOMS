@@ -32,6 +32,7 @@ const TailorQuoteBuilder = ({
     onMaterialChange,
     isMeasurementLocked,
     isQuoteLocked,
+    canManageFinancials,
 }) => {
     const [materials, setMaterials] = useState(tailorMaterials || []);
     const isFixedPrice = currentOrder?.service?.checkout_type === 'fixed_price';
@@ -163,6 +164,7 @@ const initialRushFee = currentOrder?.is_rush
                 handleSendQuote={handleSendQuote}
                 isSubmittingQuote={isSubmittingQuote}
                 isQuoteLocked={resolvedQuoteLocked}
+                canManageFinancials={canManageFinancials}
             />
         </div>
     );

@@ -8,8 +8,7 @@ CTOMS-LR (Centralized Tailoring Order and Management System) is a web-based info
 - **Customer**: Registers, places orders, submits measurements, pays, tracks order status, requests rework, and files reports.
 - **Shop Staff**: Reviews orders, issues quotations, updates production progress, receives measurements, manages rework, and updates order status.
 - **Shop Owner**: Manages shop profile, services, schedules, documents, and onboarding-related business data.
-- **Super Admin**: Approves shops, manages users, investigates reports, oversees order issues, and monitors system records.
-- **External Service Providers**: Payment gateway, email/notification provider, and file storage services.
+- **Admin**: Approves shops, manages users, investigates reports, oversees order issues, and monitors system records.
 
 ### Core Transactions
 - Account creation and login
@@ -41,11 +40,8 @@ CTOMS-LR (Centralized Tailoring Order and Management System) is a web-based info
 | Customer | Places tailoring orders, submits measurements, pays, and tracks progress |
 | Shop Staff | Manages orders, quotations, production updates, and rework responses |
 | Shop Owner | Maintains shop profile, services, schedules, and compliance documents |
-| Super Admin | Oversees system users, shops, complaints, and operational control |
-| Payment Gateway | Processes electronic payments and returns transaction confirmation |
-| Email/Notification Service | Delivers system-generated notifications and messages |
-| File Storage Service | Stores uploaded images, documents, and proofs of payment |
-| Map/Location Service | Supports location lookup and map-based shop reference data |
+| Admin | Oversees system users, shops, complaints, and operational control |
+
 
 ---
 
@@ -60,7 +56,7 @@ CTOMS-LR (Centralized Tailoring Order and Management System) is a web-based info
 | 5.0 | Measurement Management | Receives, stores, and updates customer measurements and fitting records | Measurement values, fitting appointment data | Measurement records, measurement status, appointment records |
 | 6.0 | Payment Processing | Generates payment requests, records payment results, and updates order payment status | Payment request, payment confirmation, manual payment evidence | Payment records, payment status updates, receipt/reference data |
 | 7.0 | Rework Management | Handles customer requests for alteration or correction after order delivery | Rework request, rework details, shop decision | Rework records, rework status, customer notification |
-| 8.0 | Report and Investigation Management | Receives complaints, links them to orders, and supports super admin investigation | Report details, order reference, investigation decision | Complaint records, report status updates, investigation notes |
+| 8.0 | Report and Investigation Management | Receives complaints, links them to orders, and supports admin investigation | Report details, order reference, investigation decision | Complaint records, report status updates, investigation notes |
 | 9.0 | Notification Handling | Sends system alerts, reminders, and status updates to relevant users | Event triggers, recipient data, message content | Delivered notifications, notification records |
 | 10.0 | User and Role Administration | Manages user profiles, roles, suspension, impersonation, and access control | User records, role updates, admin actions | Updated user records, access decisions, audit entries |
 | 11.0 | Audit and Log Management | Stores significant operational events for review and accountability | Order actions, admin actions, system events | Audit logs, historical records |
@@ -104,7 +100,7 @@ CTOMS-LR (Centralized Tailoring Order and Management System) is a web-based info
 | Customer | 1.0 Authentication and Account Management | Registration details, login credentials | D1 Users, D2 User Profiles |
 | Customer | 2.0 Shop Browsing and Inquiry | Search criteria, shop selection request | D3 Tailoring Shops, D4 Services, D5 Shop Attributes |
 | Shop Owner | 3.0 Shop Onboarding and Approval | Shop profile, compliance documents | D3 Tailoring Shops, D16 Shop Documents |
-| Super Admin | 3.0 Shop Onboarding and Approval | Approval or rejection decision | D3 Tailoring Shops, D21 Shop Statuses |
+| Admin | 3.0 Shop Onboarding and Approval | Approval or rejection decision | D3 Tailoring Shops, D21 Shop Statuses |
 | Customer | 4.0 Order Management | Order details, selected service, design reference | D6 Orders, D7 Order Items, D10 Order Logs |
 | Shop Staff | 4.0 Order Management | Quotation, production updates, order status change | D6 Orders, D10 Order Logs |
 | Customer | 5.0 Measurement Management | Measurement values, fitting information | D8 Order Measurements, D14 Appointments |
@@ -114,16 +110,16 @@ CTOMS-LR (Centralized Tailoring Order and Management System) is a web-based info
 | Customer | 7.0 Rework Management | Rework request, explanation, evidence | D12 Rework Requests, D10 Order Logs |
 | Shop Staff | 7.0 Rework Management | Rework decision, completion status | D12 Rework Requests, D10 Order Logs |
 | Customer | 8.0 Report and Investigation Management | Complaint details, order reference | D13 Reports |
-| Super Admin | 8.0 Report and Investigation Management | Investigation and resolution decision | D13 Reports, D10 Order Logs |
+| Admin | 8.0 Report and Investigation Management | Investigation and resolution decision | D13 Reports, D10 Order Logs |
 | System | 9.0 Notification Handling | Event trigger, recipient, message | D15 Notifications |
-| Super Admin | 10.0 User and Role Administration | Suspension, activation, impersonation actions | D1 Users, D10 Order Logs |
+| Admin | 10.0 User and Role Administration | Suspension, activation, impersonation actions | D1 Users, D10 Order Logs |
 | System | 11.0 Audit and Log Management | Operational events and status changes | D10 Order Logs |
 
 ---
 
 ## 6. Context Diagram Description
 
-At the context level, CTOMS-LR is a single central process that exchanges data with external entities. The system receives registration data, order details, measurements, payment information, rework requests, and complaint reports from customers. It receives shop profile updates, production status data, quotations, and order actions from shop staff and shop owners. It receives approval decisions, suspension actions, and investigation commands from the super admin.
+At the context level, CTOMS-LR is a single central process that exchanges data with external entities. The system receives registration data, order details, measurements, payment information, rework requests, and complaint reports from customers. It receives shop profile updates, production status data, quotations, and order actions from shop staff and shop owners. It receives approval decisions, suspension actions, and investigation commands from the admin.
 
 The system also exchanges data with external service providers. A payment gateway returns payment confirmation data, an email or notification service delivers messages, and a file storage service receives uploaded images and documents. The overall context diagram should show the system as one central process connected to these external entities through clearly labeled data flows.
 

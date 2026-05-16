@@ -721,8 +721,14 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         }
 
         $shop = TailoringShop::with(['attributes.attributeCategory'])->findOrFail($shopId);
-        if ($shop->user_id !== $userId) {
-            abort(403, 'Unauthorized. You can only view orders for your own shop.');
+        $isOwner = $shop->user_id === $userId;
+        $isStaff = $request->user()?->workplaces()
+            ->where('tailoring_shops.id', $shop->id)
+            ->wherePivot('is_active', true)
+            ->exists();
+
+        if (! $isOwner && ! $isStaff) {
+            abort(403, 'Unauthorized. You can only view orders for your own shop or assigned workplace.');
         }
 
         // ==========================================
@@ -733,6 +739,7 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         // Separates from pagination to maintain accuracy across all filters.
         
         $allOrders = Order::where('tailoring_shop_id', $shopId)
+            ->forUser($request->user())
             ->with(['status', 'payment']) 
             ->get();
 
@@ -819,12 +826,14 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         // Filters and sorting applied separately via Eloquent query builder.
         
         $query = Order::where('tailoring_shop_id', $shopId)
+            ->forUser($request->user())
             ->with([
                 'user.profile',
                 'customer',
                 'service.serviceCategory',
                 'items.shopAttribute.attributeType.attributeCategory',
                 'tailoringShop',
+                'assignments:id,name,email',
                 'latestLog.user:id,name,role',
             ]);
 
@@ -934,6 +943,10 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
             'shop' => $shop,
             'orders' => $orders,
             'stats' => $stats,
+            'staffMembers' => $isOwner
+                ? $shop->activeStaff()->select('users.id', 'users.name', 'users.email')->orderBy('users.name')->get()
+                : [],
+            'canAssignStaff' => $isOwner,
             'filters' => $request->only(['search', 'status', 'sort']),
         ]);
     }

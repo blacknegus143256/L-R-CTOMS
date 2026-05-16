@@ -44,18 +44,26 @@ class HandleInertiaRequests extends Middleware
             $impersonationStatus = ImpersonationController::getImpersonationStatus();
         }
 
+        $authUser = $user ? $user->load('profile') : null;
+        $authUserPayload = $authUser
+            ? array_merge($authUser->toArray(), [
+                'unread_notifications_count' => $authUser->unreadNotifications()->count(),
+                'unread_notifications' => $authUser->unreadNotifications()
+                    ->latest()
+                    ->take(5)
+                    ->get(),
+            ])
+            : null;
+
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $user ? $user->load('profile') : null,
+                'user' => $authUserPayload,
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
-            'unread_notifications' => $user
-                ? $user->unreadNotifications()->take(5)->get()
-                : [],
             'pending_shops_count' => $pendingShopsCount,
             'impersonation' => $impersonationStatus,
         ];

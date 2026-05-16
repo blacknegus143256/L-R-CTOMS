@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Notifications\VerifyEmailCodeNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -29,7 +28,7 @@ class EmailVerificationNotificationController extends Controller
         ])->save();
 
         try {
-            $request->user()->notify(new VerifyEmailCodeNotification($code));
+            $request->user()->sendVerificationCodeNotification($code);
         } catch (Throwable $throwable) {
             Log::warning('Verification code email delivery failed; exposing code in session fallback.', [
                 'user_id' => $request->user()->id,

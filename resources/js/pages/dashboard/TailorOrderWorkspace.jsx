@@ -14,7 +14,7 @@ import { FiLock } from 'react-icons/fi';
 import { TbCurrencyPeso } from 'react-icons/tb';
 import { router, usePage } from '@inertiajs/react';
 
-export default function TailorOrderWorkspace({ auth, order, globalMeasurements = {} }) {
+export default function TailorOrderWorkspace({ auth, order, globalMeasurements = {}, staffMembers = [], canManageFinancials = true }) {
     const { props, url } = usePage();
     const parsedUrl = new URL(url, 'http://localhost');
     const action = (parsedUrl.searchParams.get('action') || '').trim().toLowerCase();
@@ -53,8 +53,31 @@ export default function TailorOrderWorkspace({ auth, order, globalMeasurements =
     const shopFromOrder = currentOrder?.tailoringShop || currentOrder?.shop;
     const shop = shopFromProps?.attributes ? shopFromProps : (shopFromOrder?.attributes ? shopFromOrder : (shopFromProps || shopFromOrder || {}));
     const availableShopAttributes = shop.attributes || [];
+    const assignedStaffName = Array.isArray(currentOrder?.assignments) && currentOrder.assignments.length > 0
+        ? currentOrder.assignments[0]?.name || ''
+        : '';
+    const currentAssigneeId = Array.isArray(currentOrder?.assignments) && currentOrder.assignments.length > 0
+        ? currentOrder.assignments[0]?.id || ''
+        : '';
+    const [selectedAssigneeId, setSelectedAssigneeId] = useState(currentAssigneeId || '');
     const orderLogs = Array.isArray(currentOrder.logs) ? currentOrder.logs : [];
     const categories = Array.isArray(props?.categories) ? props.categories : [];
+
+    const handleAssignStaff = (assignedStaffId) => {
+        const previousAssigneeId = selectedAssigneeId;
+        const nextAssigneeId = assignedStaffId || '';
+
+        setSelectedAssigneeId(nextAssigneeId);
+
+        router.patch(route('store.orders.assign-staff', currentOrder.id), {
+            assigned_staff_id: assignedStaffId || null,
+        }, {
+            preserveScroll: true,
+            onError: () => {
+                setSelectedAssigneeId(previousAssigneeId);
+            },
+        });
+    };
 
     const formatTimelineDate = (value) => {
         if (!value) return 'Unknown date';
@@ -129,6 +152,10 @@ const [showRejectModal, setShowRejectModal] = useState(false);
         setActiveTab(tabMap[highlightSection] || 'overview');
         setActiveHighlight(highlightSection);
     }, [highlightSection, requestedTab]);
+
+    useEffect(() => {
+        setSelectedAssigneeId(currentAssigneeId || '');
+    }, [currentOrder?.id, currentAssigneeId]);
 
     useEffect(() => {
         if (!validHighlights.includes(activeHighlight)) return;
@@ -620,6 +647,31 @@ const handleSendMeasurements = (e) => {
                         </div>
                         
                         <div className="flex flex-wrap items-center gap-3 md:gap-5 text-sm font-medium text-stone-500 mt-1">
+                            {canManageFinancials ? (
+                                // Owner view: Show dropdown
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={selectedAssigneeId}
+                                        onChange={(e) => handleAssignStaff(e.target.value)}
+                                        className="min-w-40 rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Unassigned</option>
+                                        {Array.isArray(staffMembers) && staffMembers.map((staff) => (
+                                            <option key={staff.id} value={staff.id}>
+                                                {staff.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : assignedStaffName ? (
+                                // Staff view: Show read-only badge
+                                <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-semibold text-indigo-700 border border-indigo-200">
+                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-black text-white">
+                                        {assignedStaffName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+                                    </span>
+                                    Assigned to {assignedStaffName}
+                                </span>
+                            ) : null}
 
                                 {(() => {
                                     const mapUrl = buildMapUrl(orderOwner.profile?.latitude, orderOwner.profile?.longitude);
@@ -671,7 +723,7 @@ const handleSendMeasurements = (e) => {
                                         <TbCurrencyPeso className="w-4 h-4" />
                                         Pending: ₱{paymentDisplay.remainingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </div>
-                                    {actionFlags.canCollectRemainingCash && (
+                                    {canManageFinancials && actionFlags.canCollectRemainingCash && (
                                         <button
                                             type="button"
                                             onClick={handleSettleRemainingBalance}
@@ -954,7 +1006,7 @@ const handleSendMeasurements = (e) => {
             </div>
 
             <div className="mt-5 flex flex-col gap-3">
-                        {!(paymentStatusRaw === 'Pending' && currentOrder.manual_payment_proof_path) && actionFlags.canRecordCashPayment && (
+                        {canManageFinancials && !(paymentStatusRaw === 'Pending' && currentOrder.manual_payment_proof_path) && actionFlags.canRecordCashPayment && (
                             <button
                                 type="button"
                                 onClick={handleRecordCashPayment}
@@ -1075,6 +1127,7 @@ const handleSendMeasurements = (e) => {
                                 measurementSuccess={measurementSuccess}
                                 isMeasurementLocked={isMeasurementLocked}
                                 isQuoteLocked={isQuoteLocked}
+                                canManageFinancials={canManageFinancials}
                             />
                         </div>
                     </div>

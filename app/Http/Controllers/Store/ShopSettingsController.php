@@ -19,6 +19,8 @@ class ShopSettingsController extends Controller
             abort(404, 'Shop not found.');
         }
 
+        $this->authorize('manageSettings', $shop);
+
         $shop->load(['schedules', 'exceptions']);
 
         return inertia('StoreAdmin/ShopSettings', [
@@ -33,6 +35,8 @@ class ShopSettingsController extends Controller
         if (!$shop) {
             abort(404, 'Shop not found.');
         }
+
+        $this->authorize('manageSettings', $shop);
 
         $validated = $request->validate([
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp,gif', 'max:5120'],

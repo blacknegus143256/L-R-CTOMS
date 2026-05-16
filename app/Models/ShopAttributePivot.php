@@ -16,10 +16,20 @@ class ShopAttributePivot extends Pivot
 
     protected $appends = [
         'isActuallyAvailable',
+        'is_actually_available',
     ];
 
     public function getIsActuallyAvailableAttribute(): bool
     {
         return (bool) $this->is_available && (float) ($this->stock_quantity ?? 0) > 0;
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $pivot) {
+            if ((float) ($pivot->stock_quantity ?? 0) <= 0) {
+                $pivot->is_available = false;
+            }
+        });
     }
 }

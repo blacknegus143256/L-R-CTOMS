@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import { FiX, FiUser, FiLogOut, FiMenu, FiHome, FiBox, FiShoppingCart, FiBriefcase, FiLayers, FiCalendar, FiSettings, FiBell, FiPackage, FiCheckCircle, FiAlertCircle, FiMessageSquare, FiImage, FiXCircle, FiActivity, FiTool, FiRefreshCw, FiClipboard } from 'react-icons/fi';
+import { FiX, FiUser, FiLogOut, FiMenu, FiHome, FiBox, FiShoppingCart, FiBriefcase, FiLayers, FiCalendar, FiSettings, FiBell, FiPackage, FiCheckCircle, FiAlertCircle, FiMessageSquare, FiImage, FiXCircle, FiActivity, FiTool, FiRefreshCw, FiClipboard, FiUsers } from 'react-icons/fi';
 import { Store } from 'lucide-react';
 
 export default function AuthenticatedLayout({ header, children }) {
@@ -14,9 +14,13 @@ export default function AuthenticatedLayout({ header, children }) {
     const user = props.auth.user;
     const shop = props.shop || user?.tailoringShops?.[0] || user?.tailoringShop || user?.shop || null;
     const shouldShowOnboardingLink = user?.role === 'store_admin' && (!shop || !shop.is_active || String(shop?.status || '').trim().toLowerCase() !== 'approved');
-    const isCustomer = user?.role !== 'super_admin' && user?.role !== 'store_admin';
+    const isSuper = user?.role === 'super_admin';
+    const isOwner = user?.role === 'store_admin';
+    const isStaff = user?.role === 'store_staff' || user?.role === 'staff';
+    const isCustomer = !isSuper && !isOwner && !isStaff;
     const flash = props.flash || {};
-    const unreadNotifications = props.unread_notifications || [];
+    const unreadNotifications = user?.unread_notifications || props.unread_notifications || [];
+    const unreadNotificationsCount = user?.unread_notifications_count ?? unreadNotifications.length;
     const pendingShopsCount = props.pending_shops_count || 0;
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -98,6 +102,7 @@ export default function AuthenticatedLayout({ header, children }) {
         switch (type) {
             case 'new_order_received':
             case 'order_created':
+            case 'order_assigned':
                 return 'status';
             case 'measurement_requested':
             case 'measurement_submitted':
@@ -182,6 +187,8 @@ export default function AuthenticatedLayout({ header, children }) {
 
     const getNotificationIcon = (type) => {
         switch (type) {
+            case 'order_assigned':
+                return <FiUsers className="w-5 h-5" />;
             case 'new_order_received':
             case 'order_created':
                 return <FiPackage className="w-5 h-5" />;
@@ -235,7 +242,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     {/* Main Nav Links - Tightened Spacing */}
 <nav className="flex-1 flex-col px-8 py-10 overflow-y-auto space-y-1 custom-scrollbar">
                         {/* Dynamic Links Based on Role */}
-                        {user.role === 'super_admin' && (
+                        {isSuper ? (
                             <>
                                 <NavLink href={route('super.dashboard')} active={route().current('super.dashboard')} className="text-base px-4 py-3" >
                                     <FiHome className="w-5 h-5 mr-3" />
@@ -261,14 +268,19 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Escrow Payouts
                                 </NavLink> */}
                             </>
-                        )}
-                        {user.role === 'store_admin' && (
+                        ) : isOwner ? (
                             <>
                             <div>
                                 <NavLink href={route('store.dashboard')} active={route().current('store.dashboard')} className="text-base px-4 py-3">
                                     <FiHome className="w-5 h-5 mr-3" />
                                     Dashboard
                                 </NavLink>
+                                </div>
+                                <div>
+                                    <NavLink href={route('shop.staff.index')} active={route().current('shop.staff.*')} className="text-base px-4 py-3">
+                                        <FiUsers className="w-5 h-5 mr-3" />
+                                        Staff Management
+                                    </NavLink>
                                 </div>
                                 {shouldShowOnboardingLink && (
                                     <div>
@@ -306,6 +318,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Orders
                                 </NavLink>
                                 </div>
+                                {shop?.id && (
+                                    <div>
+                                        {/* <NavLink href={route('store.orders.page', shop.id)} active={route().current('store.orders.page')} className="text-base px-4 py-3 opacity-70">
+                                            <FiClipboard className="w-5 h-5 mr-3" />
+                                            Order Details
+                                        </NavLink> */}
+                                    </div>
+                                )}
                                 <div>
                                 <NavLink href={route('store.reworks.index')} active={route().current('store.reworks.*')} className="text-base px-4 py-3" >
                                     <FiTool className="w-5 h-5 mr-3" />
@@ -313,9 +333,28 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </NavLink>
                                 </div>
                             </>
-                        )}
-                        {/* Customer Dashboard Link */}
-                        {isCustomer && (
+                        ) : isStaff ? (
+                            <>
+                                <div>
+                                    <NavLink href={route('staff.dashboard')} active={route().current('staff.dashboard')} className="text-base px-4 py-3">
+                                        <FiHome className="w-5 h-5 mr-3" />
+                                        Dashboard
+                                    </NavLink>
+                                </div>
+                                <div>
+                                    <NavLink href={route('staff.orders')} active={route().current('staff.orders')} className="text-base px-4 py-3">
+                                        <FiClipboard className="w-5 h-5 mr-3" />
+                                        Assigned Orders
+                                    </NavLink>
+                                </div>
+                                <div>
+                                    <NavLink href={route('staff.appointments')} active={route().current('staff.appointments')} className="text-base px-4 py-3">
+                                        <FiCalendar className="w-5 h-5 mr-3" />
+                                        My Schedule
+                                    </NavLink>
+                                </div>
+                            </>
+                        ) : (
                             <>
                             <div>
                                 <NavLink href={route('dashboard')} active={route().current('dashboard')} className="text-lg px-4 py-3">
@@ -394,9 +433,9 @@ export default function AuthenticatedLayout({ header, children }) {
                         aria-label="Toggle notifications"
                     >
                         <FiBell className="h-5 w-5 text-stone-700" />
-                        {unreadNotifications.length > 0 && (
+                        {unreadNotificationsCount > 0 && (
                             <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black leading-[18px] text-center">
-                                {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
+                                {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                             </span>
                         )}
                         {pendingShopsCount > 0 && (
@@ -448,6 +487,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 <p className="text-sm font-semibold text-stone-800 leading-snug">
                                                     {notification?.data?.message || 'Order update'}
                                                 </p>
+                                                {(notification?.data?.service_name || notification?.data?.assigned_by_name) && (
+                                                    <p className="text-xs text-stone-500 mt-1 leading-snug">
+                                                        {notification?.data?.service_name}
+                                                        {notification?.data?.service_name && notification?.data?.assigned_by_name ? ' · ' : ''}
+                                                        {notification?.data?.assigned_by_name ? `Assigned by ${notification.data.assigned_by_name}` : ''}
+                                                    </p>
+                                                )}
                                                 <p className="text-xs text-stone-500 mt-1">
                                                     {formatTimeAgo(notification.created_at)}
                                                 </p>

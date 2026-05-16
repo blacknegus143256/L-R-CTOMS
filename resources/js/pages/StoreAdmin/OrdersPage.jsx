@@ -30,7 +30,14 @@ const getOrderTotal = (order) => {
 
 export default function OrdersPage() {
 const { props } = usePage();
+    const authUser = props.auth?.user || null;
     const shop = props.shop;
+    const staffMembers = Array.isArray(props.staffMembers) ? props.staffMembers : [];
+    const canAssignStaff = Boolean(props.canAssignStaff);
+    const isStaffRoute = Boolean(props.isStaffRoute || authUser?.role === 'store_staff' || authUser?.role === 'staff');
+    const ordersRoute = isStaffRoute
+        ? route('staff.orders')
+        : route('store.orders.page', props.shopId);
     const rawOrders = props.orders || [];
     // Safely extract the array whether backend sends a paginator object or a raw array
     const ordersList = Array.isArray(rawOrders) ? rawOrders : (rawOrders?.data || []);
@@ -83,7 +90,7 @@ const { props } = usePage();
             merged.page = 1;
         }
         router.get(
-            route('store.orders.page', props.shopId),
+            ordersRoute,
             merged,
             { preserveState: true, preserveScroll: true, replace: true }
         );
@@ -95,7 +102,7 @@ const { props } = usePage();
 
     const executeSearch = () => {
         router.get(
-            route('store.orders.page', props.shopId),
+            ordersRoute,
             { ...filters, search: searchTerm, page: 1 },
             { preserveState: true, preserveScroll: true, replace: true }
         );
@@ -114,6 +121,32 @@ const { props } = usePage();
             dayjs(order.updated_at).isAfter(dayjs(order.created_at))
         );
     };
+
+    const getOrderAssignees = (order) => {
+        const list = Array.isArray(order.assignments) ? order.assignments : [];
+        return list;
+    };
+
+    const getAssignedStaffName = (order) => {
+        const assignees = getOrderAssignees(order);
+        return assignees[0]?.name || '';
+    };
+
+    const handleAssignStaff = (orderId, assignedStaffId) => {
+        router.patch(route('store.orders.assign-staff', orderId), {
+            assigned_staff_id: assignedStaffId || null,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => router.reload({ only: ['orders', 'stats'] }),
+            onError: () => showAlert({
+                title: 'Assignment Error',
+                message: 'Could not update the assigned staff member.',
+                type: 'error',
+            }),
+        });
+    };
+
+    const getOrderStatusText = (order) => order?.status?.name || order?.status || 'Pending';
     // Use global stats calculated by the backend so pagination doesn't break counts
     const stats = props.stats || {
         all: 0,
@@ -262,7 +295,7 @@ const { props } = usePage();
                                             type="button"
                                             onClick={() => {
                                                 setSearchTerm('');
-                                                router.get(route('store.orders.page', props.shopId), { ...filters, search: '', page: 1 }, { preserveState: true, preserveScroll: true, replace: true });
+                                                router.get(ordersRoute, { ...filters, search: '', page: 1 }, { preserveState: true, preserveScroll: true, replace: true });
                                             }}
                                             className="absolute inset-y-0 right-0 pr-2 flex items-center text-stone-400 hover:text-stone-600"
                                             title="Clear search"
@@ -302,17 +335,34 @@ const { props } = usePage();
                     {/* Orders List */}
                     <div className="p-6">
                         {ordersList.length === 0 ? (
-                            <div className="rounded-xl border border-stone-200 bg-stone-50 p-12 text-center">
-                                <p className="text-stone-500">No orders found.</p>
+                            <div className="rounded-3xl border border-dashed border-stone-200 bg-gradient-to-br from-stone-50 to-white p-12 text-center shadow-sm">
+                                {isStaffRoute ? (
+                                    <div className="mx-auto max-w-xl">
+                                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+                                            <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-3-2-3 2-3-2-3 2-3-2V6a2 2 0 012-2z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="mt-5 text-2xl font-black text-stone-900">No assigned orders yet</h3>
+                                        <p className="mt-3 text-sm leading-6 text-stone-600">
+                                            Once the shop owner assigns work to you, it will appear here with status, due date, and customer details.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="text-stone-500">No orders found.</p>
+                                )}
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 {ordersList.map(order => {
+    const orderStatusText = getOrderStatusText(order);
     const paymentStatus = normalizePaymentStatus(order.payment_status);
-    const isFullyCleared = order.status === 'Confirmed' && paymentStatus === 'Paid';
+    const isFullyCleared = orderStatusText === 'Confirmed' && paymentStatus === 'Paid';
     const latestLog = order.latest_log || order.latestLog || null;
     const latestActor = latestLog?.user?.name || 'System';
     const latestTime = latestLog?.created_at ? dayjs(latestLog.created_at).fromNow() : '';
+                    const assignedStaffName = getAssignedStaffName(order);
+                    const assignees = getOrderAssignees(order);
 
     const isExactMatch = (() => {
         if (!searchTerm) return false;
@@ -384,6 +434,42 @@ const { props } = usePage();
                     <span className="w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-[10px] shrink-0">👤</span>
                     {order.customer?.name ? highlightMatch(order.customer.name, searchTerm) : (order.user?.name ? highlightMatch(order.user.name, searchTerm) : 'Unknown Customer')}
                 </p>
+                {assignedStaffName && (
+                    <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-black text-white">
+                            {assignedStaffName.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+                        </span>
+                        Assigned to {assignedStaffName}
+                    </p>
+                )}
+                {assignees.length > 0 && (
+                    <div className="mt-2 flex items-center gap-2">
+                        <div className="flex -space-x-2">
+                            {assignees.slice(0, 4).map((member) => {
+                                const initials = String(member.name || 'S')
+                                    .split(' ')
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .map((part) => part[0])
+                                    .join('')
+                                    .toUpperCase();
+
+                                return (
+                                    <span
+                                        key={`${order.id}-assignee-${member.id}`}
+                                        title={member.name}
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-stone-700 text-[10px] font-black text-white shadow"
+                                    >
+                                        {initials}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        <span className="text-[11px] font-medium text-stone-500">
+                            {assignees.length} assignee{assignees.length > 1 ? 's' : ''}
+                        </span>
+                    </div>
+                )}
                 {latestLog && (
                     <p className="mt-1 text-[11px] text-stone-500 truncate">
                         Latest activity: {latestLog.description || latestLog.action || 'Order updated'} by {latestActor}{latestTime ? ` (${latestTime})` : ''}
@@ -394,7 +480,7 @@ const { props } = usePage();
 
         {/* 2. Middle Section: Status & Dates */}
         <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between w-full lg:w-40 shrink-0 gap-2">
-            <StatusBadge status={order.status ?? 'Pending'} />
+            <StatusBadge status={orderStatusText} />
             <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${PAYMENT_STATUS_CLASSES[paymentStatus] || PAYMENT_STATUS_CLASSES.Pending}`}>
                 {paymentStatus}
             </span>
@@ -419,6 +505,29 @@ const { props } = usePage();
                 <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Total</p>
             </div>
 
+            {canAssignStaff && staffMembers.length > 0 && (
+                <div className="flex items-center gap-2">
+                    <select
+                        value={getOrderAssignees(order)[0]?.id || ''}
+                        onChange={(e) => handleAssignStaff(order.id, e.target.value)}
+                        className="min-w-40 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        <option value="">Unassigned</option>
+                        {staffMembers.map((staff) => (
+                            <option key={staff.id} value={staff.id}>
+                                {staff.name}
+                            </option>
+                        ))}
+                    </select>
+                    <Link
+                        href={route('shop.orders.details', order.id)}
+                        className="rounded-xl border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                    >
+                        Assignees
+                    </Link>
+                </div>
+            )}
+
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 {/* Mobile Price Display (Hidden on Desktop) */}
                 <div className="sm:hidden flex-1 text-left">
@@ -426,7 +535,7 @@ const { props } = usePage();
                 </div>
 
                 {/* Preserved Action Logic */}
-                {order.status === 'Pending' && (
+                {orderStatusText === 'Pending' && (
                     <>
                         <button onClick={() => handleStatusUpdate(order.id, 'Rejected')} className="hidden sm:block px-3 py-2.5 text-xs font-bold text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
                             Reject
@@ -436,17 +545,17 @@ const { props } = usePage();
                         </button>
                     </>
                 )}
-                {order.status === 'Accepted' && (
+                {orderStatusText === 'Accepted' && (
                     <button onClick={() => handleStatusUpdate(order.id, 'Appointment Scheduled')} className="px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-all shadow-md shadow-purple-200 whitespace-nowrap shrink-0">
                         Start Work
                     </button>
                 )}
-                {(order.status === 'Appointment Scheduled' || order.status === 'In Progress') && (
+                {(orderStatusText === 'Appointment Scheduled' || orderStatusText === 'In Progress') && (
                     <button onClick={() => handleStatusUpdate(order.id, 'Ready')} className="px-4 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200 whitespace-nowrap shrink-0">
                         Mark Ready
                     </button>
                 )}
-                {order.status === 'Ready' && (
+                {orderStatusText === 'Ready' && (
                     <button onClick={() => handleStatusUpdate(order.id, 'Completed')} className="px-4 py-2.5 bg-stone-800 text-white text-xs font-bold rounded-xl hover:bg-stone-900 transition-all shadow-md whitespace-nowrap shrink-0">
                         Complete
                     </button>
@@ -454,7 +563,7 @@ const { props } = usePage();
 
                 {/* Dedicated Workspace Button */}
                 <Link 
-                    href={route('store.orders.show', order.id)} 
+                    href={isStaffRoute ? route('staff.orders.show', order.id) : route('store.orders.show', order.id)} 
                     className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-stone-50 hover:bg-indigo-50 text-stone-400 hover:text-indigo-600 border border-stone-200 hover:border-indigo-200 flex items-center justify-center transition-all shrink-0 ml-1 group-hover:shadow-sm"
                     title="Manage Order"
                 >

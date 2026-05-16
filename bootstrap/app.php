@@ -33,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'shop.approved' => \App\Http\Middleware\EnsureShopIsApproved::class,
+            'active.staff' => \App\Http\Middleware\EnsureActiveStaff::class,
         ]);
         //
     })

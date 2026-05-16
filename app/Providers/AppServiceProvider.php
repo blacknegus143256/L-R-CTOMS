@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Order;
+use App\Models\TailoringShop;
+use App\Policies\OrderPolicy;
+use App\Policies\ShopPolicy;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
@@ -29,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
 
         Vite::useBuildDirectory('build');
         Vite::prefetch(concurrency: 3);
+
+        Gate::policy(Order::class, OrderPolicy::class);
+        Gate::policy(TailoringShop::class, ShopPolicy::class);
 
         // GOD MODE: Super Admin bypasses all authorization checks
         Gate::before(function ($user, $ability) {

@@ -258,6 +258,13 @@ class PaymentController extends Controller
                 'payment_verified'
             ));
 
+            $this->logOrderActivity(
+                $order,
+                null,
+                'payment_verified',
+                'Payment was verified automatically via PayMongo webhook.'
+            );
+
             // Check if order is ready for production (now that payment is updated)
             $this->checkReadyForProduction($order);
 
@@ -394,6 +401,13 @@ class PaymentController extends Controller
                 'payment_received'
             ));
 
+            $this->logOrderActivity(
+                $order,
+                $request->user()?->id,
+                'payment_verified',
+                'Manual payment proof was verified and approved.'
+            );
+
             // Notify customer
             $order->user?->notify(new \App\Notifications\OrderUpdateNotification(
                 $order,
@@ -463,6 +477,13 @@ class PaymentController extends Controller
                 'payment_received'
             ));
 
+            $this->logOrderActivity(
+                $order,
+                $request->user()?->id,
+                'payment_verified',
+                'Manual payment proof was verified and approved.'
+            );
+
             // Check if order is ready for production
             $this->checkReadyForProduction($order);
 
@@ -515,6 +536,13 @@ class PaymentController extends Controller
             'payment_received'
         ));
 
+        $this->logOrderActivity(
+            $order,
+            $request->user()?->id,
+            'payment_rejected',
+            'Manual payment proof was rejected. Reason: ' . $validated['reason']
+        );
+
         return redirect()->back()->with('success', 'Manual payment proof rejected.');
     }
 
@@ -538,6 +566,13 @@ class PaymentController extends Controller
             'payment_status' => $paymentStatus,
             'payment_type' => 'cash',
         ]);
+
+        $this->logOrderActivity(
+            $order,
+            $request->user()?->id,
+            'cash_payment_recorded',
+            'Shop collected ₱' . number_format($amountPaid, 2) . ' in cash from the customer.'
+        );
 
         $order->update([
             'status' => OrderStatus::CONFIRMED->value,
@@ -575,11 +610,31 @@ class PaymentController extends Controller
             return redirect()->back()->with('error', 'Only partially paid orders can be settled.');
         }
 
+        $currentAmount = (float) ($paymentRecord->amount ?? 0);
+        $totalAmount = (float) ($order->total_amount ?: $order->total_price);
+        $remainingBalance = max(0, $totalAmount - $currentAmount);
+
         $paymentRecord->update([
             'payment_status' => 'Paid',
-            'amount' => (float) $order->total_price,
+            'amount' => $totalAmount,
         ]);
 
+        $this->logOrderActivity(
+            $order,
+            request()->user()?->id,
+            'balance_settled',
+            'Remaining balance of ₱' . number_format($remainingBalance, 2) . ' was settled via cash.'
+        );
+
         return redirect()->back()->with('success', 'Remaining balance collected successfully.');
+    }
+
+    protected function logOrderActivity(Order $order, ?int $userId, string $action, string $description): void
+    {
+        $order->logs()->create([
+            'user_id' => $userId,
+            'action' => $action,
+            'description' => $description,
+        ]);
     }
 }

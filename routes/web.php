@@ -7,9 +7,12 @@ use Inertia\Inertia;
 use App\Http\Controllers\SuperAdmin\DashboardController;
 use App\Http\Controllers\SuperAdmin\UserController;
 use App\Http\Controllers\Store\StoreDashboardController;
+use App\Http\Controllers\Store\OrderAssignmentController;
+use App\Http\Controllers\Store\ShopStaffController;
 use App\Http\Controllers\Store\ShopSettingsController;
 use App\Http\Controllers\Store\ShopExceptionsController;
 use App\Http\Controllers\Store\InventoryController;
+use App\Http\Controllers\Staff\StaffDashboardController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\TailoringShopController;
 use App\Models\TailoringShop;
@@ -86,9 +89,29 @@ Route::middleware(['auth', 'verified', 'role:store_admin'])->group(function () {
     // Allow onboarding users to view and update shop settings during onboarding
     Route::get('/store/settings', [ShopSettingsController::class, 'edit'])->name('store.schedule.index');
     Route::patch('/store/settings', [ShopSettingsController::class, 'update'])->name('store.settings.update');
+
+    Route::get('/shop/staff', [ShopStaffController::class, 'index'])->name('shop.staff.index');
+    Route::post('/shop/staff/invite', [ShopStaffController::class, 'invite'])->name('shop.staff.invite');
+    Route::patch('/shop/staff/{user}/toggle', [ShopStaffController::class, 'toggleActive'])->name('shop.staff.toggle');
+    Route::delete('/shop/staff/{user}', [ShopStaffController::class, 'destroy'])->name('shop.staff.destroy');
+
+    Route::get('/shop/orders/{order}/details', [OrderAssignmentController::class, 'show'])->name('shop.orders.details');
+    Route::put('/shop/orders/{order}/assignees', [OrderAssignmentController::class, 'attach'])->name('shop.orders.assignees.attach');
+    Route::delete('/shop/orders/{order}/assignees/{userId}', [OrderAssignmentController::class, 'detach'])->name('shop.orders.assignees.detach');
 });
 
-Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->group(function () {
+Route::prefix('staff')->middleware(['auth', 'verified', 'role:store_staff,staff'])->group(function () {
+    Route::inertia('/access-revoked', 'Staff/AccessRevoked')->name('staff.access-revoked');
+
+    Route::middleware(['active.staff'])->group(function () {
+        Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('staff.dashboard');
+        Route::get('/orders/{order}', [StaffDashboardController::class, 'show'])->name('staff.orders.show');
+        Route::get('/orders', [StaffDashboardController::class, 'orders'])->name('staff.orders');
+        Route::get('/appointments', [StaffDashboardController::class, 'appointments'])->name('staff.appointments');
+    });
+});
+
+Route::middleware(['auth', 'verified', 'role:store_admin,store_staff,staff', 'shop.approved'])->group(function () {
     Route::get('/store/dashboard', [StoreDashboardController::class, 'index'])->name('store.dashboard');
     Route::post('/store/update-description', [StoreDashboardController::class, 'updateDescription'])->name('store.dashboard.update-description');
     Route::get('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'index'])->name('store.inventory.index');
@@ -130,6 +153,7 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
         Route::patch('/store/orders/{order}/payment-status', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'updatePaymentStatus'])->name('store.orders.payment-status');
         Route::post('/store/orders/{order}/cash-payment', [\App\Http\Controllers\Api\PaymentController::class, 'recordCashPayment'])->name('store.orders.cash-payment');
         Route::post('/store/orders/{order}/settle-balance', [\App\Http\Controllers\Api\PaymentController::class, 'settleRemainingBalance'])->name('store.orders.settle-balance');
+        Route::patch('/store/orders/{order}/assign-staff', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'assignStaff'])->name('store.orders.assign-staff');
         Route::patch('/store/order-reworks/{orderRework}/status', [\App\Http\Controllers\Api\OrderReworkController::class, 'updateStatus'])->name('store.order-reworks.update-status');
         Route::patch('/store/order-reworks/{orderRework}/accept', [\App\Http\Controllers\Api\OrderReworkController::class, 'accept'])->name('store.order-reworks.accept');
         Route::patch('/store/order-reworks/{orderRework}/reject', [\App\Http\Controllers\Api\OrderReworkController::class, 'reject'])->name('store.order-reworks.reject');
@@ -143,6 +167,10 @@ Route::middleware(['auth', 'verified', 'role:store_admin', 'shop.approved'])->gr
 
         Route::post('/store/orders/{order}/photos', [\App\Http\Controllers\Api\Dashboard\OrderController::class, 'uploadPhoto'])->name('store.orders.upload-photo');
     });
+
+    Route::get('/store/staff', [ShopStaffController::class, 'index'])->name('store.staff.index');
+    Route::post('/store/staff', [ShopStaffController::class, 'store'])->name('store.staff.store');
+    Route::delete('/store/staff/{user}', [ShopStaffController::class, 'destroy'])->name('store.staff.destroy');
 
     Route::post('/store/inventory', [App\Http\Controllers\Store\InventoryController::class, 'addServices'])->name('store.services.add');
     Route::put('/store/inventory/{id}', [App\Http\Controllers\Store\InventoryController::class, 'updateServices'])->name('store.services.update');

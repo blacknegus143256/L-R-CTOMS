@@ -24,6 +24,10 @@ class CustomerDashboardController extends Controller
             return redirect()->route('store.dashboard');
         }
 
+        if (in_array($user->role, ['store_staff', 'staff'], true)) {
+            return redirect()->route('staff.dashboard');
+        }
+
         $activeOrdersCount = Order::where('user_id', $user->id)
             ->whereHas('status', function ($query) {
                 $query->whereNotIn('name', ['Completed', 'Cancelled', 'Declined', 'Rejected']);

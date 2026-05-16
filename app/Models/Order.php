@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use BackedEnum;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -151,6 +153,32 @@ class Order extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function assignments(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'order_assignments', 'order_id', 'user_id')
+            ->withTimestamps();
+    }
+
+    public function scopeForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if (in_array($user->role, ['store_staff', 'staff'], true)) {
+            return $query->whereHas('assignments', function (Builder $assignmentQuery) use ($user) {
+                $assignmentQuery->where('users.id', $user->id);
+            });
+        }
+
+        return $query;
+    }
+
+    public function shop(): BelongsTo
+    {
+        return $this->tailoringShop();
     }
 
     public function customer(): BelongsTo
@@ -299,4 +327,5 @@ class Order extends Model
         return $this->belongsTo(TailoringShop::class);
     }
 }
+
 

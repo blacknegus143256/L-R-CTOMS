@@ -308,7 +308,7 @@ export default function Dashboard() {
                         variants={{ hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1 } }}
                         className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-2xl border border-stone-100/50 p-8"
                     >
-                        {/* <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between mb-8">
                             <h3 className="text-2xl font-black bg-gradient-to-r from-stone-900 to-stone-700 bg-clip-text text-transparent flex items-center gap-3">
                                 <FiMapPin className="w-8 h-8 text-emerald-500" style={{ fill: 'currentColor' }} />
                                 Featured Tailors
@@ -316,7 +316,7 @@ export default function Dashboard() {
                             <Link href="/" className="text-lg font-bold bg-gradient-to-r from-orchid-purple to-orchid-blue bg-clip-text text-transparent hover:underline">
                                 See All
                             </Link>
-                        </div> */}
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {shopsToShow.map((shop) => (

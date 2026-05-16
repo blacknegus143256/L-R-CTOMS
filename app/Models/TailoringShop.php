@@ -128,6 +128,18 @@ class TailoringShop extends Model
         return $this->belongsTo(\App\Models\User::class);
     }
 
+    public function staff(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'shop_staff', 'shop_id', 'user_id')
+            ->withPivot('is_active')
+            ->withTimestamps();
+    }
+
+    public function activeStaff(): BelongsToMany
+    {
+        return $this->staff()->wherePivot('is_active', true);
+    }
+
     private function findDocumentByType(string $type): ?ShopDocument
     {
         if ($this->relationLoaded('documents')) {

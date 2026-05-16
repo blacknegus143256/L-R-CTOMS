@@ -34,6 +34,7 @@ class ShopAttribute extends Model
         'name',
         'attributeCategory',
         'isActuallyAvailable',
+        'is_actually_available',
     ];
 
     protected static function booted(): void

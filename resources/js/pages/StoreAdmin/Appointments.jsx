@@ -5,7 +5,7 @@ import { FiCalendar, FiClock, FiChevronLeft, FiChevronRight, FiUser, FiAlertCirc
 import { confirmDialog } from '@/utils/dialog';
 import { format, getDay, isValid, parseISO } from 'date-fns';
 
-export default function Appointments({ auth, appointmentsByDate = {}, exceptionsByDate = {}, holidaysByDate = {}, shop, month, year }) {
+export default function Appointments({ auth, appointmentsByDate = {}, exceptionsByDate = {}, holidaysByDate = {}, shop, month, year, canManageSchedule = true, appointmentsRoute = route('store.appointments') }) {
     const [currentDate, setCurrentDate] = useState(new Date((year || new Date().getFullYear()), ((month || new Date().getMonth() + 1) - 1), 1));
     const [selectedDate, setSelectedDate] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,7 +18,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
 
     const navigateMonth = (date) => {
         setCurrentDate(date);
-        router.get(route('store.appointments'), {
+        router.get(appointmentsRoute, {
             month: date.getMonth() + 1,
             year: date.getFullYear(),
         }, {
@@ -30,7 +30,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
     const prevMonth = () => {
         const newDate = new Date(displayYear, displayMonth - 1, 1);
         setCurrentDate(newDate);
-        router.get(window.location.pathname, {
+        router.get(appointmentsRoute, {
             month: newDate.getMonth() + 1,
             year: newDate.getFullYear(),
         }, {
@@ -42,7 +42,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
     const nextMonth = () => {
         const newDate = new Date(displayYear, displayMonth + 1, 1);
         setCurrentDate(newDate);
-        router.get(window.location.pathname, {
+        router.get(appointmentsRoute, {
             month: newDate.getMonth() + 1,
             year: newDate.getFullYear(),
         }, {
@@ -92,11 +92,12 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
             header={
                 <div className="flex flex-col">
                     <h2 className="font-black text-2xl text-stone-900 tracking-tight">Master Schedule</h2>
+                    <h2 className="font-black text-2xl text-stone-900 tracking-tight">{canManageSchedule ? 'Master Schedule' : 'My Schedule'}</h2>
                     <p className="text-stone-500 text-sm">{shop.shop_name}</p>
                 </div>
             }
         >
-            <Head title="Master Schedule" />
+            <Head title={canManageSchedule ? 'Master Schedule' : 'My Schedule'} />
 
             <div className="py-4 bg-stone-50/50 min-h-screen">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -269,6 +270,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
                     monthNames={monthNames}
                     formatTime={formatTime}
                     shop={shop}
+                    canManageSchedule={canManageSchedule}
                     onClose={closeDayModal}
                 />
             )}
@@ -276,7 +278,7 @@ export default function Appointments({ auth, appointmentsByDate = {}, exceptions
     );
 }
 
-function DailyRosterModal({ selectedDate, appointmentsByDate, exceptionsByDate, holidaysByDate, weeklyScheduleByDay, monthNames, formatTime, shop, onClose }) {
+function DailyRosterModal({ selectedDate, appointmentsByDate, exceptionsByDate, holidaysByDate, weeklyScheduleByDay, monthNames, formatTime, shop, canManageSchedule = true, onClose }) {
     const dayAppointments = (appointmentsByDate[selectedDate.dayString] || [])
         .sort((a, b) => String(a.time_start || '').localeCompare(String(b.time_start || '')));
     
@@ -477,93 +479,94 @@ function DailyRosterModal({ selectedDate, appointmentsByDate, exceptionsByDate, 
                         )}
                     </div>
 
-                    {/* Section B: Exception Manager */}
-                    <div className="space-y-4">
-                        <h4 className="text-lg font-black text-stone-900 mb-4">Exception Manager</h4>
-                        <form onSubmit={handleExceptionSubmit} className="space-y-4">
-                            <p className="text-xs font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2">
-                                {modeHint}
-                            </p>
+                    {canManageSchedule && (
+                        <div className="space-y-4">
+                            <h4 className="text-lg font-black text-stone-900 mb-4">Exception Manager</h4>
+                            <form onSubmit={handleExceptionSubmit} className="space-y-4">
+                                <p className="text-xs font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2">
+                                    {modeHint}
+                                </p>
 
-                            {defaultIsClosed && !toggleChecked && !dayException && (
-                                <div className="rounded-lg bg-stone-100 border border-stone-300 text-stone-700 text-sm font-medium px-3 py-2">
-                                    This day remains closed unless you create an exception to open it.
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={toggleChecked}
-                                        onChange={(e) => setToggleChecked(e.target.checked)}
-                                        className="w-4 h-4 rounded border-stone-300"
-                                    />
-                                    <span className="text-sm font-bold text-stone-700">{toggleLabel}</span>
-                                </label>
-                            </div>
-
-                            {showTimeInputs && (
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-bold text-stone-700 mb-1">Open Time</label>
-                                        <input
-                                            type="time"
-                                            value={data.open_time}
-                                            onChange={(e) => setData('open_time', e.target.value)}
-                                            className="w-full rounded-xl border border-stone-300 px-3 py-2"
-                                            required
-                                        />
-                                        {errors.open_time && <p className="text-red-600 text-sm mt-1">{errors.open_time}</p>}
+                                {defaultIsClosed && !toggleChecked && !dayException && (
+                                    <div className="rounded-lg bg-stone-100 border border-stone-300 text-stone-700 text-sm font-medium px-3 py-2">
+                                        This day remains closed unless you create an exception to open it.
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-stone-700 mb-1">Close Time</label>
-                                        <input
-                                            type="time"
-                                            value={data.close_time}
-                                            onChange={(e) => setData('close_time', e.target.value)}
-                                            className="w-full rounded-xl border border-stone-300 px-3 py-2"
-                                            required
-                                        />
-                                        {errors.close_time && <p className="text-red-600 text-sm mt-1">{errors.close_time}</p>}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-bold text-stone-700 mb-1">Reason (optional)</label>
-                                <input
-                                    type="text"
-                                    value={data.reason}
-                                    onChange={(e) => setData('reason', e.target.value)}
-                                    placeholder="e.g., Holiday, Inventory Day, Private Event"
-                                    className="w-full rounded-xl border border-stone-300 px-3 py-2"
-                                />
-                                {errors.reason && <p className="text-red-600 text-sm mt-1">{errors.reason}</p>}
-                            </div>
-
-                            <div className="flex gap-2 pt-4">
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-60"
-                                >
-                                    {processing ? 'Saving...' : dayException ? 'Update Exception' : 'Create Exception'}
-                                </button>
-                                {dayException && (
-                                    <button
-                                        type="button"
-                                        onClick={handleExceptionDelete}
-                                        disabled={processing}
-                                        className="px-4 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-60 flex items-center gap-2"
-                                    >
-                                        <FiTrash2 className="w-4 h-4" />
-                                        Remove
-                                    </button>
                                 )}
-                            </div>
-                        </form>
-                    </div>
+
+                                <div>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={toggleChecked}
+                                            onChange={(e) => setToggleChecked(e.target.checked)}
+                                            className="w-4 h-4 rounded border-stone-300"
+                                        />
+                                        <span className="text-sm font-bold text-stone-700">{toggleLabel}</span>
+                                    </label>
+                                </div>
+
+                                {showTimeInputs && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-bold text-stone-700 mb-1">Open Time</label>
+                                            <input
+                                                type="time"
+                                                value={data.open_time}
+                                                onChange={(e) => setData('open_time', e.target.value)}
+                                                className="w-full rounded-xl border border-stone-300 px-3 py-2"
+                                                required
+                                            />
+                                            {errors.open_time && <p className="text-red-600 text-sm mt-1">{errors.open_time}</p>}
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-stone-700 mb-1">Close Time</label>
+                                            <input
+                                                type="time"
+                                                value={data.close_time}
+                                                onChange={(e) => setData('close_time', e.target.value)}
+                                                className="w-full rounded-xl border border-stone-300 px-3 py-2"
+                                                required
+                                            />
+                                            {errors.close_time && <p className="text-red-600 text-sm mt-1">{errors.close_time}</p>}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-sm font-bold text-stone-700 mb-1">Reason (optional)</label>
+                                    <input
+                                        type="text"
+                                        value={data.reason}
+                                        onChange={(e) => setData('reason', e.target.value)}
+                                        placeholder="e.g., Holiday, Inventory Day, Private Event"
+                                        className="w-full rounded-xl border border-stone-300 px-3 py-2"
+                                    />
+                                    {errors.reason && <p className="text-red-600 text-sm mt-1">{errors.reason}</p>}
+                                </div>
+
+                                <div className="flex gap-2 pt-4">
+                                    <button
+                                        type="submit"
+                                        disabled={processing}
+                                        className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-60"
+                                    >
+                                        {processing ? 'Saving...' : dayException ? 'Update Exception' : 'Create Exception'}
+                                    </button>
+                                    {dayException && (
+                                        <button
+                                            type="button"
+                                            onClick={handleExceptionDelete}
+                                            disabled={processing}
+                                            className="px-4 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-60 flex items-center gap-2"
+                                        >
+                                            <FiTrash2 className="w-4 h-4" />
+                                            Remove
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -1,4 +1,5 @@
 export default function StatusBadge({ status }) {
+    const statusText = typeof status === 'object' && status !== null ? (status.name || 'Unknown') : (status || 'Pending');
     const config = {
         'Requested': 'bg-amber-50 text-amber-600 border-amber-200',
         'Pending': 'bg-amber-50 text-amber-600 border-amber-200',
@@ -19,7 +20,7 @@ export default function StatusBadge({ status }) {
         unknown: 'bg-stone-50 text-stone-600 border-stone-200',
     };
 
-    const safeStatus = status || 'unknown';
+    const safeStatus = statusText || 'unknown';
     const normalizedStatus = safeStatus === 'Ready forPickup' ? 'Ready for Pickup' : safeStatus;
 
     return (
