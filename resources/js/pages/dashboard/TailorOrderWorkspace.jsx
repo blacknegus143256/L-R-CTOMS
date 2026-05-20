@@ -64,7 +64,6 @@ export default function TailorOrderWorkspace({ auth, order, globalMeasurements =
     const categories = Array.isArray(props?.categories) ? props.categories : [];
 
     const handleAssignStaff = (assignedStaffId) => {
-        const previousAssigneeId = selectedAssigneeId;
         const nextAssigneeId = assignedStaffId || '';
 
         setSelectedAssigneeId(nextAssigneeId);
@@ -74,7 +73,8 @@ export default function TailorOrderWorkspace({ auth, order, globalMeasurements =
         }, {
             preserveScroll: true,
             onError: () => {
-                setSelectedAssigneeId(previousAssigneeId);
+                // Revert local state if the server request fails
+                setSelectedAssigneeId(currentAssigneeId || '');
             },
         });
     };

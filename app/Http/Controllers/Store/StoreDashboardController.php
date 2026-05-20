@@ -13,6 +13,7 @@ use App\Models\OrderItem;
 use App\Models\User;
 use App\Models\UserMeasurement;
 use App\Notifications\OrderUpdatedNotification;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -87,13 +88,12 @@ class StoreDashboardController extends Controller
             ]);
         }
 
-        $totalRevenue = DB::table('order_services')
-            ->join('orders', 'order_services.order_id', '=', 'orders.id')
-            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
-            ->where('orders.tailoring_shop_id', $shop->id)
-            ->where('order_statuses.name', 'Completed')
-            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
-            ->value('total');
+        $totalRevenue = $this->calculateCompletedRevenue(
+            Order::where('tailoring_shop_id', $shop->id)
+                ->whereHas('status', function ($query) {
+                    $query->where('name', 'Completed');
+                })
+        );
 
 $pendingOrders = Order::where('tailoring_shop_id', $shop->id)
     ->whereHas('status', function ($query) {
@@ -122,24 +122,22 @@ $activeCustomers = Order::where('tailoring_shop_id', $shop->id)
         $currentMonth = now()->startOfMonth();
         $lastMonthStart = now()->subMonth()->startOfMonth();
         $lastMonthEnd = $currentMonth->copy()->subSecond();
-        $currentRevenue = DB::table('order_services')
-            ->join('orders', 'order_services.order_id', '=', 'orders.id')
-            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
-            ->where('orders.tailoring_shop_id', $shop->id)
-            ->where('order_statuses.name', 'Completed')
-            ->where('orders.created_at', '>=', $currentMonth)
-            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
-            ->value('total');
+        $currentRevenue = $this->calculateCompletedRevenue(
+            Order::where('tailoring_shop_id', $shop->id)
+                ->whereHas('status', function ($query) {
+                    $query->where('name', 'Completed');
+                })
+                ->where('created_at', '>=', $currentMonth)
+        );
 
-        $lastRevenue = DB::table('order_services')
-            ->join('orders', 'order_services.order_id', '=', 'orders.id')
-            ->join('order_statuses', 'orders.order_status_id', '=', 'order_statuses.id')
-            ->where('orders.tailoring_shop_id', $shop->id)
-            ->where('order_statuses.name', 'Completed')
-            ->where('orders.created_at', '>=', $lastMonthStart)
-            ->where('orders.created_at', '<', $lastMonthEnd)
-            ->selectRaw('COALESCE(SUM(order_services.price * order_services.quantity), 0) as total')
-            ->value('total');
+        $lastRevenue = $this->calculateCompletedRevenue(
+            Order::where('tailoring_shop_id', $shop->id)
+                ->whereHas('status', function ($query) {
+                    $query->where('name', 'Completed');
+                })
+                ->where('created_at', '>=', $lastMonthStart)
+                ->where('created_at', '<', $lastMonthEnd)
+        );
         $revenueGrowth = $lastRevenue > 0 ? round((($currentRevenue - $lastRevenue) / $lastRevenue) * 100, 1) : 100;
 
         $todayStart = now()->startOfDay();
@@ -387,50 +385,57 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         $baseQuery = Order::where('tailoring_shop_id', $shop->id)
             ->whereHas('status', function ($query) {
                 $query->where('name', 'Completed');
-            });
+            })
+            ->with(['orderServices', 'items']);
 
-        if ($granularity === 'monthly') {
-            $data = (clone $baseQuery)
-                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m-01') as period, SUM(total_price) as total")
+        $orders = match ($granularity) {
+            'monthly' => (clone $baseQuery)
                 ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-                ->groupBy('period')
-                ->orderBy('period', 'asc')
-                ->get()
-                ->map(function ($item) {
-                    $item->label = Carbon::parse($item->period)->format('M Y');
-                    $item->total = (float) $item->total;
-                    return $item;
-                });
-        } elseif ($granularity === 'yearly') {
-            $data = (clone $baseQuery)
-                ->selectRaw('YEAR(created_at) as period, SUM(total_price) as total')
+                ->get(),
+            'yearly' => (clone $baseQuery)
                 ->where('created_at', '>=', now()->subYears(4)->startOfYear())
-                ->groupBy('period')
-                ->orderBy('period', 'asc')
-                ->get()
-                ->map(function ($item) {
-                    $item->label = (string) $item->period;
-                    $item->total = (float) $item->total;
-                    return $item;
-                });
-        } else {
-            $data = (clone $baseQuery)
-                ->selectRaw('DATE(created_at) as period, SUM(total_price) as total')
+                ->get(),
+            default => (clone $baseQuery)
                 ->where('created_at', '>=', now()->subDays(30))
-                ->groupBy('period')
-                ->orderBy('period', 'asc')
-                ->get()
-                ->map(function ($item) {
-                    $item->label = Carbon::parse($item->period)->format('M d');
-                    $item->total = (float) $item->total;
-                    return $item;
-                });
-        }
+                ->get(),
+        };
+
+        $periodResolver = match ($granularity) {
+            'monthly' => fn (Order $order) => $order->created_at->format('Y-m-01'),
+            'yearly' => fn (Order $order) => $order->created_at->format('Y'),
+            default => fn (Order $order) => $order->created_at->format('Y-m-d'),
+        };
+
+        $labelResolver = match ($granularity) {
+            'monthly' => fn (string $period) => Carbon::parse($period)->format('M Y'),
+            'yearly' => fn (string $period) => $period,
+            default => fn (string $period) => Carbon::parse($period)->format('M d'),
+        };
+
+        $data = $orders
+            ->groupBy(fn (Order $order) => $periodResolver($order))
+            ->sortKeys()
+            ->map(function ($group, string $period) use ($labelResolver) {
+                return [
+                    'period' => $period,
+                    'label' => $labelResolver($period),
+                    'total' => (float) $group->sum(fn (Order $order) => (float) $order->total_price),
+                ];
+            })
+            ->values();
 
         return response()->json([
             'granularity' => $granularity,
             'revenue' => $data
         ]);
+    }
+
+    private function calculateCompletedRevenue(Builder $query): float
+    {
+        return (float) $query
+            ->with(['orderServices', 'items'])
+            ->get()
+            ->sum(fn (Order $order) => (float) $order->total_price);
     }
 
     public function requestMeasurements(Request $request, Order $order)
@@ -922,6 +927,25 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         // Supports: newest, oldest, due-soon, price-high, price-low
         
         $sort = $request->input('sort', 'newest');
+        $computedOrderTotalSql = <<<SQL
+CASE
+    WHEN COALESCE(orders.total_amount, 0) > 0 THEN COALESCE(orders.total_amount, 0)
+    ELSE (
+        COALESCE((
+            SELECT SUM(order_services.price * order_services.quantity)
+            FROM order_services
+            WHERE order_services.order_id = orders.id
+        ), 0)
+        + COALESCE((
+            SELECT SUM(order_items.price * order_items.quantity)
+            FROM order_items
+            WHERE order_items.order_id = orders.id
+        ), 0)
+        + COALESCE(orders.rush_fee, 0)
+    )
+END
+SQL;
+
         if ($sort === 'newest') {
             $query->latest();
         } elseif ($sort === 'oldest') {
@@ -929,9 +953,9 @@ $recentActivity = Order::where('tailoring_shop_id', $shop->id)
         } elseif ($sort === 'due-soon') {
             $query->orderByRaw('expected_completion_date IS NULL ASC')->orderBy('expected_completion_date', 'asc');
         } elseif ($sort === 'price-high') {
-            $query->orderBy('total_price', 'desc');
+            $query->orderByRaw($computedOrderTotalSql . ' DESC');
         } elseif ($sort === 'price-low') {
-            $query->orderByRaw('total_price IS NULL ASC')->orderBy('total_price', 'asc');
+            $query->orderByRaw($computedOrderTotalSql . ' ASC');
         } else {
             $query->latest();
         }

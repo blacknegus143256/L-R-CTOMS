@@ -115,7 +115,7 @@ class OrderController extends Controller
 
         $orders = $shop->orders()
             ->with(['customer:id,name,phone_number', 'orderServices.service:id,service_name,price,service_category_id', 'orderServices.service.serviceCategory', 'items.shopAttribute.attributeType', 'fitMethod', 'appointments', 'status', 'payment.status'])
-            ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
+            ->orderByRaw('CASE WHEN is_rush = TRUE OR expected_completion_date <= ? THEN 1 ELSE 0 END DESC', [now()->addDays(2)])
             ->orderBy('expected_completion_date', 'ASC')
             ->get();
 

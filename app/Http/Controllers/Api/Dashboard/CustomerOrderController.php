@@ -329,7 +329,7 @@ class CustomerOrderController extends Controller
             'items.shopAttribute.attributeType.attributeCategory',
         ])
         ->whereIn('customer_id', $customerIds)
-        ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
+        ->orderByRaw('CASE WHEN is_rush = TRUE OR expected_completion_date <= ? THEN 1 ELSE 0 END DESC', [now()->addDays(2)])
         ->orderBy('expected_completion_date', 'ASC')
         ->get();
 

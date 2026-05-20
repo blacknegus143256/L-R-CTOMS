@@ -197,7 +197,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Get orders for the current logged in user, prioritizing urgent/rush orders
         $orders = Order::where('user_id', Auth::id())
             ->with(['user.profile', 'service.serviceCategory', 'items.shopAttribute.attributeType.attributeCategory', 'tailoringShop.attributes'])
-            ->orderByRaw('(is_rush = 1 OR expected_completion_date <= NOW() + INTERVAL 2 DAY) DESC')
+            ->orderByRaw('CASE WHEN is_rush = TRUE OR expected_completion_date <= ? THEN 1 ELSE 0 END DESC', [now()->addDays(2)])
             ->orderBy('expected_completion_date', 'ASC')
             ->get();
             
